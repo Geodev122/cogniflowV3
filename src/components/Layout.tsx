@@ -114,14 +114,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, title }) => {
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-4">
+              <div className="logo-container">
                 <img 
-                  src="/logo.svg" 
+                  src="/logosmall1 copy copy.png" 
                   alt="Thera-PY Logo" 
-                  className="w-10 h-10"
+                  className="logo-image"
                 />
-                <h1 className="text-xl font-semibold logo-text">
+                <h1 className="logo-text logo-text-medium">
                   <span className="logo-thera">Thera</span><span className="logo-py">-PY</span>
                 </h1>
               </div>

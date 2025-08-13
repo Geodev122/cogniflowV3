@@ -14,18 +14,49 @@
 
 @layer components {
   .logo-text {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
   
   .logo-thera {
-    font-weight: 400;
-    color: #374151;
+    font-weight: 500;
+    color: #1f2937;
+    font-family: 'Playfair Display', serif;
   }
   
   .logo-py {
     font-weight: 700;
-    color: #0f766e;
+    color: #0d9488;
     font-family: 'JetBrains Mono', monospace;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.05em;
+    text-shadow: 0 1px 2px rgba(13, 148, 136, 0.1);
+  }
+  
+  .logo-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  
+  .logo-image {
+    width: 2.5rem;
+    height: 2.5rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  }
+  
+  .logo-text-large {
+    font-size: 1.875rem;
+    line-height: 1.2;
+  }
+  
+  .logo-text-medium {
+    font-size: 1.5rem;
+    line-height: 1.2;
+  }
+  
+  .logo-text-small {
+    font-size: 1.25rem;
+    line-height: 1.2;
   }
 }
