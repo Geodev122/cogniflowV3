@@ -68,20 +68,35 @@ export const ClientManagement: React.FC = () => {
     if (!profile) return
 
     try {
-      // Get clients for this therapist
+      // Get clients for this therapist with error handling
       const { data: relations, error: relationsError } = await supabase
         .from('therapist_client_relations')
         .select('client_id')
         .eq('therapist_id', profile.id)
 
-      if (relationsError) throw relationsError
+      if (relationsError) {
+        console.error('Error fetching client relations:', relationsError)
+        setClients([])
+        return
+      }
 
-      // Get client profiles separately to avoid RLS issues
+      // Get client profiles
       const clientIds = relations?.map(r => r.client_id) || []
-      const { data: clientProfiles } = await supabase
+      if (clientIds.length === 0) {
+        setClients([])
+        return
+      }
+      
+      const { data: clientProfiles, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
         .in('id', clientIds)
+
+      if (profilesError) {
+        console.error('Error fetching client profiles:', profilesError)
+        setClients([])
+        return
+      }
 
       // Get extended client profiles
       const clientsWithProfiles = await Promise.all(
@@ -93,7 +108,7 @@ export const ClientManagement: React.FC = () => {
             .select('*')
             .eq('client_id', client.id)
             .eq('therapist_id', profile.id)
-            .single()
+            .maybeSingle()
 
           // Get client stats
           const { data: assessments } = await supabase
@@ -137,6 +152,7 @@ export const ClientManagement: React.FC = () => {
       setClients(clientsWithProfiles)
     } catch (error) {
       console.error('Error fetching clients:', error)
+      setClients([])
     } finally {
       setLoading(false)
     }

@@ -191,12 +191,18 @@ export const TherapistDashboard: React.FC = () => {
     if (!profile) return
 
     try {
-      // Get insights from therapist_insights_metrics view
-      const { data } = await supabase
+      // Get insights data with proper error handling
+      const { data, error } = await supabase
         .from('therapist_insights_metrics')
         .select('*')
         .eq('therapist_id', profile.id)
-        .single()
+        .maybeSingle()
+      
+      if (error) {
+        console.warn('Error fetching insights:', error)
+        setInsights([])
+        return
+      }
       
       const insights: Insight[] = []
       

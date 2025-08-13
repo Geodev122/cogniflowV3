@@ -136,21 +136,42 @@ export const useClientData = () => {
     if (!profile) return
 
     try {
-      const { data, error } = await supabase
-        .from('worksheet_assignments')
+      // First try to get CBT worksheets
+      const { data: cbtData, error: cbtError } = await supabase
+        .from('cbt_worksheets')
         .select('*')
         .eq('client_id', profile.id)
-        .order('assigned_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(20)
 
-      if (error) {
-        if (isRecursionError(error)) {
+      if (cbtError) {
+        if (isRecursionError(cbtError)) {
           handleRLSFailure('worksheets')
           return
         }
-        throw error
+        console.warn('CBT worksheets fetch failed, trying worksheet assignments:', cbtError)
+        
+        // Fallback to worksheet assignments
+        const { data: assignmentData, error: assignmentError } = await supabase
+          .from('worksheet_assignments')
+          .select('*')
+          .eq('client_id', profile.id)
+          .order('assigned_at', { ascending: false })
+          .limit(20)
+        
+        if (assignmentError) {
+          if (isRecursionError(assignmentError)) {
+            handleRLSFailure('worksheets')
+            return
+          }
+          throw assignmentError
+        }
+        
+        setWorksheets(assignmentData || [])
+        return
       }
-      setWorksheets(data || [])
+      
+      setWorksheets(cbtData || [])
     } catch (error) {
       console.error('Error fetching worksheets:', error)
       if (isRecursionError(error)) {
