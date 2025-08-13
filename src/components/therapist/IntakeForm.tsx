@@ -560,7 +560,7 @@ export const IntakeForm: React.FC<IntakeFormProps> = ({ onClose, onAdd }) => {
           <div>
             <span className="text-sm font-medium text-gray-900">Privacy Policy Agreement *</span>
             <p className="text-xs text-gray-600">
-              I have read and agree to the <span className="logo-text"><span className="logo-thera">Thera</span><span className="logo-py">-PY</span></span> Privacy Policy and understand how my data will be used and protected.
+              I have read and agree to the <span className="logo-text logo-text-small"><span className="logo-thera">Thera</span><span className="logo-py">-PY</span></span> Privacy Policy and understand how my data will be used and protected.
             </p>
           </div>
         </label>
@@ -590,7 +590,7 @@ export const IntakeForm: React.FC<IntakeFormProps> = ({ onClose, onAdd }) => {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-4">Select Initial Assessments *</label>
         <div className="space-y-3">
-          {availableAssessments.map((assessment) => (
+          {INITIAL_ASSESSMENTS.map((assessment) => (
             <label key={assessment.id} className="flex items-start space-x-3 cursor-pointer">
               <input
                 type="checkbox"
