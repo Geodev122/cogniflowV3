@@ -842,7 +842,7 @@ export const TherapistOnboarding: React.FC<TherapistOnboardingProps> = ({ onComp
           <h3 className="font-medium text-blue-900 mb-2">What happens next?</h3>
           <ul className="text-sm text-blue-800 space-y-1 text-left">
             <li>• Profile review within 2-3 business days</li>
-            <li>• Automatic listing on TheraWay directory</li>
+            <li>• Automatic listing on Thera-PY directory</li>
             <li>• Email notification when live</li>
             <li>• Start receiving client inquiries</li>
           </ul>

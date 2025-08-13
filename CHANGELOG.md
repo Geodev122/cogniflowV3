@@ -1,6 +1,6 @@
-# Changelog
+# Thera-PY Changelog
 
-All notable changes to CogniFlow will be documented in this file.
+All notable changes to Thera-PY will be documented in this file.
 
 ## [1.0.0] - 2025-01-06
 
