@@ -1,5 +1,5 @@
 // Application constants
-export const APP_NAME = 'CogniFlow'
+export const APP_NAME = 'Thera-PY'
 export const APP_DESCRIPTION = 'CBT Practice Management Application'
 
 // Risk level configurations
