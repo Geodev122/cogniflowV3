@@ -39,14 +39,19 @@ export const Login: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <div className="flex justify-center">
-            <img 
-              src="/logo.png" 
-              alt="Thera-PY Logo" 
-              className="w-16 h-16 rounded-xl shadow-lg"
-            />
+            <div className="flex flex-col items-center space-y-3">
+              <img 
+                src="/logo.svg" 
+                alt="Thera-PY Logo" 
+                className="w-16 h-16"
+              />
+              <h1 className="text-3xl font-bold logo-text">
+                <span className="logo-thera">Thera</span><span className="logo-py">-PY</span>
+              </h1>
+            </div>
           </div>
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            Welcome to <span className="font-normal">Thera</span><span className="font-bold text-teal-600">-PY</span>
+          <h2 className="mt-6 text-2xl font-bold text-gray-900">
+            Welcome back
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             Your digital bridge in Cognitive Behavioral Therapy
