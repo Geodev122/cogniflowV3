@@ -83,20 +83,35 @@ export const CaseManagement: React.FC = () => {
     if (!profile) return
 
     try {
-      // Get clients for this therapist
+      // Get clients for this therapist with proper error handling
       const { data: relations, error: relationsError } = await supabase
         .from('therapist_client_relations')
         .select('client_id')
         .eq('therapist_id', profile.id)
 
-      if (relationsError) throw relationsError
+      if (relationsError) {
+        console.error('Error fetching client relations:', relationsError)
+        setCaseFiles([])
+        return
+      }
 
-        // Get client profiles separately
-        const clientIds = relations?.map(r => r.client_id) || []
-        const { data: clientProfiles } = await supabase
+      // Get client profiles separately
+      const clientIds = relations?.map(r => r.client_id) || []
+      if (clientIds.length === 0) {
+        setCaseFiles([])
+        return
+      }
+      
+      const { data: clientProfiles, error: profilesError } = await supabase
           .from('profiles')
           .select('*')
           .in('id', clientIds)
+
+      if (profilesError) {
+        console.error('Error fetching client profiles:', profilesError)
+        setCaseFiles([])
+        return
+      }
 
         const cases = await Promise.all(
           (clientProfiles || []).map(async (client: Client) => {
@@ -122,7 +137,7 @@ export const CaseManagement: React.FC = () => {
               .select('id, title')
               .eq('client_id', client.id)
               .eq('therapist_id', profile.id)
-              .single()
+              .maybeSingle()
 
             // Get goals with interventions
             let goals: Goal[] = []
@@ -163,7 +178,7 @@ export const CaseManagement: React.FC = () => {
               .select('risk_level, notes')
               .eq('client_id', client.id)
               .eq('therapist_id', profile.id)
-              .single()
+              .maybeSingle()
 
             const completedSessions = sessions?.filter(s => s.status === 'completed') || []
             const upcomingSessions = sessions?.filter(s => s.status === 'scheduled' && new Date(s.appointment_date) > new Date()) || []
@@ -203,6 +218,7 @@ export const CaseManagement: React.FC = () => {
       setCaseFiles(cases)
     } catch (error) {
       console.error('Error fetching case files:', error)
+      setCaseFiles([])
     } finally {
       setLoading(false)
     }

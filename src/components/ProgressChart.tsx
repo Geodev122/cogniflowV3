@@ -51,7 +51,7 @@ export const ProgressChart: React.FC<ProgressChartProps> = ({
     if (Math.abs(change) < 1) return 'stable'
     
     // For depression/anxiety, lower is better
-    if (metricType.includes('depression') || metricType.includes('anxiety')) {
+    if (metricType.includes('depression') || metricType.includes('anxiety') || metricType === 'phq9_total' || metricType === 'gad7_total') {
       return change < 0 ? 'improving' : 'worsening'
     }
     // For mood/wellbeing, higher is better

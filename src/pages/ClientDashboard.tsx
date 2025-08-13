@@ -486,9 +486,21 @@ export default function ClientDashboard() {
   )
 
   const renderProgress = () => {
-    const moodData = progressData.filter(d => d.metric_type.includes('mood') || d.metric_type.includes('phq'))
-    const anxietyData = progressData.filter(d => d.metric_type.includes('anxiety') || d.metric_type.includes('gad'))
-    const wellbeingData = progressData.filter(d => d.metric_type.includes('wellbeing') || d.metric_type.includes('quality'))
+    const moodData = progressData.filter(d => 
+      d.metric_type.includes('mood') || 
+      d.metric_type.includes('phq') ||
+      d.metric_type === 'phq9_total'
+    )
+    const anxietyData = progressData.filter(d => 
+      d.metric_type.includes('anxiety') || 
+      d.metric_type.includes('gad') ||
+      d.metric_type === 'gad7_total'
+    )
+    const wellbeingData = progressData.filter(d => 
+      d.metric_type.includes('wellbeing') || 
+      d.metric_type.includes('quality') ||
+      d.metric_type === 'mood_rating'
+    )
 
     return (
       <div className="space-y-6">

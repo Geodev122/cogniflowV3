@@ -82,65 +82,112 @@ export const AssessmentTools: React.FC = () => {
   }
 
   const fetchAssessmentLibrary = async () => {
-    const { data, error } = await supabase
-      .from('assessment_library')
-      .select('*')
-      .eq('is_active', true)
-      .order('category', { ascending: true })
+    try {
+      const { data, error } = await supabase
+        .from('assessment_library')
+        .select('*')
+        .eq('is_active', true)
+        .order('category', { ascending: true })
 
-    if (error) throw error
-    setAssessmentLibrary(data || [])
+      if (error) {
+        console.error('Error fetching assessment library:', error)
+        setAssessmentLibrary([])
+        return
+      }
+      
+      setAssessmentLibrary(data || [])
+    } catch (error) {
+      console.error('Error in fetchAssessmentLibrary:', error)
+      setAssessmentLibrary([])
+    }
   }
 
   const fetchAssignedAssessments = async () => {
     if (!profile) return
 
-    const { data, error } = await supabase
-      .from('form_assignments')
-      .select('*')
-      .eq('therapist_id', profile.id)
-      .eq('form_type', 'psychometric')
-      .order('assigned_at', { ascending: false })
+    try {
+      const { data, error } = await supabase
+        .from('form_assignments')
+        .select('*')
+        .eq('therapist_id', profile.id)
+        .eq('form_type', 'psychometric')
+        .order('assigned_at', { ascending: false })
 
-    if (error) throw error
-
-    // Get client data separately
-    const clientIds = [...new Set(data?.map(a => a.client_id) || [])]
-    const { data: clients } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name, email')
-      .in('id', clientIds)
-
-    const assignmentsWithClient = data?.map(assignment => {
-      const client = clients?.find(c => c.id === assignment.client_id)
-      return {
-        ...assignment,
-        client: client || { first_name: 'Unknown', last_name: 'Client', email: 'unknown@example.com' }
+      if (error) {
+        console.error('Error fetching assigned assessments:', error)
+        setAssignedAssessments([])
+        return
       }
-    }) || []
 
-    setAssignedAssessments(assignmentsWithClient)
+      // Get client data separately
+      const clientIds = [...new Set(data?.map(a => a.client_id) || [])]
+      if (clientIds.length === 0) {
+        setAssignedAssessments([])
+        return
+      }
+      
+      const { data: clients, error: clientsError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, email')
+        .in('id', clientIds)
+
+      if (clientsError) {
+        console.warn('Error fetching client data for assignments:', clientsError)
+      }
+
+      const assignmentsWithClient = data?.map(assignment => {
+        const client = clients?.find(c => c.id === assignment.client_id)
+        return {
+          ...assignment,
+          client: client || { first_name: 'Unknown', last_name: 'Client', email: 'unknown@example.com' }
+        }
+      }) || []
+
+      setAssignedAssessments(assignmentsWithClient)
+    } catch (error) {
+      console.error('Error in fetchAssignedAssessments:', error)
+      setAssignedAssessments([])
+    }
   }
 
   const fetchClients = async () => {
     if (!profile?.id) return
 
-    const { data, error } = await supabase
-      .from('therapist_client_relations')
-      .select('client_id')
-      .eq('therapist_id', profile.id)
+    try {
+      const { data, error } = await supabase
+        .from('therapist_client_relations')
+        .select('client_id')
+        .eq('therapist_id', profile.id)
 
-    if (error) throw error
+      if (error) {
+        console.error('Error fetching therapist-client relations:', error)
+        setClients([])
+        return
+      }
 
-    // Get client profiles separately
-    const clientIds = data?.map(r => r.client_id) || []
-    const { data: clientProfiles } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name, email')
-      .in('id', clientIds)
+      // Get client profiles separately
+      const clientIds = data?.map(r => r.client_id) || []
+      if (clientIds.length === 0) {
+        setClients([])
+        return
+      }
+      
+      const { data: clientProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, email')
+        .in('id', clientIds)
 
-    const clientList = clientProfiles || []
-    setClients(clientList)
+      if (profilesError) {
+        console.error('Error fetching client profiles:', profilesError)
+        setClients([])
+        return
+      }
+
+      setClients(clientProfiles || [])
+    } catch (error) {
+      console.error('Error in fetchClients:', error)
+      setClients([])
+    }
   }
 
   const assignAssessment = async (assessmentId: string, clientIds: string[], dueDate: string, instructions: string) => {
