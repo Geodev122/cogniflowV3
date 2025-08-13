@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
+import { isRecursionError } from '../utils/helpers'
 
 // Mock data for fallback when RLS policies fail
 const mockWorksheets: Worksheet[] = [
@@ -110,38 +111,6 @@ export const useClientData = () => {
   const { profile } = useAuth()
 
   // Helper function to detect infinite recursion errors
-  const isRecursionError = (error: any): boolean => {
-    if (!error) return false
-    
-    // Check error message directly
-    if (error.message && error.message.includes('infinite recursion')) {
-      return true
-    }
-    
-    // Check stringified error for network errors
-    const errorString = String(error)
-    if (errorString.includes('infinite recursion')) {
-      return true
-    }
-    
-    // Check body property for Supabase network errors
-    if (error.body && typeof error.body === 'string') {
-      try {
-        const bodyObj = JSON.parse(error.body)
-        if (bodyObj.message && bodyObj.message.includes('infinite recursion')) {
-          return true
-        }
-      } catch {
-        // If body is not valid JSON, check as string
-        if (error.body.includes('infinite recursion')) {
-          return true
-        }
-      }
-    }
-    
-    return false
-  }
-
   // Helper function to handle RLS policy failures with fallback data
   const handleRLSFailure = (dataType: string) => {
     console.warn(`RLS policy failure detected for ${dataType}, using fallback data`)
@@ -169,9 +138,7 @@ export const useClientData = () => {
     try {
       const { data, error } = await supabase
         .from('worksheet_assignments')
-        .select(
-          'id, worksheet_id, status, responses, assigned_at, completed_at, worksheets(id, title, content)'
-        )
+        .select('*')
         .eq('client_id', profile.id)
         .order('assigned_at', { ascending: false })
         .limit(20)
@@ -183,18 +150,7 @@ export const useClientData = () => {
         }
         throw error
       }
-      const formatted = data?.map((a: any) => ({
-        id: a.id,
-        worksheet_id: a.worksheet_id,
-        title: a.worksheets?.title,
-        content: a.responses || a.worksheets?.content,
-        responses: a.responses,
-        status: a.status,
-        created_at: a.assigned_at,
-        updated_at: a.completed_at || a.assigned_at,
-        completed_at: a.completed_at
-      })) || []
-      setWorksheets(formatted)
+      setWorksheets(data || [])
     } catch (error) {
       console.error('Error fetching worksheets:', error)
       if (isRecursionError(error)) {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import { getRiskColor, formatDate, generatePatientCode } from '../../utils/helpers'
 import { 
   Users, 
   Plus, 
@@ -70,24 +71,21 @@ export const ClientManagement: React.FC = () => {
       // Get clients for this therapist
       const { data: relations, error: relationsError } = await supabase
         .from('therapist_client_relations')
-        .select(`
-          client_id,
-          profiles!therapist_client_relations_client_id_fkey (
-            id,
-            first_name,
-            last_name,
-            email,
-            created_at
-          )
-        `)
+        .select('client_id')
         .eq('therapist_id', profile.id)
 
       if (relationsError) throw relationsError
 
+      // Get client profiles separately to avoid RLS issues
+      const clientIds = relations?.map(r => r.client_id) || []
+      const { data: clientProfiles } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('id', clientIds)
+
       // Get extended client profiles
       const clientsWithProfiles = await Promise.all(
-        (relations || []).map(async (relation: any) => {
-          const client = relation.profiles
+        (clientProfiles || []).map(async (client: any) => {
 
           // Get extended profile
           const { data: clientProfile } = await supabase
@@ -164,28 +162,13 @@ export const ClientManagement: React.FC = () => {
   }
 
   const getRiskColor = (riskLevel?: string) => {
-    switch (riskLevel) {
-      case 'crisis': return 'text-red-600 bg-red-100'
-      case 'high': return 'text-orange-600 bg-orange-100'
-      case 'moderate': return 'text-yellow-600 bg-yellow-100'
-      case 'low': return 'text-green-600 bg-green-100'
-      default: return 'text-gray-600 bg-gray-100'
-    }
-  }
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
+    return getRiskColor(riskLevel)
   }
 
   const addClientToRoster = async (clientData: { firstName: string; lastName: string; email: string; whatsappNumber: string }) => {
     try {
       // Generate patient code
-      const patientCode = `PT${Math.floor(Math.random() * 900000) + 100000}`
+      const patientCode = generatePatientCode()
       
       // For demo purposes, create client directly in profiles table
       const clientId = crypto.randomUUID()

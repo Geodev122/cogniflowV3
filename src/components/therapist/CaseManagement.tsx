@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import { getRiskColor, getStatusColor, formatDate } from '../../utils/helpers'
 import { CaseFormulation } from './CaseFormulation'
 import { InBetweenSessions } from './InBetweenSessions'
 import { FileText, User, Calendar, TrendingUp, ClipboardList, Plus, Search, Filter, Eye, BarChart3, Clock, CheckCircle, AlertTriangle, Brain, Target, Activity, BookOpen, Award, MessageSquare, Send, PlayCircle, PlusCircle, Stethoscope, Baseline as Timeline, Archive } from 'lucide-react'
@@ -85,23 +86,20 @@ export const CaseManagement: React.FC = () => {
       // Get clients for this therapist
       const { data: relations, error: relationsError } = await supabase
         .from('therapist_client_relations')
-        .select(`
-          client_id,
-          profiles!therapist_client_relations_client_id_fkey (
-            id,
-            first_name,
-            last_name,
-            email,
-            created_at
-          )
-        `)
+        .select('client_id')
         .eq('therapist_id', profile.id)
 
       if (relationsError) throw relationsError
 
+        // Get client profiles separately
+        const clientIds = relations?.map(r => r.client_id) || []
+        const { data: clientProfiles } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', clientIds)
+
         const cases = await Promise.all(
-          (relations || []).map(async (relation: { profiles: Client }) => {
-            const client: Client = relation.profiles
+          (clientProfiles || []).map(async (client: Client) => {
 
             // Get session count
             const { data: sessions } = await supabase
@@ -296,34 +294,7 @@ export const CaseManagement: React.FC = () => {
   })
 
   const getRiskColor = (riskLevel: string) => {
-    switch (riskLevel) {
-      case 'crisis': return 'text-red-600 bg-red-100'
-      case 'high': return 'text-orange-600 bg-orange-100'
-      case 'moderate': return 'text-yellow-600 bg-yellow-100'
-      case 'low': return 'text-green-600 bg-green-100'
-      default: return 'text-gray-600 bg-gray-100'
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'assigned': return 'text-blue-600 bg-blue-100'
-      case 'in_progress': return 'text-amber-600 bg-amber-100'
-      case 'completed': return 'text-green-600 bg-green-100'
-      case 'overdue': return 'text-red-600 bg-red-100'
-      case 'active': return 'text-blue-600 bg-blue-100'
-      case 'achieved': return 'text-green-600 bg-green-100'
-      default: return 'text-gray-600 bg-gray-100'
-    }
-  }
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
+    return getRiskColor(riskLevel)
   }
 
   if (loading) {

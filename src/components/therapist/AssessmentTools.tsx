@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import { getStatusColor, formatDate } from '../../utils/helpers'
 import { 
   ClipboardList, 
   Plus, 
@@ -96,24 +97,27 @@ export const AssessmentTools: React.FC = () => {
 
     const { data, error } = await supabase
       .from('form_assignments')
-      .select(`
-        *,
-        profiles!form_assignments_client_id_fkey (
-          first_name,
-          last_name,
-          email
-        )
-      `)
+      .select('*')
       .eq('therapist_id', profile.id)
       .eq('form_type', 'psychometric')
       .order('assigned_at', { ascending: false })
 
     if (error) throw error
 
-    const assignmentsWithClient = data?.map(assignment => ({
-      ...assignment,
-      client: assignment.profiles
-    })) || []
+    // Get client data separately
+    const clientIds = [...new Set(data?.map(a => a.client_id) || [])]
+    const { data: clients } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email')
+      .in('id', clientIds)
+
+    const assignmentsWithClient = data?.map(assignment => {
+      const client = clients?.find(c => c.id === assignment.client_id)
+      return {
+        ...assignment,
+        client: client || { first_name: 'Unknown', last_name: 'Client', email: 'unknown@example.com' }
+      }
+    }) || []
 
     setAssignedAssessments(assignmentsWithClient)
   }
@@ -123,20 +127,19 @@ export const AssessmentTools: React.FC = () => {
 
     const { data, error } = await supabase
       .from('therapist_client_relations')
-      .select(`
-        client_id,
-        profiles!therapist_client_relations_client_id_fkey (
-          id,
-          first_name,
-          last_name,
-          email
-        )
-      `)
+      .select('client_id')
       .eq('therapist_id', profile.id)
 
     if (error) throw error
 
-    const clientList = data?.map(relation => relation.profiles).filter(Boolean) || []
+    // Get client profiles separately
+    const clientIds = data?.map(r => r.client_id) || []
+    const { data: clientProfiles } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email')
+      .in('id', clientIds)
+
+    const clientList = clientProfiles || []
     setClients(clientList)
   }
 
@@ -211,31 +214,7 @@ export const AssessmentTools: React.FC = () => {
   }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'assigned': return 'text-blue-600 bg-blue-100'
-      case 'in_progress': return 'text-amber-600 bg-amber-100'
-      case 'completed': return 'text-green-600 bg-green-100'
-      case 'overdue': return 'text-red-600 bg-red-100'
-      default: return 'text-gray-600 bg-gray-100'
-    }
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'assigned': return <Clock className="w-4 h-4" />
-      case 'in_progress': return <ClipboardList className="w-4 h-4" />
-      case 'completed': return <CheckCircle className="w-4 h-4" />
-      case 'overdue': return <AlertCircle className="w-4 h-4" />
-      default: return <ClipboardList className="w-4 h-4" />
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
+    return getStatusColor(status)
   }
 
   const filteredAssessments = assessmentLibrary.filter(assessment => {
