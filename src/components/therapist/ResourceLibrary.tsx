@@ -22,7 +22,8 @@ import {
   Target,
   Award,
   Lightbulb,
-  Gamepad2
+  Gamepad2,
+  Plus
 } from 'lucide-react'
 
 interface Resource {
