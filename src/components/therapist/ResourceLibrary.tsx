@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { AssessmentTools } from './AssessmentTools'
 import { WorksheetManagement } from './WorksheetManagement'
+import { supabase } from '../lib/supabase'
 import { 
   Library, 
   ClipboardList, 
@@ -92,6 +93,7 @@ export const ResourceLibrary: React.FC = () => {
     }
   }
 
+  const filteredResources = resources.filter((resource) => {
     const matchesTab = activeTab === 'all' || 
       (activeTab === 'assessments' && resource.type === 'assessment') ||
       (activeTab === 'treatments' && resource.type === 'treatment_plan') ||
@@ -357,10 +359,9 @@ export const ResourceLibrary: React.FC = () => {
                 </div>
               </div>
             ))}
-            </div>
-          )}
+          </div>
 
-          {!loading && !error && filteredResources.length === 0 && (
+          {filteredResources.length === 0 && (
             <div className="text-center py-12">
               <Library className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No resources found</h3>
