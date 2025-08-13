@@ -86,7 +86,7 @@ function App() {
   }, [user])
 
   if (loading) {
-    return <LoadingSpinner message="Initializing CogniFlow..." />
+    return <LoadingSpinner message="Initializing Thera-PY..." />
   }
 
   if (error) {

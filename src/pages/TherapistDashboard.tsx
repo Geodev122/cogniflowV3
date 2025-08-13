@@ -391,7 +391,7 @@ export const TherapistDashboard: React.FC = () => {
         
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-600">
-            Complete your Thera-PY profile to automatically be listed on our directory and start attracting new clients
+            Complete your <span className="logo-text"><span className="logo-thera">Thera</span><span className="logo-py">-PY</span></span> profile to automatically be listed on our directory and start attracting new clients
           </p>
           <button
             onClick={() => setShowOnboardingModal(true)}
@@ -408,7 +408,7 @@ export const TherapistDashboard: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl sm:text-3xl font-bold mb-2">Welcome back, Dr. {profile?.first_name}!</h2>
-            <p className="text-sm text-gray-600">Complete your profile to be listed on Thera-PY directory</p>
+            <p className="text-sm text-gray-600">Complete your profile to be listed on <span className="logo-text"><span className="logo-thera">Thera</span><span className="logo-py">-PY</span></span> directory</p>
           </div>
           <div className="text-right hidden sm:block">
             <div className="text-lg sm:text-2xl font-bold">{new Date().toLocaleDateString('en-US', { weekday: 'long' })}</div>

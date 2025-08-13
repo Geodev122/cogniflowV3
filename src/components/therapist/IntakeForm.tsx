@@ -560,7 +560,7 @@ export const IntakeForm: React.FC<IntakeFormProps> = ({ onClose, onAdd }) => {
           <div>
             <span className="text-sm font-medium text-gray-900">Privacy Policy Agreement *</span>
             <p className="text-xs text-gray-600">
-              I have read and agree to the CogniFlow Privacy Policy and understand how my data will be used and protected.
+              I have read and agree to the <span className="logo-text"><span className="logo-thera">Thera</span><span className="logo-py">-PY</span></span> Privacy Policy and understand how my data will be used and protected.
             </p>
           </div>
         </label>
