@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { AssessmentTools } from './AssessmentTools'
 import { WorksheetManagement } from './WorksheetManagement'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../../lib/supabase'
 import { 
   Library, 
   ClipboardList, 
