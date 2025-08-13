@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { AssessmentTools } from './AssessmentTools'
 import { WorksheetManagement } from './WorksheetManagement'
-import { supabase } from '../lib/supabase'
 import { 
   Library, 
   ClipboardList, 
@@ -22,8 +21,10 @@ import {
   Target,
   Award,
   Lightbulb,
-  Gamepad2
+  Gamepad2,
+  AlertTriangle
 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 
 interface Resource {
   id: string
@@ -226,58 +227,75 @@ export const ResourceLibrary: React.FC = () => {
       
       {(activeTab === 'all' || activeTab === 'treatments' || activeTab === 'psychoeducation') && (
         <>
-          {/* Filters */}
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Search resources..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Categories</option>
-                <option value="Depression Screening">Depression Screening</option>
-                <option value="Anxiety Screening">Anxiety Screening</option>
-                <option value="Cognitive Restructuring">Cognitive Restructuring</option>
-                <option value="Educational">Educational</option>
-                <option value="Depression Treatment">Depression Treatment</option>
-                <option value="Anxiety Treatment">Anxiety Treatment</option>
-                <option value="Mood Monitoring">Mood Monitoring</option>
-                <option value="Mindfulness">Mindfulness</option>
-              </select>
-              
-              <select
-                value={difficultyFilter}
-                onChange={(e) => setDifficultyFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Levels</option>
-                <option value="beginner">Beginner</option>
-                <option value="intermediate">Intermediate</option>
-                <option value="advanced">Advanced</option>
-              </select>
-              
-              <select
-                value={evidenceFilter}
-                onChange={(e) => setEvidenceFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Types</option>
-                <option value="evidence-based">Evidence-Based</option>
-                <option value="clinical">Clinical Practice</option>
-              </select>
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             </div>
-          </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+                <span className="text-red-800">{error}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Filters */}
+          {!loading && !error && (
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input
+                    type="text"
+                    placeholder="Search resources..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="all">All Categories</option>
+                  <option value="Depression Screening">Depression Screening</option>
+                  <option value="Anxiety Screening">Anxiety Screening</option>
+                  <option value="Cognitive Restructuring">Cognitive Restructuring</option>
+                  <option value="Educational">Educational</option>
+                  <option value="Depression Treatment">Depression Treatment</option>
+                  <option value="Anxiety Treatment">Anxiety Treatment</option>
+                  <option value="Mood Monitoring">Mood Monitoring</option>
+                  <option value="Mindfulness">Mindfulness</option>
+                </select>
+                
+                <select
+                  value={difficultyFilter}
+                  onChange={(e) => setDifficultyFilter(e.target.value)}
+                  className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="all">All Levels</option>
+                  <option value="beginner">Beginner</option>
+                  <option value="intermediate">Intermediate</option>
+                  <option value="advanced">Advanced</option>
+                </select>
+                
+                <select
+                  value={evidenceFilter}
+                  onChange={(e) => setEvidenceFilter(e.target.value)}
+                  className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="all">All Types</option>
+                  <option value="evidence-based">Evidence-Based</option>
+                  <option value="clinical">Clinical Practice</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* Resources Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
