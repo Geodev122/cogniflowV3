@@ -166,16 +166,20 @@ export const ResourceLibrary: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Resource Library</h2>
           <p className="text-gray-600">Evidence-based tools, assessments, and treatment resources</p>
         </div>
+        <button className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 sm:w-auto">
+          <Plus className="w-4 h-4 mr-2" />
+          Create Custom
+        </button>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max">
           {[
             { id: 'all', name: 'All Resources', icon: Library },
             { id: 'assessments', name: 'Assessments', icon: ClipboardList },
@@ -189,13 +193,13 @@ export const ResourceLibrary: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`flex items-center space-x-2 py-2 px-3 border-b-2 font-medium text-sm whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                <Icon className="w-5 h-5" />
+                <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>{tab.name}</span>
               </button>
             )
@@ -213,7 +217,7 @@ export const ResourceLibrary: React.FC = () => {
       )}
       
       {activeTab === 'exercises' && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
           <div className="text-center py-12 text-gray-500">
             <Gamepad2 className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">Therapeutic Exercises</h3>
@@ -227,8 +231,8 @@ export const ResourceLibrary: React.FC = () => {
       {(activeTab === 'all' || activeTab === 'treatments' || activeTab === 'psychoeducation') && (
         <>
           {/* Filters */}
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
@@ -236,14 +240,14 @@ export const ResourceLibrary: React.FC = () => {
                   placeholder="Search resources..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                 />
               </div>
               
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="all">All Categories</option>
                 <option value="Depression Screening">Depression Screening</option>
@@ -259,7 +263,7 @@ export const ResourceLibrary: React.FC = () => {
               <select
                 value={difficultyFilter}
                 onChange={(e) => setDifficultyFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="all">All Levels</option>
                 <option value="beginner">Beginner</option>
@@ -270,7 +274,7 @@ export const ResourceLibrary: React.FC = () => {
               <select
                 value={evidenceFilter}
                 onChange={(e) => setEvidenceFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="all">All Types</option>
                 <option value="evidence-based">Evidence-Based</option>
@@ -280,31 +284,31 @@ export const ResourceLibrary: React.FC = () => {
           </div>
 
           {/* Resources Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {filteredResources.map((resource) => (
-              <div key={resource.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+              <div key={resource.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center space-x-2">
                     <div className={`p-2 rounded-lg ${getTypeColor(resource.type)}`}>
                       {getTypeIcon(resource.type)}
                     </div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <h3 className="font-semibold text-gray-900 text-sm">{resource.title}</h3>
                       <p className="text-xs text-gray-600">{resource.category}</p>
                     </div>
                   </div>
                   {resource.evidenceBased && (
-                    <div className="flex items-center space-x-1 text-green-600">
+                    <div className="flex items-center space-x-1 text-green-600 flex-shrink-0">
                       <Award className="w-4 h-4" />
-                      <span className="text-xs">Evidence-Based</span>
+                      <span className="text-xs hidden sm:inline">Evidence-Based</span>
                     </div>
                   )}
                 </div>
                 
-                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{resource.description}</p>
+                <p className="text-sm text-gray-600 mb-4 line-clamp-3">{resource.description}</p>
                 
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                  <div className="flex items-center space-x-2 sm:space-x-4">
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(resource.difficulty)}`}>
                       {resource.difficulty}
                     </span>
@@ -321,7 +325,7 @@ export const ResourceLibrary: React.FC = () => {
                   </div>
                 </div>
                 
-                <div className="flex items-center justify-between mb-4">
+                <div className="mb-4">
                   {renderStarRating(resource.rating)}
                 </div>
                 
@@ -338,7 +342,7 @@ export const ResourceLibrary: React.FC = () => {
                   )}
                 </div>
                 
-                <div className="flex space-x-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <button
                     onClick={() => setSelectedResource(resource)}
                     className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
@@ -376,11 +380,11 @@ export const ResourceLibrary: React.FC = () => {
       {/* Resource Preview Modal */}
       {selectedResource && !showAssignModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setSelectedResource(null)} />
             
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-              <div className="bg-white px-6 pt-6 pb-4">
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full mx-4">
+              <div className="bg-white px-4 sm:px-6 pt-6 pb-4">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-medium text-gray-900">{selectedResource.title}</h3>
                   <button
@@ -395,13 +399,13 @@ export const ResourceLibrary: React.FC = () => {
                 </div>
                 
                 <div className="space-y-4">
-                  <div className="flex items-center space-x-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
                     <div className={`p-3 rounded-lg ${getTypeColor(selectedResource.type)}`}>
                       {getTypeIcon(selectedResource.type)}
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">{selectedResource.category}</p>
-                      <div className="flex items-center space-x-2 mt-1">
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
                         <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(selectedResource.difficulty)}`}>
                           {selectedResource.difficulty}
                         </span>
@@ -416,7 +420,7 @@ export const ResourceLibrary: React.FC = () => {
                   
                   <p className="text-gray-700">{selectedResource.description}</p>
                   
-                  <div className="grid grid-cols-2 gap-4 py-4 border-t border-gray-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4 border-t border-gray-200">
                     <div>
                       <p className="text-sm font-medium text-gray-900">Duration</p>
                       <p className="text-sm text-gray-600">{selectedResource.duration || 'Variable'}</p>
@@ -440,15 +444,15 @@ export const ResourceLibrary: React.FC = () => {
                 </div>
               </div>
               
-              <div className="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse">
+              <div className="bg-gray-50 px-4 sm:px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
                 <button
                   onClick={() => setShowAssignModal(true)}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:text-sm"
                 >
                   Assign to Client
                 </button>
                 <button
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:text-sm"
                 >
                   <Download className="w-4 h-4 mr-2" />
                   Download
@@ -462,11 +466,11 @@ export const ResourceLibrary: React.FC = () => {
       {/* Assignment Modal */}
       {showAssignModal && selectedResource && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowAssignModal(false)} />
             
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-6 pt-6 pb-4">
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full mx-4">
+              <div className="bg-white px-4 sm:px-6 pt-6 pb-4">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">
                   Assign: {selectedResource.title}
                 </h3>
@@ -476,7 +480,7 @@ export const ResourceLibrary: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Select Client
                     </label>
-                    <select className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <select className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
                       <option>Select a client...</option>
                       <option>John Doe</option>
                       <option>Jane Smith</option>
@@ -489,7 +493,7 @@ export const ResourceLibrary: React.FC = () => {
                     </label>
                     <input
                       type="date"
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     />
                   </div>
                   
@@ -499,26 +503,26 @@ export const ResourceLibrary: React.FC = () => {
                     </label>
                     <textarea
                       rows={3}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                       placeholder="Add any specific instructions for the client..."
                     />
                   </div>
                 </div>
               </div>
               
-              <div className="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse">
+              <div className="bg-gray-50 px-4 sm:px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
                 <button
                   onClick={() => {
                     setShowAssignModal(false)
                     setSelectedResource(null)
                   }}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:text-sm"
                 >
                   Assign Resource
                 </button>
                 <button
                   onClick={() => setShowAssignModal(false)}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:text-sm"
                 >
                   Cancel
                 </button>
