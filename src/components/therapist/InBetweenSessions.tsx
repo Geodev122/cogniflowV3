@@ -368,7 +368,7 @@ const NewTaskModal: React.FC<NewTaskModalProps> = ({ onClose, onCreate }) => {
               <div>
                 <h4 className="font-medium text-gray-900 mb-4">Choose from Templates</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {TASK_TEMPLATES.map((template) => (
+                  {taskTemplates.map((template) => (
                     <button
                       key={template.type}
                       onClick={() => handleCreateFromTemplate(template)}

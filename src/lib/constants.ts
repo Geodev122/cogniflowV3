@@ -2,13 +2,6 @@
 export const APP_NAME = 'CogniFlow'
 export const APP_DESCRIPTION = 'CBT Practice Management Application'
 
-// Demo account credentials
-export const DEMO_THERAPIST = {
-  email: 'fedgee911@gmail.com',
-  password: '123456',
-  id: 'f7cb820b-f73e-4bfe-9571-261c7eef79e0'
-}
-
 // Risk level configurations
 export const RISK_LEVELS = {
   low: { color: 'text-green-600 bg-green-100', label: 'Low Risk' },

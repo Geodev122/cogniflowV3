@@ -30,11 +30,8 @@ const ClientManagement = React.lazy(() => import('../components/therapist/Client
 const CaseManagement = React.lazy(() => import('../components/therapist/CaseManagement').then(m => ({ default: m.CaseManagement })))
 const SessionManagement = React.lazy(() => import('../components/therapist/SessionManagement').then(m => ({ default: m.SessionManagement })))
 const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools').then(m => ({ default: m.CommunicationTools })))
-const DocumentationCompliance = React.lazy(() => import('../components/therapist/DocumentationCompliance').then(m => ({ default: m.DocumentationCompliance })))
 const ResourceLibrary = React.lazy(() => import('../components/therapist/ResourceLibrary').then(m => ({ default: m.ResourceLibrary })))
 const PracticeManagement = React.lazy(() => import('../components/therapist/PracticeManagement').then(m => ({ default: m.PracticeManagement })))
-const AssessmentTools = React.lazy(() => import('../components/therapist/AssessmentTools').then(m => ({ default: m.AssessmentTools })))
-const WorksheetManagement = React.lazy(() => import('../components/therapist/WorksheetManagement').then(m => ({ default: m.WorksheetManagement })))
 
 interface DashboardStats {
   totalClients: number
@@ -326,7 +323,6 @@ export const TherapistDashboard: React.FC = () => {
     { id: 'resources', name: 'Resource Library', icon: Library },
     { id: 'sessions', name: 'Session Management', icon: Calendar },
     { id: 'communication', name: 'Communication', icon: MessageSquare },
-    { id: 'documentation', name: 'Documentation', icon: FileText },
     { id: 'practice', name: 'Practice Management', icon: BarChart3 },
   ], [])
 
@@ -708,12 +704,6 @@ export const TherapistDashboard: React.FC = () => {
         return (
           <React.Suspense fallback={<div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
             <CommunicationTools />
-          </React.Suspense>
-        )
-      case 'documentation':
-        return (
-          <React.Suspense fallback={<div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
-            <DocumentationCompliance />
           </React.Suspense>
         )
       case 'practice':

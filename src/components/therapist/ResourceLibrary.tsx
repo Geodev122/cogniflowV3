@@ -38,133 +38,6 @@ interface Resource {
   tags: string[]
 }
 
-const MOCK_RESOURCES: Resource[] = [
-  // Assessment Tools
-  {
-    id: 'phq9',
-    title: 'Patient Health Questionnaire (PHQ-9)',
-    type: 'assessment',
-    category: 'Depression Screening',
-    description: 'Validated 9-item depression screening tool for clinical assessment',
-    difficulty: 'beginner',
-    duration: '5 min',
-    rating: 4.8,
-    usageCount: 1250,
-    evidenceBased: true,
-    tags: ['depression', 'screening', 'validated', 'DSM-5']
-  },
-  {
-    id: 'gad7',
-    title: 'Generalized Anxiety Disorder Scale (GAD-7)',
-    type: 'assessment',
-    category: 'Anxiety Screening',
-    description: 'Brief 7-item anxiety screening questionnaire',
-    difficulty: 'beginner',
-    duration: '3 min',
-    rating: 4.7,
-    usageCount: 980,
-    evidenceBased: true,
-    tags: ['anxiety', 'screening', 'validated']
-  },
-  {
-    id: 'beck-depression',
-    title: 'Beck Depression Inventory (BDI-II)',
-    type: 'assessment',
-    category: 'Depression Assessment',
-    description: 'Comprehensive 21-item depression assessment tool',
-    difficulty: 'intermediate',
-    duration: '10 min',
-    rating: 4.9,
-    usageCount: 750,
-    evidenceBased: true,
-    tags: ['depression', 'comprehensive', 'validated']
-  },
-
-  // Treatment Plans
-  {
-    id: 'cbt-depression',
-    title: 'CBT Protocol for Depression',
-    type: 'treatment_plan',
-    category: 'Depression Treatment',
-    description: 'Evidence-based 12-week CBT treatment protocol for major depression',
-    difficulty: 'intermediate',
-    duration: '12 weeks',
-    rating: 4.6,
-    usageCount: 420,
-    evidenceBased: true,
-    tags: ['CBT', 'depression', 'protocol', 'structured']
-  },
-  {
-    id: 'anxiety-treatment',
-    title: 'Anxiety Disorders Treatment Framework',
-    type: 'treatment_plan',
-    category: 'Anxiety Treatment',
-    description: 'Comprehensive treatment approach for various anxiety disorders',
-    difficulty: 'advanced',
-    duration: '16 weeks',
-    rating: 4.5,
-    usageCount: 320,
-    evidenceBased: true,
-    tags: ['anxiety', 'comprehensive', 'multi-modal']
-  },
-
-  // Worksheets
-  {
-    id: 'thought-record',
-    title: 'CBT Thought Record Worksheet',
-    type: 'worksheet',
-    category: 'Cognitive Restructuring',
-    description: 'Classic thought challenging worksheet for identifying and restructuring negative thoughts',
-    difficulty: 'beginner',
-    duration: '15 min',
-    rating: 4.7,
-    usageCount: 2100,
-    evidenceBased: true,
-    tags: ['CBT', 'thoughts', 'cognitive', 'homework']
-  },
-  {
-    id: 'mood-tracker',
-    title: 'Daily Mood Tracking Sheet',
-    type: 'worksheet',
-    category: 'Mood Monitoring',
-    description: 'Simple daily mood tracking tool with triggers and coping strategies',
-    difficulty: 'beginner',
-    duration: '5 min daily',
-    rating: 4.4,
-    usageCount: 1800,
-    evidenceBased: false,
-    tags: ['mood', 'tracking', 'daily', 'self-monitoring']
-  },
-
-  // Educational Content
-  {
-    id: 'cbt-basics',
-    title: 'Introduction to CBT Principles',
-    type: 'article',
-    category: 'Educational',
-    description: 'Comprehensive guide to cognitive behavioral therapy fundamentals',
-    difficulty: 'beginner',
-    duration: '20 min read',
-    rating: 4.6,
-    usageCount: 890,
-    evidenceBased: true,
-    tags: ['CBT', 'education', 'fundamentals', 'theory']
-  },
-  {
-    id: 'mindfulness-video',
-    title: 'Mindfulness-Based Interventions',
-    type: 'video',
-    category: 'Mindfulness',
-    description: 'Video series on implementing mindfulness techniques in therapy',
-    difficulty: 'intermediate',
-    duration: '45 min',
-    rating: 4.8,
-    usageCount: 650,
-    evidenceBased: true,
-    tags: ['mindfulness', 'video', 'techniques', 'meditation']
-  }
-]
-
 export const ResourceLibrary: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'assessments' | 'treatments' | 'worksheets' | 'psychoeducation' | 'exercises'>('all')
   const [searchTerm, setSearchTerm] = useState('')
@@ -173,8 +46,52 @@ export const ResourceLibrary: React.FC = () => {
   const [evidenceFilter, setEvidenceFilter] = useState('all')
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null)
   const [showAssignModal, setShowAssignModal] = useState(false)
+  const [resources, setResources] = useState<Resource[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const filteredResources = MOCK_RESOURCES.filter(resource => {
+  useEffect(() => {
+    fetchResources()
+  }, [])
+
+  const fetchResources = async () => {
+    try {
+      setError(null)
+      
+      // Fetch from resource_library table
+      const { data, error } = await supabase
+        .from('resource_library')
+        .select('*')
+        .eq('is_public', true)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      // Transform database data to component format
+      const transformedResources = data?.map(item => ({
+        id: item.id,
+        title: item.title,
+        type: item.content_type || 'article',
+        category: item.category,
+        description: item.description || '',
+        difficulty: item.difficulty_level || 'beginner',
+        duration: item.content_data?.duration || 'Variable',
+        rating: 4.5, // Default rating
+        usageCount: 0, // Will be calculated from usage analytics
+        evidenceBased: item.evidence_level === 'research_based',
+        tags: item.tags || []
+      })) || []
+
+      setResources(transformedResources)
+    } catch (error) {
+      console.error('Error fetching resources:', error)
+      setError('Failed to load resources')
+      setResources([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
     const matchesTab = activeTab === 'all' || 
       (activeTab === 'assessments' && resource.type === 'assessment') ||
       (activeTab === 'treatments' && resource.type === 'treatment_plan') ||
@@ -440,9 +357,10 @@ export const ResourceLibrary: React.FC = () => {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
 
-          {filteredResources.length === 0 && (
+          {!loading && !error && filteredResources.length === 0 && (
             <div className="text-center py-12">
               <Library className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No resources found</h3>

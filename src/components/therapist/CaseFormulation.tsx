@@ -189,12 +189,12 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
     }
   }
 
-  const filteredDsmCodes = DSM5_CODES.filter(code =>
+  const filteredDsmCodes = dsmCodes.filter(code =>
     code.name.toLowerCase().includes(searchDsm.toLowerCase()) ||
     code.code.includes(searchDsm)
   )
 
-  const filteredIcdCodes = ICD11_CODES.filter(code =>
+  const filteredIcdCodes = icdCodes.filter(code =>
     code.name.toLowerCase().includes(searchIcd.toLowerCase()) ||
     code.code.includes(searchIcd)
   )

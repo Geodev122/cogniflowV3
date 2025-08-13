@@ -590,7 +590,7 @@ export const IntakeForm: React.FC<IntakeFormProps> = ({ onClose, onAdd }) => {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-4">Select Initial Assessments *</label>
         <div className="space-y-3">
-          {INITIAL_ASSESSMENTS.map((assessment) => (
+          {availableAssessments.map((assessment) => (
             <label key={assessment.id} className="flex items-start space-x-3 cursor-pointer">
               <input
                 type="checkbox"
