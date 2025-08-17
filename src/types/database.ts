@@ -249,6 +249,132 @@ export interface Database {
           recorded_at?: string
         }
       }
+      clinic_listings: {
+        Row: {
+          id: string
+          admin_id: string
+          name: string
+          description: string | null
+          location: string
+          ownership_type: 'admin_owned' | 'externally_owned'
+          contact_info: any
+          amenities: string[]
+          images: string[]
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          admin_id: string
+          name: string
+          description?: string | null
+          location: string
+          ownership_type: 'admin_owned' | 'externally_owned'
+          contact_info?: any
+          amenities?: string[]
+          images?: string[]
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          admin_id?: string
+          name?: string
+          description?: string | null
+          location?: string
+          ownership_type?: 'admin_owned' | 'externally_owned'
+          contact_info?: any
+          amenities?: string[]
+          images?: string[]
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      rental_options: {
+        Row: {
+          id: string
+          clinic_id: string
+          duration_type: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'package'
+          price: number
+          currency: string
+          description: string | null
+          min_duration: number
+          max_duration: number | null
+          is_available: boolean
+          created_at: string
+        }
+        Insert: {
+          clinic_id: string
+          duration_type: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'package'
+          price: number
+          currency?: string
+          description?: string | null
+          min_duration?: number
+          max_duration?: number | null
+          is_available?: boolean
+          created_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          duration_type?: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'package'
+          price?: number
+          currency?: string
+          description?: string | null
+          min_duration?: number
+          max_duration?: number | null
+          is_available?: boolean
+          created_at?: string
+        }
+      }
+      clinic_bookings: {
+        Row: {
+          id: string
+          clinic_id: string
+          therapist_id: string
+          rental_option_id: string
+          start_date: string
+          end_date: string
+          duration_value: number
+          total_price: number
+          status: 'pending' | 'confirmed' | 'rejected' | 'cancelled'
+          payment_receipt_url: string | null
+          booking_notes: string | null
+          admin_notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          therapist_id: string
+          rental_option_id: string
+          start_date: string
+          end_date: string
+          duration_value: number
+          total_price: number
+          status?: 'pending' | 'confirmed' | 'rejected' | 'cancelled'
+          payment_receipt_url?: string | null
+          booking_notes?: string | null
+          admin_notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          therapist_id?: string
+          rental_option_id?: string
+          start_date?: string
+          end_date?: string
+          duration_value?: number
+          total_price?: number
+          status?: 'pending' | 'confirmed' | 'rejected' | 'cancelled'
+          payment_receipt_url?: string | null
+          booking_notes?: string | null
+          admin_notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
   }
 }

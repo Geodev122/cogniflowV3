@@ -43,6 +43,7 @@ import { Navigate } from 'react-router-dom'
 // Lazy load components for better performance
 const ClientManagement = React.lazy(() => import('../components/therapist/ClientManagement'))
 const CaseManagement = React.lazy(() => import('../components/therapist/CaseManagement'))
+const ClinicRental = React.lazy(() => import('../components/therapist/ClinicRental'))
 const SessionManagement = React.lazy(() => import('../components/therapist/SessionManagement'))
 const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools'))
 const ResourceLibrary = React.lazy(() => import('../components/therapist/ResourceLibrary'))
@@ -620,7 +621,9 @@ export default function TherapistDashboard() {
       case 'clinic':
         return (
           <div className="h-full overflow-y-auto p-4 sm:p-6 lg:p-8">
-            {renderFutureContent('Clinic Rental Management', 'Manage your clinic space rentals and bookings', Building)}
+            <React.Suspense fallback={<div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
+              <ClinicRental />
+            </React.Suspense>
           </div>
         )
       case 'supervision':
