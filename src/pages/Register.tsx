@@ -67,13 +67,15 @@ export const Register: React.FC = () => {
           <div className="flex justify-center">
             <div className="flex flex-col items-center space-y-4">
               <img 
-                src="/logosmall1 copy copy.png" 
+                src="/revised logo icon.png" 
                 alt="Thera-PY Logo" 
                 className="w-20 h-20 filter drop-shadow-lg"
               />
-              <h1 className="logo-text logo-text-large">
-                <span className="logo-thera">Thera</span><span className="logo-py">-PY</span>
-              </h1>
+              <img 
+                src="/revised logo name.png" 
+                alt="Thera-PY" 
+                className="h-8 filter drop-shadow-sm"
+              />
             </div>
           </div>
           <h2 className="mt-6 text-2xl font-bold text-gray-900">Create your account</h2>
