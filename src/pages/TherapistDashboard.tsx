@@ -36,7 +36,8 @@ import {
   Activity,
   Bell,
   Lightbulb,
-  ArrowRight
+  ArrowRight,
+  LogOut
 } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 
@@ -104,7 +105,9 @@ export default function TherapistDashboard() {
   const [recentActivities, setRecentActivities] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
   const [profileLive, setProfileLive] = useState(false)
-  const { profile } = useAuth()
+  const [isSigningOut, setIsSigningOut] = useState(false)
+  const [signOutError, setSignOutError] = useState<string | null>(null)
+  const { profile, signOut } = useAuth()
 
   const navigationSections = [
     {
@@ -259,6 +262,20 @@ export default function TherapistDashboard() {
       fetchDashboardData()
     }
   }, [profile, fetchDashboardData])
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true)
+    setSignOutError(null)
+    
+    try {
+      await signOut()
+    } catch (error) {
+      console.error('Error signing out:', error)
+      setSignOutError('Failed to sign out. Please try again.')
+    } finally {
+      setIsSigningOut(false)
+    }
+  }
 
   if (profile && profile.role !== 'therapist') {
     return <Navigate to="/client" replace />
@@ -698,6 +715,22 @@ export default function TherapistDashboard() {
                 </div>
               </button>
 
+              <button
+                onClick={handleSignOut}
+                disabled={isSigningOut}
+                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-2 text-xs sm:text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Sign out"
+              >
+                {isSigningOut ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                ) : (
+                  <LogOut className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">
+                  {isSigningOut ? 'Signing out...' : 'Sign out'}
+                </span>
+              </button>
+
               {/* Mobile Menu Button */}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -707,6 +740,23 @@ export default function TherapistDashboard() {
               </button>
             </div>
           </div>
+          
+          {/* Sign out error notification */}
+          {signOutError && (
+            <div className="bg-red-50 border-l-4 border-red-400 p-3">
+              <div className="flex items-center">
+                <AlertTriangle className="w-4 h-4 text-red-400 mr-2" />
+                <span className="text-sm text-red-700">{signOutError}</span>
+                <button
+                  onClick={() => setSignOutError(null)}
+                  className="ml-auto text-red-400 hover:text-red-600"
+                >
+                  <span className="sr-only">Dismiss</span>
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
