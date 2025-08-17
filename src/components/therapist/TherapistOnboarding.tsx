@@ -800,7 +800,7 @@ export const TherapistOnboarding: React.FC<TherapistOnboardingProps> = ({ onComp
             className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
           <span className="text-sm text-gray-700">
-            I have read and agree to the <span className="logo-text"><span className="logo-thera">Thera</span><span className="logo-py">-PY</span></span>{' '}
+            I have read and agree to the Thera-PY{' '}
             <a href="/terms" target="_blank" className="text-blue-600 hover:text-blue-800 underline">
               Terms of Service
             </a>{' '}
@@ -835,13 +835,13 @@ export const TherapistOnboarding: React.FC<TherapistOnboardingProps> = ({ onComp
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Profile Submitted!</h2>
         <p className="text-gray-600 max-w-md mx-auto">
-          Thank you for completing your <span className="logo-text logo-text-small"><span className="logo-thera">Thera</span><span className="logo-py">-PY</span></span> profile. Once approved, your profile data will be automatically transferred to our therapist directory, where potential clients can find and book with you.
+          Thank you for completing your Thera-PY profile. Once approved, your profile data will be automatically transferred to our therapist directory, where potential clients can find and book with you.
         </p>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
           <h3 className="font-medium text-blue-900 mb-2">What happens next?</h3>
           <ul className="text-sm text-blue-800 space-y-1 text-left">
             <li>• Profile review within 2-3 business days</li>
-            <li>• Automatic listing on <span className="logo-text logo-text-small"><span className="logo-thera">Thera</span><span className="logo-py">-PY</span></span> directory</li>
+            <li>• Automatic listing on Thera-PY directory</li>
             <li>• Email notification when live</li>
             <li>• Start receiving client inquiries</li>
           </ul>
