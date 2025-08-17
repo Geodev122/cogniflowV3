@@ -1,6 +1,6 @@
 import React from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { LogOut, User, Brain, ChevronDown } from 'lucide-react'
+import { LogOut, User, Brain, ChevronDown, AlertTriangle } from 'lucide-react'
 import { TherapistProfile } from './therapist/TherapistProfile'
 import { TherapistOnboarding } from './therapist/TherapistOnboarding'
 import { supabase } from '../lib/supabase'
@@ -39,12 +39,20 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children, title }) => {
   const { profile, signOut } = useAuth()
+  const [isSigningOut, setIsSigningOut] = React.useState(false)
+  const [signOutError, setSignOutError] = React.useState<string | null>(null)
 
   const handleSignOut = async () => {
+    setIsSigningOut(true)
+    setSignOutError(null)
+    
     try {
       await signOut()
     } catch (error) {
       console.error('Error signing out:', error)
+      setSignOutError('Failed to sign out. Please try again.')
+    } finally {
+      setIsSigningOut(false)
     }
   }
 
@@ -86,12 +94,38 @@ export const Layout: React.FC<LayoutProps> = ({ children, title }) => {
               </div>
               <button
                 onClick={handleSignOut}
-                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-2 text-xs sm:text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                disabled={isSigningOut}
+                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-2 text-xs sm:text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Sign out"
               >
-                <LogOut className="w-4 h-4" />
+                {isSigningOut ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                ) : (
+                  <LogOut className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">
+                  {isSigningOut ? 'Signing out...' : 'Sign out'}
+                </span>
               </button>
             </div>
           </div>
+          
+          {/* Sign out error notification */}
+          {signOutError && (
+            <div className="bg-red-50 border-l-4 border-red-400 p-3">
+              <div className="flex items-center">
+                <AlertTriangle className="w-4 h-4 text-red-400 mr-2" />
+                <span className="text-sm text-red-700">{signOutError}</span>
+                <button
+                  onClick={() => setSignOutError(null)}
+                  className="ml-auto text-red-400 hover:text-red-600"
+                >
+                  <span className="sr-only">Dismiss</span>
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
