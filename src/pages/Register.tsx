@@ -67,14 +67,14 @@ export const Register: React.FC = () => {
           <div className="flex justify-center">
             <div className="flex flex-col items-center space-y-4">
               <img 
-                src="/revised logo icon.png" 
+                src="/revised logo icon copy.png" 
                 alt="Thera-PY Logo" 
-                className="w-20 h-20 filter drop-shadow-lg"
+                className="logo-image-large"
               />
               <img 
-                src="/revised logo name.png" 
+                src="/revised logo name copy.png" 
                 alt="Thera-PY" 
-                className="h-8 filter drop-shadow-sm"
+                className="logo-name-large"
               />
             </div>
           </div>

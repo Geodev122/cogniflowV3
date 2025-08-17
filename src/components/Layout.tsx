@@ -56,14 +56,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, title }) => {
             <div className="flex items-center space-x-4">
               <div className="logo-container">
                 <img 
-                  src="/revised logo icon.png"
+                  src="/revised logo icon copy.png"
                   alt="Thera-PY Logo" 
                   className="logo-image"
                 />
                 <img 
-                  src="/revised logo name.png" 
+                  src="/revised logo name copy.png" 
                   alt="Thera-PY" 
-                  className="h-6 filter drop-shadow-sm"
+                  className="logo-name"
                 />
               </div>
               <div>
