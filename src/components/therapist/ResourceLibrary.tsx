@@ -260,26 +260,26 @@ export const ResourceLibrary: React.FC = () => {
   }
 
   return (
-    <div className="space-y-3 sm:space-y-6 max-w-full overflow-hidden">
+    <div className="w-full max-w-none space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:items-center justify-between">
-        <div className="min-w-0">
-          <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 truncate">Resource Library</h2>
-          <p className="text-xs sm:text-sm lg:text-base text-gray-600">Evidence-based tools, assessments, and treatment resources</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Resource Library</h2>
+          <p className="text-sm text-gray-600 mt-1">Evidence-based tools, assessments, and treatment resources</p>
         </div>
         <button 
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center px-3 py-2 sm:px-4 sm:py-2 border border-transparent text-xs sm:text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 w-full sm:w-auto justify-center flex-shrink-0"
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-purple-600 hover:bg-purple-700 flex-shrink-0"
         >
-          <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+          <Plus className="w-4 h-4 mr-2" />
           Create Custom
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 -mx-3 sm:mx-0">
-        <div className="overflow-x-auto px-3 sm:px-0">
-          <nav className="-mb-px flex space-x-1 sm:space-x-4 lg:space-x-8 min-w-max">
+      <div className="border-b border-gray-200">
+        <div className="overflow-x-auto">
+          <nav className="-mb-px flex space-x-4 lg:space-x-8">
             {[
               { id: 'all', name: 'All Resources', icon: Library },
               { id: 'assessments', name: 'Assessments', icon: ClipboardList },
@@ -293,15 +293,15 @@ export const ResourceLibrary: React.FC = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center space-x-1 sm:space-x-2 py-2 px-2 sm:px-3 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap ${
+                  className={`flex items-center space-x-2 py-2 px-3 border-b-2 font-medium text-sm whitespace-nowrap ${
                     activeTab === tab.id
                       ? 'border-blue-500 text-blue-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  <Icon className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 flex-shrink-0" />
-                  <span className="hidden sm:inline">{tab.name}</span>
-                  <span className="sm:hidden">{tab.name.split(' ')[0]}</span>
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="hidden md:inline">{tab.name}</span>
+                  <span className="md:hidden">{tab.name.split(' ')[0]}</span>
                 </button>
               )
             })}
@@ -311,23 +311,23 @@ export const ResourceLibrary: React.FC = () => {
 
       {/* Tab Content */}
       {activeTab === 'assessments' && (
-        <div className="max-w-full overflow-hidden">
+        <div className="w-full">
           <AssessmentTools />
         </div>
       )}
       
       {activeTab === 'worksheets' && (
-        <div className="max-w-full overflow-hidden">
+        <div className="w-full">
           <WorksheetManagement />
         </div>
       )}
       
       {activeTab === 'exercises' && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-          <div className="text-center py-8 sm:py-12 text-gray-500">
-            <Gamepad2 className="mx-auto h-8 w-8 sm:h-12 sm:w-12 text-gray-400 mb-4" />
-            <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">Therapeutic Exercises</h3>
-            <p className="text-sm sm:text-base text-gray-600">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="text-center py-12 text-gray-500">
+            <Gamepad2 className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Therapeutic Exercises</h3>
+            <p className="text-gray-600">
               Interactive therapeutic exercises and games coming soon.
             </p>
           </div>
@@ -335,25 +335,25 @@ export const ResourceLibrary: React.FC = () => {
       )}
       
       {(activeTab === 'all' || activeTab === 'treatments' || activeTab === 'psychoeducation') && (
-        <div className="space-y-3 sm:space-y-6 max-w-full overflow-hidden">
+        <div className="w-full space-y-4 sm:space-y-6">
           {/* Filters */}
-          <div className="bg-white p-3 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="relative">
-                <Search className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder="Search resources..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-7 sm:pl-8 lg:pl-10 pr-2 sm:pr-3 lg:pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                 />
               </div>
               
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-2 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="all">All Categories</option>
                 <option value="worksheet">Worksheets</option>
@@ -366,7 +366,7 @@ export const ResourceLibrary: React.FC = () => {
               <select
                 value={difficultyFilter}
                 onChange={(e) => setDifficultyFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-2 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="all">All Levels</option>
                 <option value="beginner">Beginner</option>
@@ -377,7 +377,7 @@ export const ResourceLibrary: React.FC = () => {
               <select
                 value={evidenceFilter}
                 onChange={(e) => setEvidenceFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-2 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="all">All Types</option>
                 <option value="evidence-based">Evidence-Based</option>
@@ -387,51 +387,50 @@ export const ResourceLibrary: React.FC = () => {
           </div>
 
           {/* Resources Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredResources.map((resource) => (
-              <div key={resource.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 lg:p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-3 sm:mb-4">
-                  <div className="flex items-center space-x-2 min-w-0 flex-1">
-                    <div className={`p-1 sm:p-1.5 lg:p-2 rounded-lg flex-shrink-0 ${getTypeColor(resource.type)}`}>
+              <div key={resource.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center space-x-3 min-w-0 flex-1">
+                    <div className={`p-2 rounded-lg flex-shrink-0 ${getTypeColor(resource.type)}`}>
                       {getTypeIcon(resource.type)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-gray-900 text-xs sm:text-sm lg:text-base leading-tight truncate">{resource.title}</h3>
-                      <p className="text-xs text-gray-600 truncate">{resource.category}</p>
+                      <h3 className="font-semibold text-gray-900 text-sm leading-tight">{resource.title}</h3>
+                      <p className="text-xs text-gray-600 mt-1">{resource.category}</p>
                     </div>
                   </div>
                   {resource.evidenceBased && (
-                    <div className="flex items-center space-x-1 text-green-600 flex-shrink-0 ml-2">
-                      <Award className="w-3 h-3 sm:w-4 sm:h-4" />
-                      <span className="text-xs hidden lg:inline">Evidence-Based</span>
+                    <div className="flex items-center space-x-1 text-green-600 flex-shrink-0">
+                      <Award className="w-4 h-4" />
                     </div>
                   )}
                 </div>
                 
-                <p className="text-xs sm:text-sm text-gray-600 mb-3 line-clamp-2 sm:line-clamp-3">{resource.description}</p>
+                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{resource.description}</p>
                 
-                <div className="flex flex-col gap-2 mb-3">
+                <div className="flex flex-col gap-3 mb-4">
                   <div className="flex items-center justify-between">
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(resource.difficulty)}`}>
                       {resource.difficulty}
                     </span>
                     {resource.duration && (
                       <div className="flex items-center space-x-1 text-gray-500">
-                        <Clock className="w-3 h-3" />
+                        <Clock className="w-4 h-4" />
                         <span className="text-xs">{resource.duration}</span>
                       </div>
                     )}
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-1 text-gray-500">
-                      <Users className="w-3 h-3" />
+                      <Users className="w-4 h-4" />
                       <span className="text-xs">{resource.usageCount}</span>
                     </div>
                     {renderStarRating(resource.rating)}
                   </div>
                 </div>
                 
-                <div className="flex flex-wrap gap-1 mb-3">
+                <div className="flex flex-wrap gap-1 mb-4">
                   {resource.tags.slice(0, 2).map((tag, index) => (
                     <span key={index} className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded truncate">
                       {tag}
@@ -444,12 +443,12 @@ export const ResourceLibrary: React.FC = () => {
                   )}
                 </div>
                 
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <button
                     onClick={() => setSelectedResource(resource)}
-                    className="w-full inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-xs sm:text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                    className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
                   >
-                    <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                    <Eye className="w-4 h-4 mr-2" />
                     Preview
                   </button>
                   <button
@@ -457,9 +456,9 @@ export const ResourceLibrary: React.FC = () => {
                       setSelectedResource(resource)
                       setShowAssignModal(true)
                     }}
-                    className="w-full inline-flex items-center justify-center px-3 py-2 border border-transparent text-xs sm:text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                    className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
                   >
-                    <Send className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                    <Send className="w-4 h-4 mr-2" />
                     Assign
                   </button>
                 </div>
@@ -467,11 +466,11 @@ export const ResourceLibrary: React.FC = () => {
             ))}
           </div>
 
-          {!loading && !error && filteredResources.length === 0 && (
-            <div className="text-center py-8 sm:py-12">
-              <Library className="mx-auto h-8 w-8 sm:h-12 sm:w-12 text-gray-400" />
+          {filteredResources.length === 0 && !loading && !error && (
+            <div className="text-center py-12">
+              <Library className="mx-auto h-12 w-12 text-gray-400 mb-4" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No resources found</h3>
-              <p className="mt-1 text-xs sm:text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-500">
                 Try adjusting your search terms or filters.
               </p>
             </div>
@@ -482,85 +481,88 @@ export const ResourceLibrary: React.FC = () => {
       {/* Resource Preview Modal */}
       {selectedResource && !showAssignModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-end justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setSelectedResource(null)} />
             
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full mx-2 sm:mx-4">
-              <div className="bg-white px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6 pb-4">
-                <div className="flex items-start justify-between mb-4 sm:mb-6">
-                  <h3 className="text-sm sm:text-base lg:text-lg font-medium text-gray-900 pr-2 flex-1 min-w-0">{selectedResource.title}</h3>
+            <div className="inline-block align-middle bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:max-w-2xl w-full max-w-md sm:max-w-2xl mx-4">
+              <div className="bg-white">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-900 flex-1 min-w-0 pr-4">{selectedResource.title}</h3>
                   <button
                     onClick={() => setSelectedResource(null)}
-                    className="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-2"
+                    className="text-gray-400 hover:text-gray-600 flex-shrink-0"
                   >
-                    <X className="h-5 w-5 sm:h-6 sm:w-6" />
+                    <X className="h-6 w-6" />
                   </button>
                 </div>
                 
-                <div className="space-y-3 sm:space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-                    <div className={`p-2 sm:p-3 rounded-lg self-start ${getTypeColor(selectedResource.type)}`}>
-                      {getTypeIcon(selectedResource.type)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs sm:text-sm text-gray-600">{selectedResource.category}</p>
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(selectedResource.difficulty)}`}>
-                          {selectedResource.difficulty}
-                        </span>
-                        {selectedResource.evidenceBased && (
-                          <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                            Evidence-Based
+                <div className="p-6">
+                  <div className="space-y-6">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
+                      <div className={`p-3 rounded-lg self-start ${getTypeColor(selectedResource.type)}`}>
+                        {getTypeIcon(selectedResource.type)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-gray-600">{selectedResource.category}</p>
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(selectedResource.difficulty)}`}>
+                            {selectedResource.difficulty}
                           </span>
-                        )}
+                          {selectedResource.evidenceBased && (
+                            <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                              Evidence-Based
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <p className="text-gray-700">{selectedResource.description}</p>
+                    
+                    <div className="grid grid-cols-2 gap-4 py-4 border-t border-gray-200">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Duration</p>
+                        <p className="text-sm text-gray-600">{selectedResource.duration || 'Variable'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Usage</p>
+                        <p className="text-sm text-gray-600">{selectedResource.usageCount} therapists</p>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 mb-3">Tags</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedResource.tags.map((tag, index) => (
+                          <span key={index} className="inline-flex px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
+                            {tag}
+                          </span>
+                        ))}
                       </div>
                     </div>
                   </div>
-                  
-                  <p className="text-xs sm:text-sm lg:text-base text-gray-700">{selectedResource.description}</p>
-                  
-                  <div className="grid grid-cols-2 gap-3 sm:gap-4 py-3 sm:py-4 border-t border-gray-200">
-                    <div>
-                      <p className="text-xs sm:text-sm font-medium text-gray-900">Duration</p>
-                      <p className="text-xs sm:text-sm text-gray-600">{selectedResource.duration || 'Variable'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs sm:text-sm font-medium text-gray-900">Usage</p>
-                      <p className="text-xs sm:text-sm text-gray-600">{selectedResource.usageCount} therapists</p>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <p className="text-xs sm:text-sm font-medium text-gray-900 mb-2">Tags</p>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedResource.tags.map((tag, index) => (
-                        <span key={index} className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
                 </div>
-              </div>
-              
-              <div className="bg-gray-50 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex flex-col sm:flex-row-reverse gap-2 sm:gap-3">
-                <button
-                  onClick={() => setShowAssignModal(true)}
-                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-3 sm:px-4 py-2 bg-blue-600 text-xs sm:text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Assign to Client
-                </button>
-                <button
-                  onClick={() => {
-                    if (selectedResource.content_url) {
-                      window.open(selectedResource.content_url, '_blank')
-                    }
-                  }}
-                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-3 sm:px-4 py-2 bg-white text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
-                  Download
-                </button>
+                
+                <div className="bg-gray-50 px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
+                  <button
+                    onClick={() => setShowAssignModal(true)}
+                    className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700"
+                  >
+                    Assign to Client
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (selectedResource.content_url) {
+                        window.open(selectedResource.content_url, '_blank')
+                      }
+                    }}
+                    className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -622,14 +624,14 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-end justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
         
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full mx-2 sm:mx-4">
+        <div className="inline-block align-middle bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 w-full max-w-md sm:max-w-lg mx-4">
           <form onSubmit={handleSubmit}>
-            <div className="bg-white px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6 pb-4">
-              <div className="flex items-start justify-between mb-4 sm:mb-6">
-                <h3 className="text-sm sm:text-base lg:text-lg font-medium text-gray-900 pr-2 flex-1 min-w-0">
+            <div className="bg-white px-6 pt-6 pb-4">
+              <div className="flex items-start justify-between mb-6">
+                <h3 className="text-lg font-medium text-gray-900 flex-1 min-w-0 pr-4">
                   Assign: {resource.title}
                 </h3>
                 <button
@@ -637,29 +639,29 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
                   onClick={onClose}
                   className="text-gray-400 hover:text-gray-600 flex-shrink-0"
                 >
-                  <X className="h-5 w-5 sm:h-6 sm:w-6" />
+                  <X className="h-6 w-6" />
                 </button>
               </div>
 
-              <div className="space-y-4 sm:space-y-6">
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
                     Select Clients
                   </label>
-                  <div className="max-h-32 sm:max-h-48 overflow-y-auto border border-gray-300 rounded-md">
+                  <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md">
                     {clients.map((client) => (
-                      <label key={client.id} className="flex items-center p-2 sm:p-3 hover:bg-gray-50 cursor-pointer">
+                      <label key={client.id} className="flex items-center p-3 hover:bg-gray-50 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={selectedClients.includes(client.id)}
                           onChange={() => toggleClient(client.id)}
-                          className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                         />
-                        <div className="ml-2 sm:ml-3 min-w-0 flex-1">
-                          <div className="text-xs sm:text-sm font-medium text-gray-900 truncate">
+                        <div className="ml-3 min-w-0 flex-1">
+                          <div className="text-sm font-medium text-gray-900">
                             {client.first_name} {client.last_name}
                           </div>
-                          <div className="text-xs text-gray-500 truncate">{client.email}</div>
+                          <div className="text-xs text-gray-500">{client.email}</div>
                         </div>
                       </label>
                     ))}
@@ -667,7 +669,7 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
                 </div>
 
                 <div>
-                  <label htmlFor="instructions" className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="instructions" className="block text-sm font-medium text-gray-700 mb-2">
                     Instructions for Client
                   </label>
                   <textarea
@@ -676,24 +678,24 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
                     onChange={(e) => setInstructions(e.target.value)}
                     rows={3}
                     placeholder="Optional instructions or context for the client..."
-                    className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   />
                 </div>
               </div>
             </div>
             
-            <div className="bg-gray-50 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex flex-col sm:flex-row-reverse gap-2 sm:gap-3">
+            <div className="bg-gray-50 px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
               <button
                 type="submit"
                 disabled={selectedClients.length === 0}
-                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-3 sm:px-4 py-2 bg-blue-600 text-xs sm:text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Assign Resource
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-3 sm:px-4 py-2 bg-white text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
@@ -736,42 +738,42 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-end justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
         
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full mx-2 sm:mx-4">
+        <div className="inline-block align-middle bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 w-full max-w-md sm:max-w-2xl mx-4">
           <form onSubmit={handleSubmit}>
-            <div className="bg-white px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6 pb-4">
-              <div className="flex items-start justify-between mb-4 sm:mb-6">
-                <h3 className="text-sm sm:text-base lg:text-lg font-medium text-gray-900 pr-2">Create Custom Resource</h3>
+            <div className="bg-white px-6 pt-6 pb-4">
+              <div className="flex items-start justify-between mb-6">
+                <h3 className="text-lg font-medium text-gray-900 flex-1 min-w-0 pr-4">Create Custom Resource</h3>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 flex-shrink-0"
                 >
-                  <X className="h-5 w-5 sm:h-6 sm:w-6" />
+                  <X className="h-6 w-6" />
                 </button>
               </div>
 
               <div className="space-y-4 max-h-96 overflow-y-auto">
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Title *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
                   <input
                     type="text"
                     value={formData.title}
                     onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     required
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Category</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
                     <select
                       value={formData.category}
                       onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                      className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     >
                       <option value="worksheet">Worksheet</option>
                       <option value="educational">Educational</option>
@@ -781,11 +783,11 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Difficulty</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty</label>
                     <select
                       value={formData.difficulty}
                       onChange={(e) => setFormData(prev => ({ ...prev, difficulty: e.target.value }))}
-                      className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     >
                       <option value="beginner">Beginner</option>
                       <option value="intermediate">Intermediate</option>
@@ -795,24 +797,24 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
                 </div>
 
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Description *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description *</label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                     rows={3}
-                    className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Tags</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
                   <input
                     type="text"
                     value={formData.tags}
                     onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
                     placeholder="Comma-separated tags"
-                    className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   />
                 </div>
 
@@ -824,24 +826,24 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
                       onChange={(e) => setFormData(prev => ({ ...prev, evidenceBased: e.target.checked }))}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
-                    <span className="text-xs sm:text-sm text-gray-700">Evidence-based resource</span>
+                    <span className="text-sm text-gray-700">Evidence-based resource</span>
                   </label>
                 </div>
               </div>
             </div>
             
-            <div className="bg-gray-50 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex flex-col sm:flex-row-reverse gap-2 sm:gap-3">
+            <div className="bg-gray-50 px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
               <button
                 type="submit"
                 disabled={!formData.title || !formData.description}
-                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-3 sm:px-4 py-2 bg-purple-600 text-xs sm:text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-purple-600 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Create Resource
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-3 sm:px-4 py-2 bg-white text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
