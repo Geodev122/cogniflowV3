@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { AssessmentTools } from './AssessmentTools'
 import { WorksheetManagement } from './WorksheetManagement'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../hooks/useAuth'
 import { 
   Library, 
   ClipboardList, 
@@ -23,7 +24,8 @@ import {
   Award,
   Lightbulb,
   Gamepad2,
-  Plus
+  Plus,
+  X
 } from 'lucide-react'
 
 interface Resource {
@@ -38,6 +40,8 @@ interface Resource {
   usageCount: number
   evidenceBased: boolean
   tags: string[]
+  content_url?: string
+  content_data?: any
 }
 
 export const ResourceLibrary: React.FC = () => {
@@ -48,13 +52,19 @@ export const ResourceLibrary: React.FC = () => {
   const [evidenceFilter, setEvidenceFilter] = useState('all')
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null)
   const [showAssignModal, setShowAssignModal] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
   const [resources, setResources] = useState<Resource[]>([])
+  const [clients, setClients] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { profile } = useAuth()
 
   useEffect(() => {
-    fetchResources()
-  }, [])
+    if (profile) {
+      fetchResources()
+      fetchClients()
+    }
+  }, [profile])
 
   const fetchResources = async () => {
     try {
@@ -81,7 +91,9 @@ export const ResourceLibrary: React.FC = () => {
         rating: 4.5, // Default rating
         usageCount: 0, // Will be calculated from usage analytics
         evidenceBased: item.evidence_level === 'research_based',
-        tags: item.tags || []
+        tags: item.tags || [],
+        content_url: item.content_url,
+        content_data: item.content_data
       })) || []
 
       setResources(transformedResources)
@@ -91,6 +103,89 @@ export const ResourceLibrary: React.FC = () => {
       setResources([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchClients = async () => {
+    if (!profile) return
+
+    try {
+      const { data: relations } = await supabase
+        .from('therapist_client_relations')
+        .select('client_id')
+        .eq('therapist_id', profile.id)
+
+      const clientIds = relations?.map(r => r.client_id) || []
+      if (clientIds.length > 0) {
+        const { data: clientData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email')
+          .in('id', clientIds)
+
+        setClients(clientData || [])
+      }
+    } catch (error) {
+      console.error('Error fetching clients:', error)
+      setClients([])
+    }
+  }
+
+  const createCustomResource = async (resourceData: any) => {
+    try {
+      const { error } = await supabase
+        .from('resource_library')
+        .insert({
+          title: resourceData.title,
+          category: resourceData.category,
+          subcategory: resourceData.subcategory,
+          description: resourceData.description,
+          content_type: resourceData.type,
+          content_data: resourceData.content,
+          tags: resourceData.tags,
+          difficulty_level: resourceData.difficulty,
+          evidence_level: resourceData.evidenceBased ? 'research_based' : 'clinical_consensus',
+          created_by: profile!.id,
+          is_public: false
+        })
+
+      if (error) throw error
+
+      await fetchResources()
+      setShowCreateModal(false)
+      alert('Resource created successfully!')
+    } catch (error) {
+      console.error('Error creating resource:', error)
+      alert('Error creating resource. Please try again.')
+    }
+  }
+
+  const assignResource = async (resourceId: string, clientIds: string[], instructions: string) => {
+    try {
+      const resource = resources.find(r => r.id === resourceId)
+      if (!resource) return
+
+      const assignments = clientIds.map(clientId => ({
+        therapist_id: profile!.id,
+        client_id: clientId,
+        form_type: resource.type,
+        form_id: resourceId,
+        title: resource.title,
+        instructions,
+        status: 'assigned'
+      }))
+
+      const { error } = await supabase
+        .from('form_assignments')
+        .insert(assignments)
+
+      if (error) throw error
+
+      setShowAssignModal(false)
+      setSelectedResource(null)
+      alert('Resource assigned successfully!')
+    } catch (error) {
+      console.error('Error assigning resource:', error)
+      alert('Error assigning resource. Please try again.')
     }
   }
 
@@ -117,13 +212,13 @@ export const ResourceLibrary: React.FC = () => {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'assessment': return <ClipboardList className="w-5 h-5" />
-      case 'treatment_plan': return <Brain className="w-5 h-5" />
-      case 'worksheet': return <FileText className="w-5 h-5" />
-      case 'article': return <BookOpen className="w-5 h-5" />
-      case 'video': return <Video className="w-5 h-5" />
-      case 'audio': return <Headphones className="w-5 h-5" />
-      default: return <FileText className="w-5 h-5" />
+      case 'assessment': return <ClipboardList className="w-4 h-4 sm:w-5 sm:h-5" />
+      case 'treatment_plan': return <Brain className="w-4 h-4 sm:w-5 sm:h-5" />
+      case 'worksheet': return <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
+      case 'article': return <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
+      case 'video': return <Video className="w-4 h-4 sm:w-5 sm:h-5" />
+      case 'audio': return <Headphones className="w-4 h-4 sm:w-5 sm:h-5" />
+      default: return <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
     }
   }
 
@@ -154,76 +249,85 @@ export const ResourceLibrary: React.FC = () => {
         {[1, 2, 3, 4, 5].map((star) => (
           <Star
             key={star}
-            className={`w-4 h-4 ${
+            className={`w-3 h-3 sm:w-4 sm:h-4 ${
               star <= rating ? 'text-yellow-400 fill-current' : 'text-gray-300'
             }`}
           />
         ))}
-        <span className="text-sm text-gray-600 ml-1">{rating}</span>
+        <span className="text-xs sm:text-sm text-gray-600 ml-1">{rating}</span>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-3 sm:space-y-6 max-w-full overflow-hidden">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Resource Library</h2>
-          <p className="text-sm sm:text-base text-gray-600">Evidence-based tools, assessments, and treatment resources</p>
+      <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:items-center justify-between">
+        <div className="min-w-0">
+          <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 truncate">Resource Library</h2>
+          <p className="text-xs sm:text-sm lg:text-base text-gray-600">Evidence-based tools, assessments, and treatment resources</p>
         </div>
-        <button className="inline-flex items-center px-3 py-2 sm:px-4 sm:py-2 border border-transparent text-xs sm:text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 w-full sm:w-auto justify-center">
-          <Plus className="w-4 h-4 mr-2" />
+        <button 
+          onClick={() => setShowCreateModal(true)}
+          className="inline-flex items-center px-3 py-2 sm:px-4 sm:py-2 border border-transparent text-xs sm:text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 w-full sm:w-auto justify-center flex-shrink-0"
+        >
+          <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
           Create Custom
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 overflow-x-auto">
-        <nav className="-mb-px flex space-x-2 sm:space-x-4 lg:space-x-8 min-w-max px-1">
-          {[
-            { id: 'all', name: 'All Resources', icon: Library },
-            { id: 'assessments', name: 'Assessments', icon: ClipboardList },
-            { id: 'worksheets', name: 'Worksheets', icon: FileText },
-            { id: 'exercises', name: 'Exercises', icon: Gamepad2 },
-            { id: 'treatments', name: 'Treatments', icon: Brain },
-            { id: 'psychoeducation', name: 'Psychoeducation', icon: GraduationCap }
-          ].map((tab) => {
-            const Icon = tab.icon
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center space-x-1 sm:space-x-2 py-2 px-2 sm:px-3 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Icon className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5" />
-                <span className="hidden sm:inline">{tab.name}</span>
-                <span className="sm:hidden">{tab.name.split(' ')[0]}</span>
-              </button>
-            )
-          })}
-        </nav>
+      <div className="border-b border-gray-200 -mx-3 sm:mx-0">
+        <div className="overflow-x-auto px-3 sm:px-0">
+          <nav className="-mb-px flex space-x-1 sm:space-x-4 lg:space-x-8 min-w-max">
+            {[
+              { id: 'all', name: 'All Resources', icon: Library },
+              { id: 'assessments', name: 'Assessments', icon: ClipboardList },
+              { id: 'worksheets', name: 'Worksheets', icon: FileText },
+              { id: 'exercises', name: 'Exercises', icon: Gamepad2 },
+              { id: 'treatments', name: 'Treatments', icon: Brain },
+              { id: 'psychoeducation', name: 'Psychoeducation', icon: GraduationCap }
+            ].map((tab) => {
+              const Icon = tab.icon
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center space-x-1 sm:space-x-2 py-2 px-2 sm:px-3 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Icon className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 flex-shrink-0" />
+                  <span className="hidden sm:inline">{tab.name}</span>
+                  <span className="sm:hidden">{tab.name.split(' ')[0]}</span>
+                </button>
+              )
+            })}
+          </nav>
+        </div>
       </div>
 
       {/* Tab Content */}
       {activeTab === 'assessments' && (
-        <AssessmentTools />
+        <div className="max-w-full overflow-hidden">
+          <AssessmentTools />
+        </div>
       )}
       
       {activeTab === 'worksheets' && (
-        <WorksheetManagement />
+        <div className="max-w-full overflow-hidden">
+          <WorksheetManagement />
+        </div>
       )}
       
       {activeTab === 'exercises' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-          <div className="text-center py-12 text-gray-500">
-            <Gamepad2 className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Therapeutic Exercises</h3>
-            <p className="text-gray-600">
+          <div className="text-center py-8 sm:py-12 text-gray-500">
+            <Gamepad2 className="mx-auto h-8 w-8 sm:h-12 sm:w-12 text-gray-400 mb-4" />
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">Therapeutic Exercises</h3>
+            <p className="text-sm sm:text-base text-gray-600">
               Interactive therapeutic exercises and games coming soon.
             </p>
           </div>
@@ -231,18 +335,18 @@ export const ResourceLibrary: React.FC = () => {
       )}
       
       {(activeTab === 'all' || activeTab === 'treatments' || activeTab === 'psychoeducation') && (
-        <>
+        <div className="space-y-3 sm:space-y-6 max-w-full overflow-hidden">
           {/* Filters */}
           <div className="bg-white p-3 sm:p-4 lg:p-6 rounded-lg shadow-sm border border-gray-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
               <div className="relative">
-                <Search className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
+                <Search className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5" />
                 <input
                   type="text"
-                  placeholder="Search resources..."
+                  placeholder="Search..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-8 sm:pl-10 pr-3 sm:pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                  className="w-full pl-7 sm:pl-8 lg:pl-10 pr-2 sm:pr-3 lg:pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
                 />
               </div>
               
@@ -252,14 +356,11 @@ export const ResourceLibrary: React.FC = () => {
                 className="border border-gray-300 rounded-md px-2 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
               >
                 <option value="all">All Categories</option>
-                <option value="Depression Screening">Depression Screening</option>
-                <option value="Anxiety Screening">Anxiety Screening</option>
-                <option value="Cognitive Restructuring">Cognitive Restructuring</option>
-                <option value="Educational">Educational</option>
-                <option value="Depression Treatment">Depression Treatment</option>
-                <option value="Anxiety Treatment">Anxiety Treatment</option>
-                <option value="Mood Monitoring">Mood Monitoring</option>
-                <option value="Mindfulness">Mindfulness</option>
+                <option value="worksheet">Worksheets</option>
+                <option value="educational">Educational</option>
+                <option value="intervention">Interventions</option>
+                <option value="protocol">Protocols</option>
+                <option value="research">Research</option>
               </select>
               
               <select
@@ -289,57 +390,56 @@ export const ResourceLibrary: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
             {filteredResources.map((resource) => (
               <div key={resource.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 lg:p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-2">
-                    <div className={`p-1.5 sm:p-2 rounded-lg ${getTypeColor(resource.type)}`}>
+                <div className="flex items-start justify-between mb-3 sm:mb-4">
+                  <div className="flex items-center space-x-2 min-w-0 flex-1">
+                    <div className={`p-1 sm:p-1.5 lg:p-2 rounded-lg flex-shrink-0 ${getTypeColor(resource.type)}`}>
                       {getTypeIcon(resource.type)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-gray-900 text-xs sm:text-sm leading-tight">{resource.title}</h3>
-                      <p className="text-xs text-gray-600">{resource.category}</p>
+                      <h3 className="font-semibold text-gray-900 text-xs sm:text-sm lg:text-base leading-tight truncate">{resource.title}</h3>
+                      <p className="text-xs text-gray-600 truncate">{resource.category}</p>
                     </div>
                   </div>
                   {resource.evidenceBased && (
-                    <div className="flex items-center space-x-1 text-green-600 flex-shrink-0">
+                    <div className="flex items-center space-x-1 text-green-600 flex-shrink-0 ml-2">
                       <Award className="w-3 h-3 sm:w-4 sm:h-4" />
-                      <span className="text-xs hidden sm:inline">Evidence-Based</span>
+                      <span className="text-xs hidden lg:inline">Evidence-Based</span>
                     </div>
                   )}
                 </div>
                 
-                <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4 line-clamp-2 sm:line-clamp-3">{resource.description}</p>
+                <p className="text-xs sm:text-sm text-gray-600 mb-3 line-clamp-2 sm:line-clamp-3">{resource.description}</p>
                 
-                <div className="flex flex-col gap-2 mb-3 sm:mb-4">
-                  <div className="flex items-center space-x-2 sm:space-x-4">
+                <div className="flex flex-col gap-2 mb-3">
+                  <div className="flex items-center justify-between">
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(resource.difficulty)}`}>
                       {resource.difficulty}
                     </span>
                     {resource.duration && (
                       <div className="flex items-center space-x-1 text-gray-500">
-                        <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
+                        <Clock className="w-3 h-3" />
                         <span className="text-xs">{resource.duration}</span>
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center space-x-1 text-gray-500">
-                    <Users className="w-3 h-3 sm:w-4 sm:h-4" />
-                    <span className="text-xs">{resource.usageCount}</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-1 text-gray-500">
+                      <Users className="w-3 h-3" />
+                      <span className="text-xs">{resource.usageCount}</span>
+                    </div>
+                    {renderStarRating(resource.rating)}
                   </div>
                 </div>
                 
-                <div className="mb-3 sm:mb-4">
-                  {renderStarRating(resource.rating)}
-                </div>
-                
-                <div className="flex flex-wrap gap-1 mb-3 sm:mb-4">
-                  {resource.tags.slice(0, 3).map((tag, index) => (
-                    <span key={index} className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {resource.tags.slice(0, 2).map((tag, index) => (
+                    <span key={index} className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded truncate">
                       {tag}
                     </span>
                   ))}
-                  {resource.tags.length > 3 && (
+                  {resource.tags.length > 2 && (
                     <span className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                      +{resource.tags.length - 3}
+                      +{resource.tags.length - 2}
                     </span>
                   )}
                 </div>
@@ -376,7 +476,7 @@ export const ResourceLibrary: React.FC = () => {
               </p>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Resource Preview Modal */}
@@ -387,25 +487,22 @@ export const ResourceLibrary: React.FC = () => {
             
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full mx-2 sm:mx-4">
               <div className="bg-white px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6 pb-4">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-base sm:text-lg font-medium text-gray-900 pr-2">{selectedResource.title}</h3>
+                <div className="flex items-start justify-between mb-4 sm:mb-6">
+                  <h3 className="text-sm sm:text-base lg:text-lg font-medium text-gray-900 pr-2 flex-1 min-w-0">{selectedResource.title}</h3>
                   <button
                     onClick={() => setSelectedResource(null)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-2"
                   >
-                    <span className="sr-only">Close</span>
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <X className="h-5 w-5 sm:h-6 sm:w-6" />
                   </button>
                 </div>
                 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-                    <div className={`p-2 sm:p-3 rounded-lg ${getTypeColor(selectedResource.type)} self-start`}>
+                    <div className={`p-2 sm:p-3 rounded-lg self-start ${getTypeColor(selectedResource.type)}`}>
                       {getTypeIcon(selectedResource.type)}
                     </div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <p className="text-xs sm:text-sm text-gray-600">{selectedResource.category}</p>
                       <div className="flex flex-wrap items-center gap-2 mt-1">
                         <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(selectedResource.difficulty)}`}>
@@ -420,7 +517,7 @@ export const ResourceLibrary: React.FC = () => {
                     </div>
                   </div>
                   
-                  <p className="text-sm sm:text-base text-gray-700">{selectedResource.description}</p>
+                  <p className="text-xs sm:text-sm lg:text-base text-gray-700">{selectedResource.description}</p>
                   
                   <div className="grid grid-cols-2 gap-3 sm:gap-4 py-3 sm:py-4 border-t border-gray-200">
                     <div>
@@ -449,12 +546,17 @@ export const ResourceLibrary: React.FC = () => {
               <div className="bg-gray-50 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex flex-col sm:flex-row-reverse gap-2 sm:gap-3">
                 <button
                   onClick={() => setShowAssignModal(true)}
-                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-3 sm:px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700"
+                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-3 sm:px-4 py-2 bg-blue-600 text-xs sm:text-sm font-medium text-white hover:bg-blue-700"
                 >
                   Assign to Client
                 </button>
                 <button
-                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-3 sm:px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  onClick={() => {
+                    if (selectedResource.content_url) {
+                      window.open(selectedResource.content_url, '_blank')
+                    }
+                  }}
+                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-3 sm:px-4 py-2 bg-white text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
                   Download
@@ -467,72 +569,286 @@ export const ResourceLibrary: React.FC = () => {
 
       {/* Assignment Modal */}
       {showAssignModal && selectedResource && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-end justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowAssignModal(false)} />
-            
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full mx-2 sm:mx-4">
-              <div className="bg-white px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6 pb-4">
-                <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-4">
-                  Assign: {selectedResource.title}
+        <AssignResourceModal
+          resource={selectedResource}
+          clients={clients}
+          onClose={() => setShowAssignModal(false)}
+          onAssign={assignResource}
+        />
+      )}
+
+      {/* Create Resource Modal */}
+      {showCreateModal && (
+        <CreateResourceModal
+          onClose={() => setShowCreateModal(false)}
+          onCreate={createCustomResource}
+        />
+      )}
+    </div>
+  )
+}
+
+// Assign Resource Modal Component
+interface AssignResourceModalProps {
+  resource: Resource
+  clients: any[]
+  onClose: () => void
+  onAssign: (resourceId: string, clientIds: string[], instructions: string) => void
+}
+
+const AssignResourceModal: React.FC<AssignResourceModalProps> = ({ 
+  resource, 
+  clients, 
+  onClose, 
+  onAssign 
+}) => {
+  const [selectedClients, setSelectedClients] = useState<string[]>([])
+  const [instructions, setInstructions] = useState('')
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (selectedClients.length > 0) {
+      onAssign(resource.id, selectedClients, instructions)
+    }
+  }
+
+  const toggleClient = (clientId: string) => {
+    setSelectedClients(prev => 
+      prev.includes(clientId) 
+        ? prev.filter(id => id !== clientId)
+        : [...prev, clientId]
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-end justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
+        
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full mx-2 sm:mx-4">
+          <form onSubmit={handleSubmit}>
+            <div className="bg-white px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6 pb-4">
+              <div className="flex items-start justify-between mb-4 sm:mb-6">
+                <h3 className="text-sm sm:text-base lg:text-lg font-medium text-gray-900 pr-2 flex-1 min-w-0">
+                  Assign: {resource.title}
                 </h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
-                      Select Client
-                    </label>
-                    <select className="w-full border border-gray-300 rounded-md px-2 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm">
-                      <option>Select a client...</option>
-                      <option>John Doe</option>
-                      <option>Jane Smith</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
-                      Due Date
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full border border-gray-300 rounded-md px-2 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
-                      Instructions (Optional)
-                    </label>
-                    <textarea
-                      rows={3}
-                      className="w-full border border-gray-300 rounded-md px-2 sm:px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
-                      placeholder="Add any specific instructions for the client..."
-                    />
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                >
+                  <X className="h-5 w-5 sm:h-6 sm:w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4 sm:space-y-6">
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">
+                    Select Clients
+                  </label>
+                  <div className="max-h-32 sm:max-h-48 overflow-y-auto border border-gray-300 rounded-md">
+                    {clients.map((client) => (
+                      <label key={client.id} className="flex items-center p-2 sm:p-3 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedClients.includes(client.id)}
+                          onChange={() => toggleClient(client.id)}
+                          className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <div className="ml-2 sm:ml-3 min-w-0 flex-1">
+                          <div className="text-xs sm:text-sm font-medium text-gray-900 truncate">
+                            {client.first_name} {client.last_name}
+                          </div>
+                          <div className="text-xs text-gray-500 truncate">{client.email}</div>
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 </div>
-              </div>
-              
-              <div className="bg-gray-50 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex flex-col sm:flex-row-reverse gap-2 sm:gap-3">
-                <button
-                  onClick={() => {
-                    setShowAssignModal(false)
-                    setSelectedResource(null)
-                  }}
-                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-3 sm:px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  Assign Resource
-                </button>
-                <button
-                  onClick={() => setShowAssignModal(false)}
-                  className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-3 sm:px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
+
+                <div>
+                  <label htmlFor="instructions" className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+                    Instructions for Client
+                  </label>
+                  <textarea
+                    id="instructions"
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    rows={3}
+                    placeholder="Optional instructions or context for the client..."
+                    className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+            
+            <div className="bg-gray-50 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex flex-col sm:flex-row-reverse gap-2 sm:gap-3">
+              <button
+                type="submit"
+                disabled={selectedClients.length === 0}
+                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-3 sm:px-4 py-2 bg-blue-600 text-xs sm:text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Assign Resource
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-3 sm:px-4 py-2 bg-white text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
-      )}
+      </div>
+    </div>
+  )
+}
+
+// Create Resource Modal Component
+interface CreateResourceModalProps {
+  onClose: () => void
+  onCreate: (resourceData: any) => void
+}
+
+const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCreate }) => {
+  const [formData, setFormData] = useState({
+    title: '',
+    category: 'worksheet',
+    subcategory: '',
+    description: '',
+    type: 'text',
+    difficulty: 'beginner',
+    evidenceBased: false,
+    tags: '',
+    content: ''
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (formData.title && formData.description) {
+      onCreate({
+        ...formData,
+        tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+      })
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-end justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
+        
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full mx-2 sm:mx-4">
+          <form onSubmit={handleSubmit}>
+            <div className="bg-white px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6 pb-4">
+              <div className="flex items-start justify-between mb-4 sm:mb-6">
+                <h3 className="text-sm sm:text-base lg:text-lg font-medium text-gray-900 pr-2">Create Custom Resource</h3>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5 sm:h-6 sm:w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Title *</label>
+                  <input
+                    type="text"
+                    value={formData.title}
+                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Category</label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                    >
+                      <option value="worksheet">Worksheet</option>
+                      <option value="educational">Educational</option>
+                      <option value="intervention">Intervention</option>
+                      <option value="protocol">Protocol</option>
+                      <option value="research">Research</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Difficulty</label>
+                    <select
+                      value={formData.difficulty}
+                      onChange={(e) => setFormData(prev => ({ ...prev, difficulty: e.target.value }))}
+                      className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                    >
+                      <option value="beginner">Beginner</option>
+                      <option value="intermediate">Intermediate</option>
+                      <option value="advanced">Advanced</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Description *</label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    rows={3}
+                    className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Tags</label>
+                  <input
+                    type="text"
+                    value={formData.tags}
+                    onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
+                    placeholder="Comma-separated tags"
+                    className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs sm:text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.evidenceBased}
+                      onChange={(e) => setFormData(prev => ({ ...prev, evidenceBased: e.target.checked }))}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-xs sm:text-sm text-gray-700">Evidence-based resource</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-gray-50 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex flex-col sm:flex-row-reverse gap-2 sm:gap-3">
+              <button
+                type="submit"
+                disabled={!formData.title || !formData.description}
+                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-3 sm:px-4 py-2 bg-purple-600 text-xs sm:text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Create Resource
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-3 sm:px-4 py-2 bg-white text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   )
 }

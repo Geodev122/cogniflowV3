@@ -226,78 +226,102 @@ export const CaseManagement: React.FC = () => {
 
   const handleCreatePlan = async () => {
     if (!selectedCase || !profile) return
-    const title = prompt('Plan title')
+    const title = prompt('Treatment plan title:')
     if (!title) return
-    const { error } = await supabase
-      .from('treatment_plans')
-      .insert({
-        client_id: selectedCase.client.id,
-        therapist_id: profile.id,
-        title: title,
-        status: 'active'
-      })
-    if (error) {
+    
+    try {
+      const { error } = await supabase
+        .from('treatment_plans')
+        .insert({
+          client_id: selectedCase.client.id,
+          therapist_id: profile.id,
+          title: title,
+          status: 'active'
+        })
+      
+      if (error) throw error
+      
+      await fetchCaseFiles()
+      alert('Treatment plan created successfully!')
+    } catch (error) {
       console.error('Error creating plan:', error)
-    } else {
-      fetchCaseFiles()
+      alert('Error creating treatment plan. Please try again.')
     }
   }
 
   const handleAddGoal = async () => {
     if (!selectedCase?.treatmentPlanId) return
-    const text = prompt('Goal description')
+    const text = prompt('Goal description:')
     if (!text) return
-    const { error } = await supabase
-      .from('therapy_goals')
-      .insert({
-        treatment_plan_id: selectedCase.treatmentPlanId,
-        goal_text: text,
-        progress_percentage: 0,
-        status: 'active'
-      })
-    if (error) {
+    
+    try {
+      const { error } = await supabase
+        .from('therapy_goals')
+        .insert({
+          treatment_plan_id: selectedCase.treatmentPlanId,
+          goal_text: text,
+          progress_percentage: 0,
+          status: 'active'
+        })
+      
+      if (error) throw error
+      
+      await fetchCaseFiles()
+      alert('Goal added successfully!')
+    } catch (error) {
       console.error('Error adding goal:', error)
-    } else {
-      fetchCaseFiles()
+      alert('Error adding goal. Please try again.')
     }
   }
 
   const handleCompleteGoal = async (goalId: string) => {
-    const { error } = await supabase
-      .from('therapy_goals')
-      .update({
-        progress_percentage: 100,
-        status: 'achieved'
-      })
-      .eq('id', goalId)
-    if (error) {
+    try {
+      const { error } = await supabase
+        .from('therapy_goals')
+        .update({
+          progress_percentage: 100,
+          status: 'achieved'
+        })
+        .eq('id', goalId)
+      
+      if (error) throw error
+      
+      await fetchCaseFiles()
+      alert('Goal marked as achieved!')
+    } catch (error) {
       console.error('Error updating goal:', error)
-    } else {
-      fetchCaseFiles()
+      alert('Error updating goal. Please try again.')
     }
   }
 
   const handleAddIntervention = async (goalId: string) => {
-    const description = prompt('Intervention description')
+    const description = prompt('Intervention description:')
     if (!description) return
-    // For now, we'll add interventions as notes to the goal
-    // This can be expanded later with a proper interventions table
-    const { data: goal } = await supabase
-      .from('therapy_goals')
-      .select('notes')
-      .eq('id', goalId)
-      .single()
     
-    const existingNotes = goal?.notes || ''
-    const updatedNotes = existingNotes ? `${existingNotes}\n• ${description}` : `• ${description}`
-    
-    const { error } = await supabase
-      .from('therapy_goals')
-      .update({ notes: updatedNotes })
-      .eq('id', goalId)
-    
-    if (!error) {
-      fetchCaseFiles()
+    try {
+      // For now, we'll add interventions as notes to the goal
+      // This can be expanded later with a proper interventions table
+      const { data: goal } = await supabase
+        .from('therapy_goals')
+        .select('notes')
+        .eq('id', goalId)
+        .single()
+      
+      const existingNotes = goal?.notes || ''
+      const updatedNotes = existingNotes ? `${existingNotes}\n• ${description}` : `• ${description}`
+      
+      const { error } = await supabase
+        .from('therapy_goals')
+        .update({ notes: updatedNotes })
+        .eq('id', goalId)
+      
+      if (error) throw error
+      
+      await fetchCaseFiles()
+      alert('Intervention added successfully!')
+    } catch (error) {
+      console.error('Error adding intervention:', error)
+      alert('Error adding intervention. Please try again.')
     }
   }
 

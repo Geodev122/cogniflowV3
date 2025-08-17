@@ -134,6 +134,7 @@ export const CommunicationTools: React.FC = () => {
 
       await fetchCommunications()
       setShowNewMessage(false)
+      alert('Message sent successfully!')
     } catch (error) {
       console.error('Error sending message:', error)
       alert('Error sending message')

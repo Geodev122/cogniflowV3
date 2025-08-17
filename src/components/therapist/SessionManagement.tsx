@@ -135,6 +135,7 @@ export const SessionManagement: React.FC = () => {
 
       await fetchAppointments()
       setShowNewAppointment(false)
+      alert('Appointment scheduled successfully!')
     } catch (error) {
       console.error('Error creating appointment:', error)
       alert('Error creating appointment')
@@ -150,8 +151,10 @@ export const SessionManagement: React.FC = () => {
 
       if (error) throw error
       await fetchAppointments()
+      alert(`Appointment marked as ${status}`)
     } catch (error) {
       console.error('Error updating appointment:', error)
+      alert('Error updating appointment status')
     }
   }
 
