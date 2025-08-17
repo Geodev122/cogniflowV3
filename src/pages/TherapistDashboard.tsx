@@ -587,7 +587,7 @@ export const TherapistDashboard: React.FC = () => {
         )
       case 'resources':
         return (
-          <div className="h-full">
+          <div className="h-full bg-white">
             <React.Suspense fallback={<div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
               <ResourceLibrary />
             </React.Suspense>
@@ -707,25 +707,18 @@ export const TherapistDashboard: React.FC = () => {
 
       <div className="flex pt-16">
         {/* Fixed Sidebar - Desktop */}
-        <div className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 fixed left-0 top-16 bottom-0 transition-all duration-300`}>
-          {/* Collapse/Expand Button */}
-          <div className="p-4 border-b border-gray-200">
+        <div className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 fixed left-0 top-16 bottom-0 transition-all duration-300 shadow-sm`}>
+          {/* Elegant Collapse/Expand Button */}
+          <div className="relative">
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              className={`absolute ${sidebarCollapsed ? '-right-3 top-4' : '-right-3 top-4'} z-10 w-6 h-6 bg-white border border-gray-300 rounded-full shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center hover:bg-gray-50 group`}
             >
-              {sidebarCollapsed ? (
-                <ChevronRight className="w-5 h-5 text-gray-600" />
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <ChevronLeft className="w-5 h-5 text-gray-600" />
-                  <span className="text-sm text-gray-600">Collapse</span>
-                </div>
-              )}
+              <ChevronLeft className={`w-4 h-4 text-gray-600 transition-transform duration-200 ${sidebarCollapsed ? 'rotate-180' : ''} group-hover:text-gray-800`} />
             </button>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4 pt-12">
             <nav className="space-y-6">
               {navigationSections.map((section, sectionIndex) => (
                 <div key={sectionIndex}>
@@ -815,8 +808,8 @@ export const TherapistDashboard: React.FC = () => {
         )}
 
         {/* Main Content */}
-        <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}>
-          <main className="h-screen pt-0 overflow-hidden">
+        <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} bg-gray-50`}>
+          <main className="h-screen overflow-hidden">
             {renderTabContent()}
           </main>
         </div>
