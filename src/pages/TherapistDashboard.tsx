@@ -587,9 +587,11 @@ export const TherapistDashboard: React.FC = () => {
         )
       case 'resources':
         return (
-          <React.Suspense fallback={<div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
-            <ResourceLibrary />
-          </React.Suspense>
+          <div className="h-full">
+            <React.Suspense fallback={<div className="flex justify-center items-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
+              <ResourceLibrary />
+            </React.Suspense>
+          </div>
         )
       case 'sessions':
         return (
@@ -707,43 +709,36 @@ export const TherapistDashboard: React.FC = () => {
         {/* Fixed Sidebar - Desktop */}
         <div className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 fixed left-0 top-16 bottom-0 transition-all duration-300 shadow-lg z-30`}>
           {/* Modern Collapse/Expand Button */}
-          <div className="relative">
-            <div className="p-4 flex items-center justify-between border-b border-gray-100">
+          <div className="flex-shrink-0 border-b border-gray-100">
+            <div className="p-4 flex items-center justify-between">
               {!sidebarCollapsed && (
-                <h3 className="text-sm font-semibold text-gray-800">Navigation</h3>
+                <h3 className="text-sm font-semibold text-gray-800 flex items-center">
+                  <Target className="w-4 h-4 mr-2 text-blue-600" />
+                  Navigation
+                </h3>
               )}
               <button
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className={`w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center hover:from-blue-600 hover:to-indigo-700 group transform hover:scale-105 ${
+                className={`w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center hover:from-blue-600 hover:to-indigo-700 group transform hover:scale-110 ${
                   sidebarCollapsed ? 'mx-auto' : ''
-                }`}
+                } relative overflow-hidden`}
                 title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               >
-                <ChevronLeft className={`w-4 h-4 transition-transform duration-300 ${sidebarCollapsed ? 'rotate-180' : ''} group-hover:scale-110`} />
+                <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+                <ChevronLeft className={`w-4 h-4 transition-all duration-300 ${sidebarCollapsed ? 'rotate-180' : ''} group-hover:scale-125 relative z-10`} />
               </button>
             </div>
-            
-            {/* Floating expand button when collapsed */}
-            {sidebarCollapsed && (
-              <div className="absolute -right-4 top-1/2 transform -translate-y-1/2">
-                <button
-                  onClick={() => setSidebarCollapsed(false)}
-                  className="w-8 h-8 bg-white border-2 border-blue-500 text-blue-600 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center hover:bg-blue-50 group z-40"
-                  title="Expand sidebar"
-                >
-                  <ChevronRight className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                </button>
-              </div>
-            )}
           </div>
           
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-3">
             <nav className="space-y-6">
               {navigationSections.map((section, sectionIndex) => (
                 <div key={sectionIndex}>
                   {section.title && !sidebarCollapsed && (
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-2">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-2 flex items-center">
+                      <div className="w-4 h-0.5 bg-gray-300 mr-2"></div>
                       {section.title}
+                      <div className="flex-1 h-0.5 bg-gray-300 ml-2"></div>
                     </h4>
                   )}
                   <div className="space-y-1">
@@ -755,24 +750,27 @@ export const TherapistDashboard: React.FC = () => {
                         <button
                           key={tab.id}
                           onClick={() => setActiveTab(tab.id)}
-                          className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-xl transition-all text-sm font-medium group relative overflow-hidden ${
+                          className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-xl transition-all duration-200 text-sm font-medium group relative overflow-hidden ${
                             isActive
-                              ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg transform scale-105'
-                              : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 hover:text-gray-900 hover:shadow-md hover:scale-102'
+                              ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg transform scale-105 border border-blue-400'
+                              : 'text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:text-blue-900 hover:shadow-md hover:scale-102 hover:border hover:border-blue-200'
                           }`}
                           title={sidebarCollapsed ? tab.name : undefined}
                         >
-                          <Icon className={`w-5 h-5 flex-shrink-0 transition-all duration-200 group-hover:scale-110 ${
-                            isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-600'
+                          <Icon className={`w-5 h-5 flex-shrink-0 transition-all duration-200 group-hover:scale-125 ${
+                            isActive ? 'text-white drop-shadow-sm' : 'text-gray-400 group-hover:text-blue-600'
                           }`} />
                           {!sidebarCollapsed && (
-                            <span className="transition-all duration-200 font-medium">{tab.name}</span>
+                            <span className="transition-all duration-200 font-medium group-hover:font-semibold">{tab.name}</span>
                           )}
                           {isActive && !sidebarCollapsed && (
-                            <div className="absolute right-3 w-2 h-2 bg-white rounded-full opacity-90 animate-pulse"></div>
+                            <div className="absolute right-3 w-2 h-2 bg-white rounded-full opacity-90 animate-pulse shadow-sm"></div>
                           )}
                           {isActive && (
-                            <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent pointer-events-none"></div>
+                            <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent pointer-events-none"></div>
+                          )}
+                          {!isActive && (
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"></div>
                           )}
                         </button>
                       )
@@ -782,6 +780,16 @@ export const TherapistDashboard: React.FC = () => {
               ))}
             </nav>
           </div>
+          
+          {/* Sidebar Footer */}
+          {!sidebarCollapsed && (
+            <div className="flex-shrink-0 border-t border-gray-100 p-4">
+              <div className="text-center">
+                <div className="text-xs text-gray-500 mb-1">Thera-PY Platform</div>
+                <div className="text-xs text-gray-400">v1.0.0</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Mobile Navigation Overlay */}

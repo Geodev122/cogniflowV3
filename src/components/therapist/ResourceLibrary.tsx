@@ -3,249 +3,185 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { 
   Library, 
-  ClipboardList, 
-  Brain, 
-  BookOpen, 
   Search, 
   Filter, 
+  Grid3X3, 
+  List, 
+  Plus, 
   Eye, 
   Send, 
-  GraduationCap,
+  Star,
+  BookOpen,
   FileText,
   Video,
   Headphones,
   Download,
-  Star,
-  Clock,
-  Users,
-  Target,
-  Award,
-  Lightbulb,
-  Gamepad2,
-  Plus,
   X,
-  Grid3X3,
-  List,
-  SlidersHorizontal,
-  ChevronDown,
-  Bookmark,
-  TrendingUp,
+  Users,
+  Clock,
+  Award,
+  Target,
+  Brain,
+  Heart,
   Zap,
-  AlertTriangle,
-  Grid,
-  Play,
-  CheckCircle,
-  ArrowRight
+  Shield
 } from 'lucide-react'
 
 interface Resource {
   id: string
   title: string
-  type: 'assessment' | 'treatment_plan' | 'worksheet' | 'exercise' | 'article' | 'video' | 'audio'
   category: string
-  description: string
-  difficulty: 'beginner' | 'intermediate' | 'advanced'
-  duration?: string
-  rating: number
-  usageCount: number
-  evidenceBased: boolean
-  tags: string[]
+  subcategory?: string
+  description?: string
+  content_type?: string
   content_url?: string
   content_data?: any
+  tags?: string[]
+  difficulty_level?: string
+  evidence_level?: string
+  created_by?: string
+  is_public?: boolean
+  created_at: string
+  updated_at: string
 }
 
-export const ResourceLibrary: React.FC = () => {
-  const [activeCategory, setActiveCategory] = useState<string>('all')
+const SAMPLE_RESOURCES: Resource[] = [
+  {
+    id: '1',
+    title: 'CBT Thought Record Worksheet',
+    category: 'worksheet',
+    subcategory: 'cognitive',
+    description: 'A comprehensive thought record worksheet for identifying and challenging negative thought patterns.',
+    content_type: 'pdf',
+    tags: ['CBT', 'thought-challenging', 'cognitive-restructuring'],
+    difficulty_level: 'beginner',
+    evidence_level: 'research_based',
+    is_public: true,
+    created_at: '2024-01-15T10:00:00Z',
+    updated_at: '2024-01-15T10:00:00Z'
+  },
+  {
+    id: '2',
+    title: 'Anxiety Management Protocol',
+    category: 'protocol',
+    subcategory: 'anxiety',
+    description: 'Step-by-step protocol for managing acute anxiety episodes using evidence-based techniques.',
+    content_type: 'interactive',
+    tags: ['anxiety', 'breathing', 'grounding'],
+    difficulty_level: 'intermediate',
+    evidence_level: 'research_based',
+    is_public: true,
+    created_at: '2024-01-14T14:30:00Z',
+    updated_at: '2024-01-14T14:30:00Z'
+  },
+  {
+    id: '3',
+    title: 'Depression Screening Guide',
+    category: 'educational',
+    subcategory: 'assessment',
+    description: 'Comprehensive guide for conducting depression screenings with interpretation guidelines.',
+    content_type: 'pdf',
+    tags: ['depression', 'screening', 'PHQ-9'],
+    difficulty_level: 'advanced',
+    evidence_level: 'clinical_consensus',
+    is_public: true,
+    created_at: '2024-01-13T09:15:00Z',
+    updated_at: '2024-01-13T09:15:00Z'
+  },
+  {
+    id: '4',
+    title: 'Mindfulness Meditation Scripts',
+    category: 'intervention',
+    subcategory: 'mindfulness',
+    description: 'Collection of guided meditation scripts for various therapeutic contexts.',
+    content_type: 'audio',
+    tags: ['mindfulness', 'meditation', 'relaxation'],
+    difficulty_level: 'beginner',
+    evidence_level: 'research_based',
+    is_public: true,
+    created_at: '2024-01-12T16:45:00Z',
+    updated_at: '2024-01-12T16:45:00Z'
+  },
+  {
+    id: '5',
+    title: 'Trauma-Informed Care Guidelines',
+    category: 'protocol',
+    subcategory: 'trauma',
+    description: 'Best practices for providing trauma-informed care in therapeutic settings.',
+    content_type: 'text',
+    tags: ['trauma', 'PTSD', 'safety'],
+    difficulty_level: 'advanced',
+    evidence_level: 'research_based',
+    is_public: true,
+    created_at: '2024-01-11T11:20:00Z',
+    updated_at: '2024-01-11T11:20:00Z'
+  },
+  {
+    id: '6',
+    title: 'Behavioral Activation Worksheet',
+    category: 'worksheet',
+    subcategory: 'behavioral',
+    description: 'Activity scheduling and mood monitoring worksheet for depression treatment.',
+    content_type: 'pdf',
+    tags: ['behavioral-activation', 'depression', 'activity-scheduling'],
+    difficulty_level: 'intermediate',
+    evidence_level: 'research_based',
+    is_public: true,
+    created_at: '2024-01-10T13:30:00Z',
+    updated_at: '2024-01-10T13:30:00Z'
+  }
+]
+
+const CATEGORIES = [
+  { id: 'all', name: 'All Resources', icon: Library, color: 'blue' },
+  { id: 'worksheet', name: 'Worksheets', icon: FileText, color: 'green' },
+  { id: 'educational', name: 'Educational', icon: BookOpen, color: 'purple' },
+  { id: 'intervention', name: 'Interventions', icon: Target, color: 'orange' },
+  { id: 'protocol', name: 'Protocols', icon: Shield, color: 'red' },
+  { id: 'research', name: 'Research', icon: Brain, color: 'indigo' }
+]
+
+export default function ResourceLibrary() {
+  const [resources, setResources] = useState<Resource[]>([])
+  const [filteredResources, setFilteredResources] = useState<Resource[]>([])
+  const [selectedCategory, setSelectedCategory] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
-  const [difficultyFilter, setDifficultyFilter] = useState('all')
-  const [evidenceFilter, setEvidenceFilter] = useState('all')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [showFilters, setShowFilters] = useState(false)
+  const [difficultyFilter, setDifficultyFilter] = useState('all')
+  const [evidenceFilter, setEvidenceFilter] = useState('all')
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null)
   const [showAssignModal, setShowAssignModal] = useState(false)
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [resources, setResources] = useState<Resource[]>([])
   const [clients, setClients] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const { profile } = useAuth()
 
-  const categories = [
-    { id: 'all', name: 'All', icon: Library, color: 'blue' },
-    { id: 'assessments', name: 'Assessments', icon: ClipboardList, color: 'purple' },
-    { id: 'worksheets', name: 'Worksheets', icon: FileText, color: 'green' },
-    { id: 'exercises', name: 'Exercises', icon: Gamepad2, color: 'orange' },
-    { id: 'education', name: 'Education', icon: GraduationCap, color: 'teal' }
-  ]
-
-  // Enhanced fallback resources with better data
-  const getFallbackResources = (): Resource[] => [
-    {
-      id: 'phq9-assessment',
-      title: 'Patient Health Questionnaire (PHQ-9)',
-      type: 'assessment',
-      category: 'depression',
-      description: 'A 9-question instrument for screening, diagnosing, monitoring and measuring the severity of depression.',
-      difficulty: 'beginner',
-      duration: '5-10 min',
-      rating: 4.8,
-      usageCount: 1250,
-      evidenceBased: true,
-      tags: ['depression', 'screening', 'PHQ-9', 'validated'],
-      content_data: { questions: 9, max_score: 27 }
-    },
-    {
-      id: 'gad7-assessment',
-      title: 'Generalized Anxiety Disorder Scale (GAD-7)',
-      type: 'assessment',
-      category: 'anxiety',
-      description: 'A 7-item anxiety scale used to screen for and measure severity of generalized anxiety disorder.',
-      difficulty: 'beginner',
-      duration: '3-5 min',
-      rating: 4.7,
-      usageCount: 980,
-      evidenceBased: true,
-      tags: ['anxiety', 'GAD', 'screening', 'validated'],
-      content_data: { questions: 7, max_score: 21 }
-    },
-    {
-      id: 'thought-record-worksheet',
-      title: 'CBT Thought Record Worksheet',
-      type: 'worksheet',
-      category: 'cognitive',
-      description: 'A structured worksheet to help clients identify and challenge negative thought patterns.',
-      difficulty: 'intermediate',
-      duration: '15-20 min',
-      rating: 4.6,
-      usageCount: 750,
-      evidenceBased: true,
-      tags: ['CBT', 'thought-record', 'cognitive-restructuring'],
-      content_data: { sections: 7, interactive: true }
-    },
-    {
-      id: 'breathing-exercise',
-      title: 'Progressive Breathing Exercise',
-      type: 'exercise',
-      category: 'relaxation',
-      description: 'Interactive breathing exercise with visual guidance for anxiety and stress management.',
-      difficulty: 'beginner',
-      duration: '5-15 min',
-      rating: 4.5,
-      usageCount: 620,
-      evidenceBased: true,
-      tags: ['breathing', 'relaxation', 'anxiety', 'interactive'],
-      content_data: { guided: true, customizable: true }
-    },
-    {
-      id: 'mindfulness-meditation',
-      title: 'Mindfulness Meditation Guide',
-      type: 'audio',
-      category: 'mindfulness',
-      description: 'Guided mindfulness meditation sessions for stress reduction and emotional regulation.',
-      difficulty: 'beginner',
-      duration: '10-30 min',
-      rating: 4.9,
-      usageCount: 890,
-      evidenceBased: true,
-      tags: ['mindfulness', 'meditation', 'stress', 'guided'],
-      content_data: { sessions: 5, progressive: true }
-    },
-    {
-      id: 'cbt-psychoeducation',
-      title: 'Understanding CBT: Patient Guide',
-      type: 'article',
-      category: 'education',
-      description: 'Comprehensive guide explaining CBT principles and techniques for patient education.',
-      difficulty: 'beginner',
-      duration: '10-15 min',
-      rating: 4.4,
-      usageCount: 540,
-      evidenceBased: true,
-      tags: ['CBT', 'psychoeducation', 'patient-guide'],
-      content_data: { pages: 8, illustrations: true }
-    },
-    {
-      id: 'trauma-worksheet',
-      title: 'Trauma Processing Worksheet',
-      type: 'worksheet',
-      category: 'trauma',
-      description: 'Structured worksheet for processing traumatic experiences in a safe, guided manner.',
-      difficulty: 'advanced',
-      duration: '20-30 min',
-      rating: 4.7,
-      usageCount: 320,
-      evidenceBased: true,
-      tags: ['trauma', 'PTSD', 'processing', 'safety'],
-      content_data: { sections: 5, safety_features: true }
-    },
-    {
-      id: 'mood-tracking',
-      title: 'Daily Mood Tracker',
-      type: 'exercise',
-      category: 'monitoring',
-      description: 'Interactive daily mood tracking tool with pattern recognition and insights.',
-      difficulty: 'beginner',
-      duration: '2-5 min',
-      rating: 4.3,
-      usageCount: 1100,
-      evidenceBased: true,
-      tags: ['mood', 'tracking', 'daily', 'patterns'],
-      content_data: { interactive: true, charts: true }
-    }
-  ]
+  useEffect(() => {
+    fetchResources()
+    fetchClients()
+  }, [profile])
 
   useEffect(() => {
-    if (profile) {
-      fetchResources()
-      fetchClients()
-    }
-  }, [profile])
+    filterResources()
+  }, [resources, selectedCategory, searchTerm, difficultyFilter, evidenceFilter])
 
   const fetchResources = async () => {
     try {
-      setError(null)
-      
-      // Try to get from resource_library table
-      const { data: libraryData, error: libraryError } = await supabase
+      const { data, error } = await supabase
         .from('resource_library')
         .select('*')
-        .or(`is_public.eq.true,created_by.eq.${profile!.id}`)
+        .eq('is_public', true)
         .order('created_at', { ascending: false })
 
-      if (libraryError) {
-        console.warn('Resource library not available, using fallback data:', libraryError)
-        setResources(getFallbackResources())
-        return
+      if (error) {
+        console.warn('Database resources not available, using sample data:', error)
+        setResources(SAMPLE_RESOURCES)
+      } else {
+        setResources(data || SAMPLE_RESOURCES)
       }
-
-      if (!libraryData || libraryData.length === 0) {
-        console.log('No data in resource library, using fallback resources')
-        setResources(getFallbackResources())
-        return
-      }
-
-      // Transform database data to match interface
-      const transformedResources = libraryData.map(item => ({
-        id: item.id,
-        title: item.title,
-        type: item.content_type as Resource['type'] || 'article',
-        category: item.category || 'general',
-        description: item.description || '',
-        difficulty: (item.difficulty_level as Resource['difficulty']) || 'beginner',
-        duration: item.content_data?.duration || 'Variable',
-        rating: item.content_data?.rating || 4.5,
-        usageCount: item.content_data?.usage_count || Math.floor(Math.random() * 1000),
-        evidenceBased: item.evidence_level === 'research_based',
-        tags: item.tags || [],
-        content_url: item.content_url,
-        content_data: item.content_data
-      }))
-
-      setResources(transformedResources)
     } catch (error) {
       console.error('Error fetching resources:', error)
-      setError('Failed to load resources, using fallback data')
-      setResources(getFallbackResources())
+      setResources(SAMPLE_RESOURCES)
     } finally {
       setLoading(false)
     }
@@ -275,36 +211,66 @@ export const ResourceLibrary: React.FC = () => {
     }
   }
 
-  const createCustomResource = async (resourceData: any) => {
-    try {
-      const { error } = await supabase
-        .from('resource_library')
-        .insert({
-          title: resourceData.title,
-          category: resourceData.category,
-          subcategory: resourceData.subcategory,
-          description: resourceData.description,
-          content_type: resourceData.type,
-          content_data: resourceData.content,
-          tags: resourceData.tags,
-          difficulty_level: resourceData.difficulty,
-          evidence_level: resourceData.evidenceBased ? 'research_based' : 'clinical_consensus',
-          created_by: profile!.id,
-          is_public: false
-        })
+  const filterResources = () => {
+    let filtered = resources
 
-      if (error) throw error
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(r => r.category === selectedCategory)
+    }
 
-      await fetchResources()
-      setShowCreateModal(false)
-      alert('Resource created successfully!')
-    } catch (error) {
-      console.error('Error creating resource:', error)
-      alert('Error creating resource. Please try again.')
+    if (searchTerm) {
+      filtered = filtered.filter(r =>
+        r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
+    }
+
+    if (difficultyFilter !== 'all') {
+      filtered = filtered.filter(r => r.difficulty_level === difficultyFilter)
+    }
+
+    if (evidenceFilter !== 'all') {
+      filtered = filtered.filter(r => r.evidence_level === evidenceFilter)
+    }
+
+    setFilteredResources(filtered)
+  }
+
+  const getContentTypeIcon = (type?: string) => {
+    switch (type) {
+      case 'pdf': return <FileText className="w-4 h-4" />
+      case 'video': return <Video className="w-4 h-4" />
+      case 'audio': return <Headphones className="w-4 h-4" />
+      case 'interactive': return <Zap className="w-4 h-4" />
+      default: return <FileText className="w-4 h-4" />
     }
   }
 
-  const assignResource = async (resourceId: string, clientIds: string[], instructions: string) => {
+  const getDifficultyColor = (level?: string) => {
+    switch (level) {
+      case 'beginner': return 'bg-green-100 text-green-800'
+      case 'intermediate': return 'bg-yellow-100 text-yellow-800'
+      case 'advanced': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getEvidenceColor = (level?: string) => {
+    switch (level) {
+      case 'research_based': return 'bg-blue-100 text-blue-800'
+      case 'clinical_consensus': return 'bg-purple-100 text-purple-800'
+      case 'expert_opinion': return 'bg-orange-100 text-orange-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getCategoryIcon = (category: string) => {
+    const cat = CATEGORIES.find(c => c.id === category)
+    return cat ? cat.icon : FileText
+  }
+
+  const assignResource = async (resourceId: string, clientIds: string[]) => {
     try {
       const resource = resources.find(r => r.id === resourceId)
       if (!resource) return
@@ -312,10 +278,9 @@ export const ResourceLibrary: React.FC = () => {
       const assignments = clientIds.map(clientId => ({
         therapist_id: profile!.id,
         client_id: clientId,
-        form_type: resource.type,
-        form_id: resourceId,
+        form_type: 'worksheet',
         title: resource.title,
-        instructions,
+        instructions: resource.description || 'Please review this resource.',
         status: 'assigned'
       }))
 
@@ -334,94 +299,10 @@ export const ResourceLibrary: React.FC = () => {
     }
   }
 
-  const filteredResources = resources.filter((resource) => {
-    const matchesCategory = activeCategory === 'all' || 
-      (activeCategory === 'assessments' && resource.type === 'assessment') ||
-      (activeCategory === 'worksheets' && resource.type === 'worksheet') ||
-      (activeCategory === 'exercises' && resource.type === 'exercise') ||
-      (activeCategory === 'education' && ['article', 'video', 'audio'].includes(resource.type))
-
-    const matchesSearch = resource.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         resource.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         resource.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-
-    const matchesDifficulty = difficultyFilter === 'all' || resource.difficulty === difficultyFilter
-    const matchesEvidence = evidenceFilter === 'all' || 
-      (evidenceFilter === 'evidence-based' && resource.evidenceBased) ||
-      (evidenceFilter === 'clinical' && !resource.evidenceBased)
-
-    return matchesCategory && matchesSearch && matchesDifficulty && matchesEvidence
-  })
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'assessment': return <ClipboardList className="w-5 h-5" />
-      case 'treatment_plan': return <Brain className="w-5 h-5" />
-      case 'worksheet': return <FileText className="w-5 h-5" />
-      case 'article': return <BookOpen className="w-5 h-5" />
-      case 'video': return <Video className="w-5 h-5" />
-      case 'audio': return <Headphones className="w-5 h-5" />
-      case 'exercise': return <Gamepad2 className="w-5 h-5" />
-      default: return <FileText className="w-5 h-5" />
-    }
-  }
-
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'assessment': return 'text-purple-600 bg-purple-100'
-      case 'treatment_plan': return 'text-indigo-600 bg-indigo-100'
-      case 'worksheet': return 'text-green-600 bg-green-100'
-      case 'article': return 'text-orange-600 bg-orange-100'
-      case 'video': return 'text-red-600 bg-red-100'
-      case 'audio': return 'text-blue-600 bg-blue-100'
-      case 'exercise': return 'text-amber-600 bg-amber-100'
-      default: return 'text-gray-600 bg-gray-100'
-    }
-  }
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'beginner': return 'text-green-600 bg-green-100'
-      case 'intermediate': return 'text-yellow-600 bg-yellow-100'
-      case 'advanced': return 'text-red-600 bg-red-100'
-      default: return 'text-gray-600 bg-gray-100'
-    }
-  }
-
-  const getCategoryColor = (categoryId: string) => {
-    const category = categories.find(c => c.id === categoryId)
-    switch (category?.color) {
-      case 'purple': return 'bg-purple-500 hover:bg-purple-600 text-white'
-      case 'green': return 'bg-green-500 hover:bg-green-600 text-white'
-      case 'orange': return 'bg-orange-500 hover:bg-orange-600 text-white'
-      case 'teal': return 'bg-teal-500 hover:bg-teal-600 text-white'
-      default: return 'bg-blue-500 hover:bg-blue-600 text-white'
-    }
-  }
-
-  const renderStarRating = (rating: number) => {
-    return (
-      <div className="flex items-center space-x-1">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            className={`w-4 h-4 ${
-              star <= rating ? 'text-yellow-400 fill-current' : 'text-gray-300'
-            }`}
-          />
-        ))}
-        <span className="text-sm text-gray-600 ml-1">{rating}</span>
-      </div>
-    )
-  }
-
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading resources...</p>
-        </div>
+      <div className="h-full flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     )
   }
@@ -429,89 +310,64 @@ export const ResourceLibrary: React.FC = () => {
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Fixed Header */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-200">
-        {/* Title and Actions */}
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
+      <div className="flex-shrink-0 border-b border-gray-200 bg-white">
+        {/* Title and Search Bar */}
+        <div className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-bold text-gray-900">Resource Library</h2>
-              <p className="text-sm text-gray-600">Therapeutic resources and materials</p>
+              <p className="text-sm text-gray-600">Evidence-based therapeutic resources and tools</p>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create
-            </button>
-          </div>
-        </div>
-
-        {/* Search and Controls */}
-        <div className="px-6 pb-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            
+            <div className="flex items-center space-x-3">
+              {/* Search */}
+              <div className="relative flex-1 sm:w-64">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
                   placeholder="Search resources..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                 />
               </div>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`inline-flex items-center px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
-                  showFilters 
-                    ? 'bg-blue-50 border-blue-300 text-blue-700' 
-                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <SlidersHorizontal className="w-4 h-4 mr-1" />
-                Filters
-                <ChevronDown className={`w-4 h-4 ml-1 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-              </button>
-              
+
+              {/* View Toggle */}
               <div className="flex border border-gray-300 rounded-lg overflow-hidden">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`px-3 py-2 text-sm transition-colors ${
-                    viewMode === 'grid' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
+                  className={`p-2 ${viewMode === 'grid' ? 'bg-blue-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                 >
                   <Grid3X3 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`px-3 py-2 text-sm transition-colors ${
-                    viewMode === 'list' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
+                  className={`p-2 ${viewMode === 'list' ? 'bg-blue-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                 >
                   <List className="w-4 h-4" />
                 </button>
               </div>
+
+              {/* Filters Toggle */}
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`p-2 border border-gray-300 rounded-lg ${showFilters ? 'bg-blue-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              >
+                <Filter className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
           {/* Advanced Filters */}
           {showFilters && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Difficulty Level</label>
                   <select
                     value={difficultyFilter}
                     onChange={(e) => setDifficultyFilter(e.target.value)}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="all">All Levels</option>
                     <option value="beginner">Beginner</option>
@@ -519,67 +375,48 @@ export const ResourceLibrary: React.FC = () => {
                     <option value="advanced">Advanced</option>
                   </select>
                 </div>
-                
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Evidence Level</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Evidence Level</label>
                   <select
                     value={evidenceFilter}
                     onChange={(e) => setEvidenceFilter(e.target.value)}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="all">All Types</option>
-                    <option value="evidence-based">Evidence-Based</option>
-                    <option value="clinical">Clinical Practice</option>
+                    <option value="all">All Evidence</option>
+                    <option value="research_based">Research Based</option>
+                    <option value="clinical_consensus">Clinical Consensus</option>
+                    <option value="expert_opinion">Expert Opinion</option>
                   </select>
-                </div>
-                
-                <div className="flex items-end">
-                  <button
-                    onClick={() => {
-                      setDifficultyFilter('all')
-                      setEvidenceFilter('all')
-                      setSearchTerm('')
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
-                  >
-                    Clear Filters
-                  </button>
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Categories */}
-        <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+        {/* Category Navigation */}
+        <div className="px-4 py-3 border-b border-gray-100">
           <div className="flex space-x-2 overflow-x-auto">
-            {categories.map((category) => {
+            {CATEGORIES.map((category) => {
               const Icon = category.icon
-              const isActive = activeCategory === category.id
-              const categoryResources = category.id === 'all' 
-                ? resources 
-                : resources.filter(r => {
-                    if (category.id === 'assessments') return r.type === 'assessment'
-                    if (category.id === 'worksheets') return r.type === 'worksheet'
-                    if (category.id === 'exercises') return r.type === 'exercise'
-                    if (category.id === 'education') return ['article', 'video', 'audio'].includes(r.type)
-                    return false
-                  })
+              const isActive = selectedCategory === category.id
+              const count = category.id === 'all' ? resources.length : resources.filter(r => r.category === category.id).length
               
               return (
                 <button
                   key={category.id}
-                  onClick={() => setActiveCategory(category.id)}
-                  className={`flex-shrink-0 inline-flex items-center px-4 py-2 rounded-lg border transition-all ${
-                    isActive 
-                      ? getCategoryColor(category.id)
-                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                  onClick={() => setSelectedCategory(category.id)}
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                    isActive
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  <Icon className="w-4 h-4 mr-2" />
-                  {category.name}
-                  <span className="ml-2 text-xs bg-white bg-opacity-20 px-2 py-0.5 rounded-full">
-                    {categoryResources.length}
+                  <Icon className="w-4 h-4" />
+                  <span>{category.name}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                    isActive ? 'bg-white bg-opacity-20' : 'bg-gray-200'
+                  }`}>
+                    {count}
                   </span>
                 </button>
               )
@@ -590,157 +427,142 @@ export const ResourceLibrary: React.FC = () => {
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-6">
+        <div className="p-4">
           {filteredResources.length === 0 ? (
             <div className="text-center py-12">
-              <Library className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No resources found</h3>
-              <p className="text-gray-600 mb-6">
-                {searchTerm || difficultyFilter !== 'all' || evidenceFilter !== 'all'
-                  ? 'Try adjusting your search terms or filters.'
-                  : 'Create your first custom resource to get started.'
-                }
+              <Library className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No resources found</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {searchTerm ? 'Try adjusting your search or filters.' : 'No resources available in this category.'}
               </p>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Create Resource
-              </button>
-            </div>
-          ) : viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {filteredResources.map((resource) => (
-                <div key={resource.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all duration-200 group">
-                  {/* Header */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className={`p-3 rounded-lg ${getTypeColor(resource.type)}`}>
-                      {getTypeIcon(resource.type)}
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {resource.evidenceBased && (
-                        <div className="p-1 bg-green-100 rounded-full" title="Evidence-Based">
-                          <Award className="w-4 h-4 text-green-600" />
-                        </div>
-                      )}
-                      <button className="p-1 hover:bg-gray-100 rounded-full transition-colors">
-                        <Bookmark className="w-4 h-4 text-gray-400" />
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Content */}
-                  <div className="mb-4">
-                    <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">{resource.title}</h3>
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">{resource.description}</p>
-                    
-                    <div className="flex items-center justify-between text-sm text-gray-500 mb-3">
-                      <span className="flex items-center">
-                        <Clock className="w-3 h-3 mr-1" />
-                        {resource.duration}
-                      </span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getDifficultyColor(resource.difficulty)}`}>
-                        {resource.difficulty}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      {renderStarRating(resource.rating)}
-                      <span className="text-xs text-gray-500 flex items-center">
-                        <Users className="w-3 h-3 mr-1" />
-                        {resource.usageCount}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {/* Actions */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setSelectedResource(resource)}
-                      className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors"
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      Preview
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedResource(resource)
-                        setShowAssignModal(true)
-                      }}
-                      className="flex-1 inline-flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
-                    >
-                      <Send className="w-4 h-4 mr-1" />
-                      Assign
-                    </button>
-                  </div>
-                </div>
-              ))}
             </div>
           ) : (
-            <div className="space-y-4">
-              {filteredResources.map((resource) => (
-                <div key={resource.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition-all duration-200">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-4 flex-1">
-                      <div className={`p-3 rounded-lg ${getTypeColor(resource.type)} flex-shrink-0`}>
-                        {getTypeIcon(resource.type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between mb-2">
-                          <h3 className="font-semibold text-gray-900 text-lg">{resource.title}</h3>
-                          <div className="flex items-center space-x-2 ml-4">
-                            {resource.evidenceBased && (
-                              <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                                <Award className="w-3 h-3 mr-1" />
-                                Evidence-Based
-                              </span>
-                            )}
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getDifficultyColor(resource.difficulty)}`}>
-                              {resource.difficulty}
+            <>
+              {viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filteredResources.map((resource) => {
+                    const CategoryIcon = getCategoryIcon(resource.category)
+                    return (
+                      <div key={resource.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all hover:border-blue-300 group">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center space-x-2">
+                            <div className="p-1.5 bg-blue-100 rounded-md">
+                              <CategoryIcon className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              {getContentTypeIcon(resource.content_type)}
+                              <span className="text-xs text-gray-500 capitalize">{resource.content_type}</span>
+                            </div>
+                          </div>
+                          <button className="opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Star className="w-4 h-4 text-gray-400 hover:text-yellow-500" />
+                          </button>
+                        </div>
+
+                        <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 text-sm">{resource.title}</h3>
+                        <p className="text-xs text-gray-600 mb-3 line-clamp-2">{resource.description}</p>
+
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {resource.difficulty_level && (
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(resource.difficulty_level)}`}>
+                              {resource.difficulty_level}
                             </span>
+                          )}
+                          {resource.evidence_level && (
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getEvidenceColor(resource.evidence_level)}`}>
+                              {resource.evidence_level?.replace('_', ' ')}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => setSelectedResource(resource)}
+                            className="flex-1 flex items-center justify-center px-3 py-2 text-xs font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors"
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
+                            Preview
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedResource(resource)
+                              setShowAssignModal(true)
+                            }}
+                            className="flex-1 flex items-center justify-center px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                          >
+                            <Send className="w-3 h-3 mr-1" />
+                            Assign
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredResources.map((resource) => {
+                    const CategoryIcon = getCategoryIcon(resource.category)
+                    return (
+                      <div key={resource.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all hover:border-blue-300">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-4 flex-1">
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                              <CategoryIcon className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <h3 className="font-semibold text-gray-900 truncate">{resource.title}</h3>
+                                <div className="flex items-center space-x-1">
+                                  {getContentTypeIcon(resource.content_type)}
+                                  <span className="text-xs text-gray-500 capitalize">{resource.content_type}</span>
+                                </div>
+                              </div>
+                              <p className="text-sm text-gray-600 mb-2 line-clamp-2">{resource.description}</p>
+                              <div className="flex flex-wrap gap-1">
+                                {resource.difficulty_level && (
+                                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(resource.difficulty_level)}`}>
+                                    {resource.difficulty_level}
+                                  </span>
+                                )}
+                                {resource.evidence_level && (
+                                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getEvidenceColor(resource.evidence_level)}`}>
+                                    {resource.evidence_level?.replace('_', ' ')}
+                                  </span>
+                                )}
+                                {resource.tags?.slice(0, 2).map((tag, index) => (
+                                  <span key={index} className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex space-x-2 ml-4">
+                            <button
+                              onClick={() => setSelectedResource(resource)}
+                              className="flex items-center px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors"
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              Preview
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedResource(resource)
+                                setShowAssignModal(true)
+                              }}
+                              className="flex items-center px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                            >
+                              <Send className="w-4 h-4 mr-1" />
+                              Assign
+                            </button>
                           </div>
                         </div>
-                        
-                        <p className="text-gray-600 mb-3 line-clamp-2">{resource.description}</p>
-                        
-                        <div className="flex items-center space-x-6 text-sm text-gray-500">
-                          <span className="flex items-center">
-                            <Clock className="w-4 h-4 mr-1" />
-                            {resource.duration}
-                          </span>
-                          {renderStarRating(resource.rating)}
-                          <span className="flex items-center">
-                            <Users className="w-4 h-4 mr-1" />
-                            {resource.usageCount} uses
-                          </span>
-                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="flex gap-2 ml-4 flex-shrink-0">
-                      <button
-                        onClick={() => setSelectedResource(resource)}
-                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors"
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        Preview
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedResource(resource)
-                          setShowAssignModal(true)
-                        }}
-                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
-                      >
-                        <Send className="w-4 h-4 mr-1" />
-                        Assign
-                      </button>
-                    </div>
-                  </div>
+                    )
+                  })}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -748,147 +570,98 @@ export const ResourceLibrary: React.FC = () => {
       {/* Resource Preview Modal */}
       {selectedResource && !showAssignModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen p-4">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setSelectedResource(null)} />
             
-            <div className="relative bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-              <div className="bg-white">
-                {/* Modal Header */}
-                <div className="p-6 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className={`p-3 rounded-lg ${getTypeColor(selectedResource.type)}`}>
-                        {getTypeIcon(selectedResource.type)}
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-semibold text-gray-900">{selectedResource.title}</h3>
-                        <p className="text-sm text-gray-600 capitalize">{selectedResource.category}</p>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+              <div className="bg-white px-6 pt-6 pb-4">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="flex items-start space-x-4">
+                    <div className="p-3 bg-blue-100 rounded-lg">
+                      {React.createElement(getCategoryIcon(selectedResource.category), { className: "w-6 h-6 text-blue-600" })}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">{selectedResource.title}</h3>
+                      <p className="text-gray-600 mt-1">{selectedResource.description}</p>
+                      <div className="flex items-center space-x-4 mt-2">
+                        <div className="flex items-center space-x-1">
+                          {getContentTypeIcon(selectedResource.content_type)}
+                          <span className="text-sm text-gray-500 capitalize">{selectedResource.content_type}</span>
+                        </div>
+                        <span className="text-sm text-gray-500">Category: {selectedResource.category}</span>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setSelectedResource(null)}
-                      className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
                   </div>
+                  <button
+                    onClick={() => setSelectedResource(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
                 </div>
-                
-                <div className="p-6">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Main Content */}
-                    <div className="lg:col-span-2 space-y-6">
-                      <div>
-                        <h4 className="text-lg font-semibold text-gray-900 mb-3">Description</h4>
-                        <p className="text-gray-700 leading-relaxed">{selectedResource.description}</p>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2">
+                    <div className="bg-gray-50 rounded-lg p-6 h-64 flex items-center justify-center">
+                      <div className="text-center">
+                        {getContentTypeIcon(selectedResource.content_type)}
+                        <p className="text-gray-600 mt-2">Resource preview would be displayed here</p>
                       </div>
-                      
-                      {selectedResource.content_data && (
-                        <div>
-                          <h4 className="text-lg font-semibold text-gray-900 mb-3">Content Details</h4>
-                          <div className="bg-gray-50 rounded-lg p-4">
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              {selectedResource.content_data.questions && (
-                                <div>
-                                  <span className="font-medium text-gray-900">Questions:</span>
-                                  <span className="text-gray-600 ml-2">{selectedResource.content_data.questions}</span>
-                                </div>
-                              )}
-                              {selectedResource.content_data.max_score && (
-                                <div>
-                                  <span className="font-medium text-gray-900">Max Score:</span>
-                                  <span className="text-gray-600 ml-2">{selectedResource.content_data.max_score}</span>
-                                </div>
-                              )}
-                              {selectedResource.content_data.sections && (
-                                <div>
-                                  <span className="font-medium text-gray-900">Sections:</span>
-                                  <span className="text-gray-600 ml-2">{selectedResource.content_data.sections}</span>
-                                </div>
-                              )}
-                              {selectedResource.content_data.interactive && (
-                                <div>
-                                  <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
-                                    <Play className="w-3 h-3 mr-1" />
-                                    Interactive
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Details</h4>
+                      <div className="space-y-2 text-sm">
+                        {selectedResource.difficulty_level && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Difficulty:</span>
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(selectedResource.difficulty_level)}`}>
+                              {selectedResource.difficulty_level}
+                            </span>
                           </div>
+                        )}
+                        {selectedResource.evidence_level && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Evidence:</span>
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getEvidenceColor(selectedResource.evidence_level)}`}>
+                              {selectedResource.evidence_level?.replace('_', ' ')}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Created:</span>
+                          <span>{new Date(selectedResource.created_at).toLocaleDateString()}</span>
                         </div>
-                      )}
-                      
+                      </div>
+                    </div>
+
+                    {selectedResource.tags && selectedResource.tags.length > 0 && (
                       <div>
-                        <h4 className="text-lg font-semibold text-gray-900 mb-3">Tags</h4>
-                        <div className="flex flex-wrap gap-2">
+                        <h4 className="font-medium text-gray-900 mb-2">Tags</h4>
+                        <div className="flex flex-wrap gap-1">
                           {selectedResource.tags.map((tag, index) => (
-                            <span key={index} className="inline-flex px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
+                            <span key={index} className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
                               {tag}
                             </span>
                           ))}
                         </div>
                       </div>
-                    </div>
-                    
-                    {/* Sidebar */}
-                    <div className="space-y-6">
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <h4 className="font-semibold text-gray-900 mb-4">Resource Details</h4>
-                        <div className="space-y-3">
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Type:</span>
-                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getTypeColor(selectedResource.type)}`}>
-                              {selectedResource.type}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Difficulty:</span>
-                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(selectedResource.difficulty)}`}>
-                              {selectedResource.difficulty}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Duration:</span>
-                            <span className="text-sm text-gray-900">{selectedResource.duration}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Usage:</span>
-                            <span className="text-sm text-gray-900">{resource.usageCount} therapists</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Rating:</span>
-                            {renderStarRating(selectedResource.rating)}
-                          </div>
-                          {selectedResource.evidenceBased && (
-                            <div className="flex items-center space-x-2 pt-2 border-t border-gray-200">
-                              <Award className="w-4 h-4 text-green-600" />
-                              <span className="text-sm text-green-800 font-medium">Evidence-Based</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-3">
-                        <button
-                          onClick={() => setShowAssignModal(true)}
-                          className="w-full inline-flex items-center justify-center px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
-                        >
-                          <Send className="w-5 h-5 mr-2" />
-                          Assign to Client
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (selectedResource.content_url) {
-                              window.open(selectedResource.content_url, '_blank')
-                            }
-                          }}
-                          className="w-full inline-flex items-center justify-center px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
-                        >
-                          <Download className="w-5 h-5 mr-2" />
-                          Download
-                        </button>
-                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => setShowAssignModal(true)}
+                        className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Send className="w-4 h-4 mr-2" />
+                        Assign to Clients
+                      </button>
+                      <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                        <Download className="w-4 h-4 mr-2" />
+                        Download
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -898,54 +671,51 @@ export const ResourceLibrary: React.FC = () => {
         </div>
       )}
 
-      {/* Assignment Modal */}
+      {/* Assign Resource Modal */}
       {showAssignModal && selectedResource && (
-        <AssignResourceModal
-          resource={selectedResource}
-          clients={clients}
-          onClose={() => {
-            setShowAssignModal(false)
-            setSelectedResource(null)
-          }}
-          onAssign={assignResource}
-        />
-      )}
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowAssignModal(false)} />
+            
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-6 pt-6 pb-4">
+                <div className="flex items-start justify-between mb-6">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Assign: {selectedResource.title}
+                  </h3>
+                  <button
+                    onClick={() => setShowAssignModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
 
-      {/* Create Resource Modal */}
-      {showCreateModal && (
-        <CreateResourceModal
-          onClose={() => setShowCreateModal(false)}
-          onCreate={createCustomResource}
-        />
+                <AssignResourceForm
+                  resource={selectedResource}
+                  clients={clients}
+                  onAssign={assignResource}
+                  onCancel={() => setShowAssignModal(false)}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
 }
 
-// Assign Resource Modal Component
-interface AssignResourceModalProps {
+// Assign Resource Form Component
+interface AssignResourceFormProps {
   resource: Resource
   clients: any[]
-  onClose: () => void
-  onAssign: (resourceId: string, clientIds: string[], instructions: string) => void
+  onAssign: (resourceId: string, clientIds: string[]) => void
+  onCancel: () => void
 }
 
-const AssignResourceModal: React.FC<AssignResourceModalProps> = ({ 
-  resource, 
-  clients, 
-  onClose, 
-  onAssign 
-}) => {
+const AssignResourceForm: React.FC<AssignResourceFormProps> = ({ resource, clients, onAssign, onCancel }) => {
   const [selectedClients, setSelectedClients] = useState<string[]>([])
-  const [dueDate, setDueDate] = useState('')
-  const [instructions, setInstructions] = useState('')
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (selectedClients.length > 0) {
-      onAssign(resource.id, selectedClients, instructions)
-    }
-  }
 
   const toggleClient = (clientId: string) => {
     setSelectedClients(prev => 
@@ -955,276 +725,62 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
     )
   }
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen p-4">
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
-        
-        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-          <form onSubmit={handleSubmit}>
-            <div className="bg-white px-6 pt-6 pb-4">
-              <div className="flex items-start justify-between mb-6">
-                <h3 className="text-lg font-medium text-gray-900 pr-4">
-                  Assign: {resource.title}
-                </h3>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Select Clients ({selectedClients.length} selected)
-                  </label>
-                  <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-lg">
-                    {clients.map((client) => (
-                      <label key={client.id} className="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0">
-                        <input
-                          type="checkbox"
-                          checked={selectedClients.includes(client.id)}
-                          onChange={() => toggleClient(client.id)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <div className="ml-3">
-                          <div className="text-sm font-medium text-gray-900">
-                            {client.first_name} {client.last_name}
-                          </div>
-                          <div className="text-xs text-gray-500">{client.email}</div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 mb-2">
-                    Due Date (Optional)
-                  </label>
-                  <input
-                    type="date"
-                    id="dueDate"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="instructions" className="block text-sm font-medium text-gray-700 mb-2">
-                    Instructions for Client
-                  </label>
-                  <textarea
-                    id="instructions"
-                    value={instructions}
-                    onChange={(e) => setInstructions(e.target.value)}
-                    rows={3}
-                    placeholder="Optional instructions or context for the client..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-gray-50 px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
-              <button
-                type="submit"
-                disabled={selectedClients.length === 0}
-                className="w-full sm:w-auto inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Assign to {selectedClients.length} Client{selectedClients.length !== 1 ? 's' : ''}
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full sm:w-auto inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Create Resource Modal Component
-interface CreateResourceModalProps {
-  onClose: () => void
-  onCreate: (resourceData: any) => void
-}
-
-const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCreate }) => {
-  const [formData, setFormData] = useState({
-    title: '',
-    category: 'worksheet',
-    subcategory: '',
-    description: '',
-    type: 'text',
-    difficulty: 'beginner',
-    evidenceBased: false,
-    tags: '',
-    content: '',
-    duration: ''
-  })
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (formData.title && formData.description) {
-      onCreate({
-        ...formData,
-        tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
-      })
+    if (selectedClients.length > 0) {
+      onAssign(resource.id, selectedClients)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen p-4">
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
-        
-        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-          <form onSubmit={handleSubmit}>
-            <div className="bg-white px-6 pt-6 pb-4">
-              <div className="flex items-start justify-between mb-6">
-                <h3 className="text-lg font-medium text-gray-900">Create Custom Resource</h3>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="worksheet">Worksheet</option>
-                      <option value="educational">Educational</option>
-                      <option value="intervention">Intervention</option>
-                      <option value="protocol">Protocol</option>
-                      <option value="research">Research</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty</label>
-                    <select
-                      value={formData.difficulty}
-                      onChange={(e) => setFormData(prev => ({ ...prev, difficulty: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="beginner">Beginner</option>
-                      <option value="intermediate">Intermediate</option>
-                      <option value="advanced">Advanced</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Description *</label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Content Type</label>
-                    <select
-                      value={formData.type}
-                      onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="text">Text/PDF</option>
-                      <option value="interactive">Interactive</option>
-                      <option value="video">Video</option>
-                      <option value="audio">Audio</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Duration</label>
-                    <input
-                      type="text"
-                      value={formData.duration}
-                      onChange={(e) => setFormData(prev => ({ ...prev, duration: e.target.value }))}
-                      placeholder="e.g., 15 min"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-                  <input
-                    type="text"
-                    value={formData.tags}
-                    onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
-                    placeholder="Comma-separated tags (e.g., CBT, anxiety, homework)"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.evidenceBased}
-                      onChange={(e) => setFormData(prev => ({ ...prev, evidenceBased: e.target.checked }))}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">Evidence-based resource</span>
-                  </label>
-                </div>
-              </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-3">
+          Select Clients ({selectedClients.length} selected)
+        </label>
+        <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-lg">
+          {clients.length === 0 ? (
+            <div className="p-4 text-center text-gray-500">
+              <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+              <p className="text-sm">No clients available</p>
             </div>
-            
-            <div className="bg-gray-50 px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
-              <button
-                type="submit"
-                disabled={!formData.title || !formData.description}
-                className="w-full sm:w-auto inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Create Resource
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full sm:w-auto inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+          ) : (
+            clients.map((client) => (
+              <label key={client.id} className="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0">
+                <input
+                  type="checkbox"
+                  checked={selectedClients.includes(client.id)}
+                  onChange={() => toggleClient(client.id)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <div className="ml-3 flex-1">
+                  <div className="text-sm font-medium text-gray-900">
+                    {client.first_name} {client.last_name}
+                  </div>
+                  <div className="text-xs text-gray-500">{client.email}</div>
+                </div>
+              </label>
+            ))
+          )}
         </div>
       </div>
-    </div>
+
+      <div className="flex space-x-3 pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={selectedClients.length === 0}
+          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          Assign Resource
+        </button>
+      </div>
+    </form>
   )
 }
