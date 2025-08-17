@@ -15,27 +15,15 @@ import {
   FileText,
   Video,
   Headphones,
-  Download,
   X,
   Users,
-  Clock,
+  Tag,
   Award,
   Target,
   Brain,
-  Heart,
-  Zap,
   Shield,
-  Play,
-  ExternalLink,
-  Bookmark,
-  Share2,
-  MoreVertical,
-  Tag,
-  Calendar,
-  User,
-  CheckCircle,
-  AlertCircle,
-  Info
+  Zap,
+  CheckCircle
 } from 'lucide-react'
 
 interface Resource {
@@ -45,15 +33,11 @@ interface Resource {
   subcategory?: string
   description?: string
   content_type?: string
-  content_url?: string
-  content_data?: any
   tags?: string[]
   difficulty_level?: string
   evidence_level?: string
-  created_by?: string
   is_public?: boolean
   created_at: string
-  updated_at: string
 }
 
 const SAMPLE_RESOURCES: Resource[] = [
@@ -68,8 +52,7 @@ const SAMPLE_RESOURCES: Resource[] = [
     difficulty_level: 'beginner',
     evidence_level: 'research_based',
     is_public: true,
-    created_at: '2024-01-15T10:00:00Z',
-    updated_at: '2024-01-15T10:00:00Z'
+    created_at: '2024-01-15T10:00:00Z'
   },
   {
     id: '2',
@@ -82,8 +65,7 @@ const SAMPLE_RESOURCES: Resource[] = [
     difficulty_level: 'intermediate',
     evidence_level: 'research_based',
     is_public: true,
-    created_at: '2024-01-14T14:30:00Z',
-    updated_at: '2024-01-14T14:30:00Z'
+    created_at: '2024-01-14T14:30:00Z'
   },
   {
     id: '3',
@@ -96,8 +78,7 @@ const SAMPLE_RESOURCES: Resource[] = [
     difficulty_level: 'advanced',
     evidence_level: 'clinical_consensus',
     is_public: true,
-    created_at: '2024-01-13T09:15:00Z',
-    updated_at: '2024-01-13T09:15:00Z'
+    created_at: '2024-01-13T09:15:00Z'
   },
   {
     id: '4',
@@ -110,8 +91,7 @@ const SAMPLE_RESOURCES: Resource[] = [
     difficulty_level: 'beginner',
     evidence_level: 'research_based',
     is_public: true,
-    created_at: '2024-01-12T16:45:00Z',
-    updated_at: '2024-01-12T16:45:00Z'
+    created_at: '2024-01-12T16:45:00Z'
   },
   {
     id: '5',
@@ -124,8 +104,7 @@ const SAMPLE_RESOURCES: Resource[] = [
     difficulty_level: 'advanced',
     evidence_level: 'research_based',
     is_public: true,
-    created_at: '2024-01-11T11:20:00Z',
-    updated_at: '2024-01-11T11:20:00Z'
+    created_at: '2024-01-11T11:20:00Z'
   },
   {
     id: '6',
@@ -138,46 +117,17 @@ const SAMPLE_RESOURCES: Resource[] = [
     difficulty_level: 'intermediate',
     evidence_level: 'research_based',
     is_public: true,
-    created_at: '2024-01-10T13:30:00Z',
-    updated_at: '2024-01-10T13:30:00Z'
-  },
-  {
-    id: '7',
-    title: 'Exposure Therapy Hierarchy Builder',
-    category: 'intervention',
-    subcategory: 'exposure',
-    description: 'Interactive tool for building exposure hierarchies for anxiety disorders with step-by-step guidance and progress tracking.',
-    content_type: 'interactive',
-    tags: ['exposure-therapy', 'anxiety', 'phobia', 'hierarchy', 'CBT'],
-    difficulty_level: 'advanced',
-    evidence_level: 'research_based',
-    is_public: true,
-    created_at: '2024-01-09T12:00:00Z',
-    updated_at: '2024-01-09T12:00:00Z'
-  },
-  {
-    id: '8',
-    title: 'Sleep Hygiene Education Module',
-    category: 'educational',
-    subcategory: 'sleep',
-    description: 'Comprehensive educational module on sleep hygiene with interactive elements and personalized recommendations.',
-    content_type: 'video',
-    tags: ['sleep', 'insomnia', 'hygiene', 'education', 'wellness'],
-    difficulty_level: 'beginner',
-    evidence_level: 'clinical_consensus',
-    is_public: true,
-    created_at: '2024-01-08T15:30:00Z',
-    updated_at: '2024-01-08T15:30:00Z'
+    created_at: '2024-01-10T13:30:00Z'
   }
 ]
 
 const CATEGORIES = [
-  { id: 'all', name: 'All', icon: Library, color: 'slate', count: 0 },
-  { id: 'worksheet', name: 'Worksheets', icon: FileText, color: 'emerald', count: 0 },
-  { id: 'educational', name: 'Educational', icon: BookOpen, color: 'violet', count: 0 },
-  { id: 'intervention', name: 'Interventions', icon: Target, color: 'orange', count: 0 },
-  { id: 'protocol', name: 'Protocols', icon: Shield, color: 'rose', count: 0 },
-  { id: 'research', name: 'Research', icon: Brain, color: 'indigo', count: 0 }
+  { id: 'all', name: 'All', icon: Library, count: 0 },
+  { id: 'worksheet', name: 'Worksheets', icon: FileText, count: 0 },
+  { id: 'educational', name: 'Educational', icon: BookOpen, count: 0 },
+  { id: 'intervention', name: 'Interventions', icon: Target, count: 0 },
+  { id: 'protocol', name: 'Protocols', icon: Shield, count: 0 },
+  { id: 'research', name: 'Research', icon: Brain, count: 0 }
 ]
 
 export default function ResourceLibrary() {
@@ -186,7 +136,6 @@ export default function ResourceLibrary() {
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [difficultyFilter, setDifficultyFilter] = useState('all')
   const [evidenceFilter, setEvidenceFilter] = useState('all')
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null)
@@ -213,11 +162,11 @@ export default function ResourceLibrary() {
         .eq('is_public', true)
         .order('created_at', { ascending: false })
 
-      if (error) {
-        console.warn('Database resources not available, using sample data:', error)
+      if (error || !data || data.length === 0) {
+        console.log('Using sample resources')
         setResources(SAMPLE_RESOURCES)
       } else {
-        setResources(data && data.length > 0 ? data : SAMPLE_RESOURCES)
+        setResources(data)
       }
     } catch (error) {
       console.error('Error fetching resources:', error)
@@ -299,30 +248,25 @@ export default function ResourceLibrary() {
 
   const getDifficultyColor = (level?: string) => {
     switch (level) {
-      case 'beginner': return 'text-emerald-700 bg-emerald-100 border-emerald-200'
-      case 'intermediate': return 'text-amber-700 bg-amber-100 border-amber-200'
-      case 'advanced': return 'text-rose-700 bg-rose-100 border-rose-200'
-      default: return 'text-gray-700 bg-gray-100 border-gray-200'
+      case 'beginner': return 'text-emerald-700 bg-emerald-100'
+      case 'intermediate': return 'text-amber-700 bg-amber-100'
+      case 'advanced': return 'text-rose-700 bg-rose-100'
+      default: return 'text-gray-700 bg-gray-100'
     }
   }
 
   const getEvidenceColor = (level?: string) => {
     switch (level) {
-      case 'research_based': return 'text-blue-700 bg-blue-100 border-blue-200'
-      case 'clinical_consensus': return 'text-violet-700 bg-violet-100 border-violet-200'
-      case 'expert_opinion': return 'text-orange-700 bg-orange-100 border-orange-200'
-      default: return 'text-gray-700 bg-gray-100 border-gray-200'
+      case 'research_based': return 'text-blue-700 bg-blue-100'
+      case 'clinical_consensus': return 'text-violet-700 bg-violet-100'
+      case 'expert_opinion': return 'text-orange-700 bg-orange-100'
+      default: return 'text-gray-700 bg-gray-100'
     }
   }
 
   const getCategoryIcon = (category: string) => {
     const cat = CATEGORIES.find(c => c.id === category)
     return cat ? cat.icon : FileText
-  }
-
-  const getCategoryColor = (category: string) => {
-    const cat = CATEGORIES.find(c => c.id === category)
-    return cat ? cat.color : 'slate'
   }
 
   const toggleBookmark = (resourceId: string) => {
@@ -382,9 +326,9 @@ export default function ResourceLibrary() {
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Fixed Header */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-200 shadow-sm">
+      <div className="flex-shrink-0 bg-white border-b border-gray-200">
         {/* Top Bar */}
-        <div className="px-6 py-4">
+        <div className="p-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
@@ -421,15 +365,7 @@ export default function ResourceLibrary() {
                 </button>
               </div>
 
-              {/* Advanced Filters Toggle */}
-              <button
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className={`p-2 rounded-lg border transition-all ${
-                  showAdvancedFilters 
-                    ? 'bg-blue-50 border-blue-200 text-blue-600' 
-                    : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                }`}
-              >
+              <button className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50">
                 <Filter className="w-4 h-4" />
               </button>
             </div>
@@ -447,40 +383,6 @@ export default function ResourceLibrary() {
             />
           </div>
 
-          {/* Advanced Filters */}
-          {showAdvancedFilters && (
-            <div className="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-200">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty Level</label>
-                  <select
-                    value={difficultyFilter}
-                    onChange={(e) => setDifficultyFilter(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="all">All Levels</option>
-                    <option value="beginner">Beginner</option>
-                    <option value="intermediate">Intermediate</option>
-                    <option value="advanced">Advanced</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Evidence Level</label>
-                  <select
-                    value={evidenceFilter}
-                    onChange={(e) => setEvidenceFilter(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="all">All Evidence</option>
-                    <option value="research_based">Research Based</option>
-                    <option value="clinical_consensus">Clinical Consensus</option>
-                    <option value="expert_opinion">Expert Opinion</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Category Pills */}
           <div className="flex space-x-2 overflow-x-auto pb-2">
             {categoriesWithCounts.map((category) => {
@@ -493,7 +395,7 @@ export default function ResourceLibrary() {
                   onClick={() => setSelectedCategory(category.id)}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all border ${
                     isActive
-                      ? `bg-${category.color}-100 text-${category.color}-700 border-${category.color}-200 shadow-sm`
+                      ? 'bg-blue-100 text-blue-700 border-blue-200 shadow-sm'
                       : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
                   }`}
                 >
@@ -501,7 +403,7 @@ export default function ResourceLibrary() {
                   <span>{category.name}</span>
                   <span className={`px-2 py-0.5 text-xs rounded-full ${
                     isActive 
-                      ? `bg-${category.color}-200 text-${category.color}-800` 
+                      ? 'bg-blue-200 text-blue-800' 
                       : 'bg-gray-200 text-gray-600'
                   }`}>
                     {category.count}
@@ -515,14 +417,14 @@ export default function ResourceLibrary() {
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-6">
+        <div className="p-4">
           {/* Results Header */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">
                 Showing {filteredResources.length} of {resources.length} resources
               </span>
-              {(searchTerm || selectedCategory !== 'all' || difficultyFilter !== 'all' || evidenceFilter !== 'all') && (
+              {(searchTerm || selectedCategory !== 'all') && (
                 <button
                   onClick={() => {
                     setSearchTerm('')
@@ -559,15 +461,14 @@ export default function ResourceLibrary() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {filteredResources.map((resource) => {
                     const CategoryIcon = getCategoryIcon(resource.category)
-                    const categoryColor = getCategoryColor(resource.category)
                     const isBookmarked = bookmarkedResources.includes(resource.id)
                     
                     return (
                       <div key={resource.id} className="group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg hover:border-blue-200 transition-all duration-200 hover:-translate-y-1">
                         {/* Header */}
                         <div className="flex items-start justify-between mb-4">
-                          <div className={`p-2 rounded-lg bg-${categoryColor}-100`}>
-                            <CategoryIcon className={`w-5 h-5 text-${categoryColor}-600`} />
+                          <div className="p-2 rounded-lg bg-blue-100">
+                            <CategoryIcon className="w-5 h-5 text-blue-600" />
                           </div>
                           <div className="flex items-center space-x-1">
                             <button
@@ -579,9 +480,6 @@ export default function ResourceLibrary() {
                               }`}
                             >
                               <Star className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
-                            </button>
-                            <button className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all">
-                              <MoreVertical className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
@@ -610,12 +508,12 @@ export default function ResourceLibrary() {
 
                           <div className="flex flex-wrap gap-1">
                             {resource.difficulty_level && (
-                              <span className={`px-2 py-1 text-xs font-medium rounded-md border ${getDifficultyColor(resource.difficulty_level)}`}>
+                              <span className={`px-2 py-1 text-xs font-medium rounded-md ${getDifficultyColor(resource.difficulty_level)}`}>
                                 {resource.difficulty_level}
                               </span>
                             )}
                             {resource.evidence_level && (
-                              <span className={`px-2 py-1 text-xs font-medium rounded-md border ${getEvidenceColor(resource.evidence_level)}`}>
+                              <span className={`px-2 py-1 text-xs font-medium rounded-md ${getEvidenceColor(resource.evidence_level)}`}>
                                 {resource.evidence_level?.replace('_', ' ')}
                               </span>
                             )}
@@ -665,15 +563,14 @@ export default function ResourceLibrary() {
                 <div className="space-y-4">
                   {filteredResources.map((resource) => {
                     const CategoryIcon = getCategoryIcon(resource.category)
-                    const categoryColor = getCategoryColor(resource.category)
                     const isBookmarked = bookmarkedResources.includes(resource.id)
                     
                     return (
                       <div key={resource.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md hover:border-blue-200 transition-all">
                         <div className="flex items-start justify-between">
                           <div className="flex items-start space-x-4 flex-1">
-                            <div className={`p-3 rounded-xl bg-${categoryColor}-100 flex-shrink-0`}>
-                              <CategoryIcon className={`w-6 h-6 text-${categoryColor}-600`} />
+                            <div className="p-3 rounded-xl bg-blue-100 flex-shrink-0">
+                              <CategoryIcon className="w-6 h-6 text-blue-600" />
                             </div>
                             
                             <div className="flex-1 min-w-0">
@@ -705,12 +602,12 @@ export default function ResourceLibrary() {
                               
                               <div className="flex flex-wrap items-center gap-2 mb-4">
                                 {resource.difficulty_level && (
-                                  <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getDifficultyColor(resource.difficulty_level)}`}>
+                                  <span className={`px-3 py-1 text-xs font-medium rounded-full ${getDifficultyColor(resource.difficulty_level)}`}>
                                     {resource.difficulty_level}
                                   </span>
                                 )}
                                 {resource.evidence_level && (
-                                  <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getEvidenceColor(resource.evidence_level)}`}>
+                                  <span className={`px-3 py-1 text-xs font-medium rounded-full ${getEvidenceColor(resource.evidence_level)}`}>
                                     {resource.evidence_level?.replace('_', ' ')}
                                   </span>
                                 )}
@@ -777,9 +674,9 @@ export default function ResourceLibrary() {
                 {/* Modal Header */}
                 <div className="flex items-start justify-between p-6 border-b border-gray-200">
                   <div className="flex items-start space-x-4">
-                    <div className={`p-3 rounded-xl bg-${getCategoryColor(selectedResource.category)}-100`}>
+                    <div className="p-3 rounded-xl bg-blue-100">
                       {React.createElement(getCategoryIcon(selectedResource.category), { 
-                        className: `w-6 h-6 text-${getCategoryColor(selectedResource.category)}-600` 
+                        className: 'w-6 h-6 text-blue-600' 
                       })}
                     </div>
                     <div>
@@ -810,7 +707,7 @@ export default function ResourceLibrary() {
                     <div className="lg:col-span-2">
                       <div className="bg-gray-50 rounded-xl p-8 h-80 flex items-center justify-center">
                         <div className="text-center">
-                          <div className={`w-16 h-16 rounded-full bg-${getCategoryColor(selectedResource.category)}-100 flex items-center justify-center mx-auto mb-4`}>
+                          <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
                             {getContentTypeIcon(selectedResource.content_type)}
                           </div>
                           <h4 className="font-medium text-gray-900 mb-2">Resource Preview</h4>
@@ -832,7 +729,7 @@ export default function ResourceLibrary() {
                           {selectedResource.difficulty_level && (
                             <div className="flex justify-between items-center">
                               <span className="text-sm text-gray-600">Difficulty:</span>
-                              <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getDifficultyColor(selectedResource.difficulty_level)}`}>
+                              <span className={`px-3 py-1 text-xs font-medium rounded-full ${getDifficultyColor(selectedResource.difficulty_level)}`}>
                                 {selectedResource.difficulty_level}
                               </span>
                             </div>
@@ -840,7 +737,7 @@ export default function ResourceLibrary() {
                           {selectedResource.evidence_level && (
                             <div className="flex justify-between items-center">
                               <span className="text-sm text-gray-600">Evidence:</span>
-                              <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getEvidenceColor(selectedResource.evidence_level)}`}>
+                              <span className={`px-3 py-1 text-xs font-medium rounded-full ${getEvidenceColor(selectedResource.evidence_level)}`}>
                                 {selectedResource.evidence_level?.replace('_', ' ')}
                               </span>
                             </div>
@@ -877,16 +774,6 @@ export default function ResourceLibrary() {
                           <Send className="w-4 h-4 mr-2" />
                           Assign to Clients
                         </button>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button className="flex items-center justify-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm">
-                            <Download className="w-4 h-4 mr-1" />
-                            Download
-                          </button>
-                          <button className="flex items-center justify-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm">
-                            <Share2 className="w-4 h-4 mr-1" />
-                            Share
-                          </button>
-                        </div>
                       </div>
                     </div>
                   </div>
