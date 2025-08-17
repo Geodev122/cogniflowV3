@@ -587,7 +587,7 @@ export const TherapistDashboard: React.FC = () => {
         )
       case 'resources':
         return (
-          <div className="h-full bg-white">
+          <div className="h-full">
             <React.Suspense fallback={<div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
               <ResourceLibrary />
             </React.Suspense>
@@ -708,46 +708,56 @@ export const TherapistDashboard: React.FC = () => {
       <div className="flex pt-16">
         {/* Fixed Sidebar - Desktop */}
         <div className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 fixed left-0 top-16 bottom-0 transition-all duration-300 shadow-sm`}>
-          {/* Elegant Collapse/Expand Button */}
-          <div className="relative">
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className={`absolute ${sidebarCollapsed ? '-right-3 top-4' : '-right-3 top-4'} z-10 w-6 h-6 bg-white border border-gray-300 rounded-full shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center hover:bg-gray-50 group`}
-            >
-              <ChevronLeft className={`w-4 h-4 text-gray-600 transition-transform duration-200 ${sidebarCollapsed ? 'rotate-180' : ''} group-hover:text-gray-800`} />
-            </button>
+          {/* Modern Collapse/Expand Button */}
+          <div className="relative border-b border-gray-100">
+            <div className="p-4 flex items-center justify-between">
+              {!sidebarCollapsed && (
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Navigation</h3>
+              )}
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center hover:from-blue-600 hover:to-indigo-700 group transform hover:scale-105"
+                title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                <ChevronLeft className={`w-4 h-4 transition-transform duration-300 ${sidebarCollapsed ? 'rotate-180' : ''} group-hover:scale-110`} />
+              </button>
+            </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-4 pt-12">
+          <div className="flex-1 overflow-y-auto p-4">
             <nav className="space-y-6">
               {navigationSections.map((section, sectionIndex) => (
                 <div key={sectionIndex}>
                   {section.title && !sidebarCollapsed && (
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-2">
                       {section.title}
-                    </h3>
+                    </h4>
                   )}
                   <div className="space-y-1">
                     {section.items.map((tab) => {
                       const Icon = tab.icon
                       const isActive = activeTab === tab.id
-                      const colorClasses = getColorClasses(tab.color)
                       
                       return (
                         <button
                           key={tab.id}
                           onClick={() => setActiveTab(tab.id)}
-                          className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-2 rounded-lg transition-all text-sm font-medium ${
+                          className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-xl transition-all text-sm font-medium group relative ${
                             isActive
-                              ? colorClasses
-                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                              ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:shadow-sm'
                           }`}
                           title={sidebarCollapsed ? tab.name : undefined}
                         >
-                          <Icon className={`w-5 h-5 flex-shrink-0 ${
-                            isActive ? `text-${tab.color}-600` : 'text-gray-400'
+                          <Icon className={`w-5 h-5 flex-shrink-0 transition-transform group-hover:scale-110 ${
+                            isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-600'
                           }`} />
-                          {!sidebarCollapsed && <span>{tab.name}</span>}
+                          {!sidebarCollapsed && (
+                            <span className="transition-all duration-200">{tab.name}</span>
+                          )}
+                          {isActive && !sidebarCollapsed && (
+                            <div className="absolute right-2 w-2 h-2 bg-white rounded-full opacity-75"></div>
+                          )}
                         </button>
                       )
                     })}
