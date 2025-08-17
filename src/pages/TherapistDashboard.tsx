@@ -587,11 +587,9 @@ export const TherapistDashboard: React.FC = () => {
         )
       case 'resources':
         return (
-          <div className="h-full overflow-hidden">
-            <React.Suspense fallback={<div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
-              <ResourceLibrary />
-            </React.Suspense>
-          </div>
+          <React.Suspense fallback={<div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
+            <ResourceLibrary />
+          </React.Suspense>
         )
       case 'sessions':
         return (
