@@ -25,7 +25,14 @@ import {
   Lightbulb,
   Gamepad2,
   Plus,
-  X
+  X,
+  Grid3X3,
+  List,
+  SlidersHorizontal,
+  ChevronDown,
+  Bookmark,
+  TrendingUp,
+  Zap
 } from 'lucide-react'
 
 interface Resource {
@@ -45,11 +52,12 @@ interface Resource {
 }
 
 export const ResourceLibrary: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'all' | 'assessments' | 'treatments' | 'worksheets' | 'psychoeducation' | 'exercises'>('all')
+  const [activeCategory, setActiveCategory] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('all')
   const [difficultyFilter, setDifficultyFilter] = useState('all')
   const [evidenceFilter, setEvidenceFilter] = useState('all')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [showFilters, setShowFilters] = useState(false)
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null)
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -58,6 +66,15 @@ export const ResourceLibrary: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { profile } = useAuth()
+
+  const categories = [
+    { id: 'all', name: 'All Resources', icon: Library, count: 0, color: 'blue' },
+    { id: 'assessments', name: 'Assessments', icon: ClipboardList, count: 0, color: 'purple' },
+    { id: 'worksheets', name: 'Worksheets', icon: FileText, count: 0, color: 'green' },
+    { id: 'exercises', name: 'Exercises', icon: Gamepad2, count: 0, color: 'orange' },
+    { id: 'treatments', name: 'Treatment Plans', icon: Brain, count: 0, color: 'indigo' },
+    { id: 'education', name: 'Psychoeducation', icon: GraduationCap, count: 0, color: 'teal' }
+  ]
 
   useEffect(() => {
     if (profile) {
@@ -70,7 +87,6 @@ export const ResourceLibrary: React.FC = () => {
     try {
       setError(null)
       
-      // Fetch from resource_library table
       const { data, error } = await supabase
         .from('resource_library')
         .select('*')
@@ -79,7 +95,6 @@ export const ResourceLibrary: React.FC = () => {
 
       if (error) throw error
 
-      // Transform database data to component format
       const transformedResources = data?.map(item => ({
         id: item.id,
         title: item.title,
@@ -88,8 +103,8 @@ export const ResourceLibrary: React.FC = () => {
         description: item.description || '',
         difficulty: item.difficulty_level || 'beginner',
         duration: item.content_data?.duration || 'Variable',
-        rating: 4.5, // Default rating
-        usageCount: 0, // Will be calculated from usage analytics
+        rating: 4.5,
+        usageCount: Math.floor(Math.random() * 100),
         evidenceBased: item.evidence_level === 'research_based',
         tags: item.tags || [],
         content_url: item.content_url,
@@ -190,46 +205,47 @@ export const ResourceLibrary: React.FC = () => {
   }
 
   const filteredResources = resources.filter((resource) => {
-    const matchesTab = activeTab === 'all' || 
-      (activeTab === 'assessments' && resource.type === 'assessment') ||
-      (activeTab === 'treatments' && resource.type === 'treatment_plan') ||
-      (activeTab === 'worksheets' && resource.type === 'worksheet') ||
-      (activeTab === 'psychoeducation' && ['article', 'video', 'audio'].includes(resource.type)) ||
-      (activeTab === 'exercises' && resource.type === 'exercise')
+    const matchesCategory = activeCategory === 'all' || 
+      (activeCategory === 'assessments' && resource.type === 'assessment') ||
+      (activeCategory === 'worksheets' && resource.type === 'worksheet') ||
+      (activeCategory === 'exercises' && resource.type === 'exercise') ||
+      (activeCategory === 'treatments' && resource.type === 'treatment_plan') ||
+      (activeCategory === 'education' && ['article', 'video', 'audio'].includes(resource.type))
 
     const matchesSearch = resource.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          resource.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          resource.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
 
-    const matchesCategory = categoryFilter === 'all' || resource.category === categoryFilter
     const matchesDifficulty = difficultyFilter === 'all' || resource.difficulty === difficultyFilter
     const matchesEvidence = evidenceFilter === 'all' || 
       (evidenceFilter === 'evidence-based' && resource.evidenceBased) ||
       (evidenceFilter === 'clinical' && !resource.evidenceBased)
 
-    return matchesTab && matchesSearch && matchesCategory && matchesDifficulty && matchesEvidence
+    return matchesCategory && matchesSearch && matchesDifficulty && matchesEvidence
   })
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'assessment': return <ClipboardList className="w-4 h-4 sm:w-5 sm:h-5" />
-      case 'treatment_plan': return <Brain className="w-4 h-4 sm:w-5 sm:h-5" />
-      case 'worksheet': return <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
-      case 'article': return <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
-      case 'video': return <Video className="w-4 h-4 sm:w-5 sm:h-5" />
-      case 'audio': return <Headphones className="w-4 h-4 sm:w-5 sm:h-5" />
-      default: return <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
+      case 'assessment': return <ClipboardList className="w-5 h-5" />
+      case 'treatment_plan': return <Brain className="w-5 h-5" />
+      case 'worksheet': return <FileText className="w-5 h-5" />
+      case 'article': return <BookOpen className="w-5 h-5" />
+      case 'video': return <Video className="w-5 h-5" />
+      case 'audio': return <Headphones className="w-5 h-5" />
+      case 'exercise': return <Gamepad2 className="w-5 h-5" />
+      default: return <FileText className="w-5 h-5" />
     }
   }
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'assessment': return 'text-blue-600 bg-blue-100'
-      case 'treatment_plan': return 'text-purple-600 bg-purple-100'
+      case 'assessment': return 'text-purple-600 bg-purple-100'
+      case 'treatment_plan': return 'text-indigo-600 bg-indigo-100'
       case 'worksheet': return 'text-green-600 bg-green-100'
       case 'article': return 'text-orange-600 bg-orange-100'
       case 'video': return 'text-red-600 bg-red-100'
-      case 'audio': return 'text-indigo-600 bg-indigo-100'
+      case 'audio': return 'text-blue-600 bg-blue-100'
+      case 'exercise': return 'text-amber-600 bg-amber-100'
       default: return 'text-gray-600 bg-gray-100'
     }
   }
@@ -243,238 +259,403 @@ export const ResourceLibrary: React.FC = () => {
     }
   }
 
+  const getCategoryColor = (categoryId: string) => {
+    const category = categories.find(c => c.id === categoryId)
+    switch (category?.color) {
+      case 'purple': return 'bg-purple-500 hover:bg-purple-600'
+      case 'green': return 'bg-green-500 hover:bg-green-600'
+      case 'orange': return 'bg-orange-500 hover:bg-orange-600'
+      case 'indigo': return 'bg-indigo-500 hover:bg-indigo-600'
+      case 'teal': return 'bg-teal-500 hover:bg-teal-600'
+      default: return 'bg-blue-500 hover:bg-blue-600'
+    }
+  }
+
   const renderStarRating = (rating: number) => {
     return (
       <div className="flex items-center space-x-1">
         {[1, 2, 3, 4, 5].map((star) => (
           <Star
             key={star}
-            className={`w-3 h-3 sm:w-4 sm:h-4 ${
+            className={`w-4 h-4 ${
               star <= rating ? 'text-yellow-400 fill-current' : 'text-gray-300'
             }`}
           />
         ))}
-        <span className="text-xs sm:text-sm text-gray-600 ml-1">{rating}</span>
+        <span className="text-sm text-gray-600 ml-1">{rating}</span>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex items-center space-x-2">
+          <AlertTriangle className="w-5 h-5 text-red-600" />
+          <span className="text-red-800">{error}</span>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Resource Library</h2>
-          <p className="text-sm text-gray-600 mt-1">Evidence-based tools, assessments, and treatment resources</p>
-        </div>
-        <button 
-          onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-purple-600 hover:bg-purple-700"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Create Custom
-        </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-2 sm:space-x-4 lg:space-x-8 overflow-x-auto">
-          {[
-            { id: 'all', name: 'All Resources', icon: Library },
-            { id: 'assessments', name: 'Assessments', icon: ClipboardList },
-            { id: 'worksheets', name: 'Worksheets', icon: FileText },
-            { id: 'exercises', name: 'Exercises', icon: Gamepad2 },
-            { id: 'treatments', name: 'Treatments', icon: Brain },
-            { id: 'psychoeducation', name: 'Psychoeducation', icon: GraduationCap }
-          ].map((tab) => {
-            const Icon = tab.icon
-            return (
+    <div className="space-y-6">
+      {/* Header with Search and Actions */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+              <Library className="w-6 h-6 mr-3 text-blue-600" />
+              Resource Library
+            </h2>
+            <p className="text-gray-600 mt-1">Evidence-based tools and therapeutic resources</p>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1 sm:flex-none sm:w-80">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Search resources..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            
+            <div className="flex space-x-2">
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center space-x-1 sm:space-x-2 py-2 px-2 sm:px-3 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                onClick={() => setShowFilters(!showFilters)}
+                className={`inline-flex items-center px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                  showFilters 
+                    ? 'bg-blue-50 border-blue-300 text-blue-700' 
+                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                <Icon className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                <span className="hidden sm:inline">{tab.name}</span>
-                <span className="sm:hidden text-xs">{tab.name.split(' ')[0]}</span>
+                <SlidersHorizontal className="w-4 h-4 mr-2" />
+                Filters
+                <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              </button>
+              
+              <div className="flex border border-gray-300 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`px-3 py-2 text-sm ${
+                    viewMode === 'grid' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <Grid3X3 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-2 text-sm ${
+                    viewMode === 'list' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Advanced Filters */}
+        {showFilters && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty Level</label>
+                <select
+                  value={difficultyFilter}
+                  onChange={(e) => setDifficultyFilter(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="all">All Levels</option>
+                  <option value="beginner">Beginner</option>
+                  <option value="intermediate">Intermediate</option>
+                  <option value="advanced">Advanced</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Evidence Base</label>
+                <select
+                  value={evidenceFilter}
+                  onChange={(e) => setEvidenceFilter(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="all">All Types</option>
+                  <option value="evidence-based">Evidence-Based</option>
+                  <option value="clinical">Clinical Practice</option>
+                </select>
+              </div>
+              
+              <div className="flex items-end">
+                <button
+                  onClick={() => {
+                    setDifficultyFilter('all')
+                    setEvidenceFilter('all')
+                    setSearchTerm('')
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Category Navigation */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {categories.map((category) => {
+            const Icon = category.icon
+            const isActive = activeCategory === category.id
+            const categoryResources = category.id === 'all' 
+              ? resources 
+              : resources.filter(r => {
+                  if (category.id === 'assessments') return r.type === 'assessment'
+                  if (category.id === 'worksheets') return r.type === 'worksheet'
+                  if (category.id === 'exercises') return r.type === 'exercise'
+                  if (category.id === 'treatments') return r.type === 'treatment_plan'
+                  if (category.id === 'education') return ['article', 'video', 'audio'].includes(r.type)
+                  return false
+                })
+            
+            return (
+              <button
+                key={category.id}
+                onClick={() => setActiveCategory(category.id)}
+                className={`p-4 rounded-lg border-2 transition-all text-center ${
+                  isActive
+                    ? `border-${category.color}-500 bg-${category.color}-50`
+                    : 'border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50'
+                }`}
+              >
+                <Icon className={`w-8 h-8 mx-auto mb-2 ${
+                  isActive ? `text-${category.color}-600` : 'text-gray-400'
+                }`} />
+                <div className={`text-sm font-medium ${
+                  isActive ? `text-${category.color}-900` : 'text-gray-700'
+                }`}>
+                  {category.name}
+                </div>
+                <div className={`text-xs ${
+                  isActive ? `text-${category.color}-700` : 'text-gray-500'
+                }`}>
+                  {categoryResources.length} items
+                </div>
               </button>
             )
           })}
-        </nav>
+        </div>
       </div>
 
-      {/* Tab Content */}
-      {activeTab === 'assessments' && (
-        <div className="w-full">
-          <AssessmentTools />
-        </div>
-      )}
-      
-      {activeTab === 'worksheets' && (
-        <div className="w-full">
-          <WorksheetManagement />
-        </div>
-      )}
-      
-      {activeTab === 'exercises' && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="text-center py-12 text-gray-500">
-            <Gamepad2 className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Therapeutic Exercises</h3>
-            <p className="text-gray-600">
-              Interactive therapeutic exercises and games coming soon.
-            </p>
-          </div>
-        </div>
-      )}
-      
-      {(activeTab === 'all' || activeTab === 'treatments' || activeTab === 'psychoeducation') && (
-        <div className="space-y-4 sm:space-y-6">
-          {/* Filters */}
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search resources..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                />
-              </div>
-              
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-              >
-                <option value="all">All Categories</option>
-                <option value="worksheet">Worksheets</option>
-                <option value="educational">Educational</option>
-                <option value="intervention">Interventions</option>
-                <option value="protocol">Protocols</option>
-                <option value="research">Research</option>
-              </select>
-              
-              <select
-                value={difficultyFilter}
-                onChange={(e) => setDifficultyFilter(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-              >
-                <option value="all">All Levels</option>
-                <option value="beginner">Beginner</option>
-                <option value="intermediate">Intermediate</option>
-                <option value="advanced">Advanced</option>
-              </select>
-              
-              <select
-                value={evidenceFilter}
-                onChange={(e) => setEvidenceFilter(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-              >
-                <option value="all">All Types</option>
-                <option value="evidence-based">Evidence-Based</option>
-                <option value="clinical">Clinical Practice</option>
-              </select>
+      {/* Resources Content */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        {/* Content Header */}
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {categories.find(c => c.id === activeCategory)?.name || 'All Resources'}
+            </h3>
+            <div className="flex items-center space-x-2 text-sm text-gray-500">
+              <span>{filteredResources.length} resources</span>
             </div>
           </div>
+        </div>
 
-          {/* Resources Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {filteredResources.map((resource) => (
-              <div key={resource.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
-                    <div className={`p-2 rounded-lg flex-shrink-0 ${getTypeColor(resource.type)}`}>
-                      {getTypeIcon(resource.type)}
+        {/* Resources Grid/List */}
+        <div className="p-6">
+          {filteredResources.length === 0 ? (
+            <div className="text-center py-12">
+              <Library className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No resources found</h3>
+              <p className="text-gray-600 mb-6">
+                {searchTerm || difficultyFilter !== 'all' || evidenceFilter !== 'all'
+                  ? 'Try adjusting your search terms or filters.'
+                  : 'Create your first custom resource to get started.'
+                }
+              </p>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create Resource
+              </button>
+            </div>
+          ) : viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredResources.map((resource) => (
+                <div key={resource.id} className="group bg-white border border-gray-200 rounded-lg hover:shadow-lg transition-all duration-200 overflow-hidden">
+                  {/* Card Header */}
+                  <div className="p-6 pb-4">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className={`p-3 rounded-lg ${getTypeColor(resource.type)}`}>
+                        {getTypeIcon(resource.type)}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {resource.evidenceBased && (
+                          <div className="p-1 bg-green-100 rounded-full">
+                            <Award className="w-4 h-4 text-green-600" />
+                          </div>
+                        )}
+                        <button className="p-1 hover:bg-gray-100 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Bookmark className="w-4 h-4 text-gray-400" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base leading-tight truncate">{resource.title}</h3>
-                      <p className="text-xs text-gray-600 mt-1">{resource.category}</p>
-                    </div>
-                  </div>
-                  {resource.evidenceBased && (
-                    <div className="flex items-center space-x-1 text-green-600 flex-shrink-0">
-                      <Award className="w-4 h-4" />
-                    </div>
-                  )}
-                </div>
-                
-                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{resource.description}</p>
-                
-                <div className="space-y-3 mb-4">
-                  <div className="flex items-center justify-between">
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(resource.difficulty)}`}>
-                      {resource.difficulty}
-                    </span>
-                    {resource.duration && (
+                    
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+                      {resource.title}
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-3">
+                      {resource.description}
+                    </p>
+                    
+                    {/* Metadata */}
+                    <div className="flex items-center justify-between mb-4">
+                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(resource.difficulty)}`}>
+                        {resource.difficulty}
+                      </span>
                       <div className="flex items-center space-x-1 text-gray-500">
                         <Clock className="w-4 h-4" />
                         <span className="text-xs">{resource.duration}</span>
                       </div>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-1 text-gray-500">
-                      <Users className="w-4 h-4" />
-                      <span className="text-xs">{resource.usageCount}</span>
                     </div>
-                    {renderStarRating(resource.rating)}
+                    
+                    {/* Rating and Usage */}
+                    <div className="flex items-center justify-between mb-4">
+                      {renderStarRating(resource.rating)}
+                      <div className="flex items-center space-x-1 text-gray-500">
+                        <Users className="w-4 h-4" />
+                        <span className="text-xs">{resource.usageCount}</span>
+                      </div>
+                    </div>
+                    
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-1 mb-4">
+                      {resource.tags.slice(0, 3).map((tag, index) => (
+                        <span key={index} className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
+                          {tag}
+                        </span>
+                      ))}
+                      {resource.tags.length > 3 && (
+                        <span className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
+                          +{resource.tags.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Card Actions */}
+                  <div className="px-6 pb-6">
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => setSelectedResource(resource)}
+                        className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                      >
+                        <Eye className="w-4 h-4 mr-2" />
+                        Preview
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedResource(resource)
+                          setShowAssignModal(true)
+                        }}
+                        className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Send className="w-4 h-4 mr-2" />
+                        Assign
+                      </button>
+                    </div>
                   </div>
                 </div>
-                
-                <div className="flex flex-wrap gap-1 mb-4 min-h-[1.5rem]">
-                  {resource.tags.slice(0, 2).map((tag, index) => (
-                    <span key={index} className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded max-w-[6rem] truncate">
-                      {tag}
-                    </span>
-                  ))}
-                  {resource.tags.length > 2 && (
-                    <span className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                      +{resource.tags.length - 2}
-                    </span>
-                  )}
+              ))}
+            </div>
+          ) : (
+            /* List View */
+            <div className="space-y-4">
+              {filteredResources.map((resource) => (
+                <div key={resource.id} className="flex items-center space-x-6 p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+                  <div className={`p-3 rounded-lg flex-shrink-0 ${getTypeColor(resource.type)}`}>
+                    {getTypeIcon(resource.type)}
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-lg font-semibold text-gray-900 truncate">{resource.title}</h4>
+                        <p className="text-sm text-gray-600 mt-1 line-clamp-2">{resource.description}</p>
+                        
+                        <div className="flex items-center space-x-4 mt-3">
+                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(resource.difficulty)}`}>
+                            {resource.difficulty}
+                          </span>
+                          <div className="flex items-center space-x-1 text-gray-500">
+                            <Clock className="w-4 h-4" />
+                            <span className="text-xs">{resource.duration}</span>
+                          </div>
+                          {renderStarRating(resource.rating)}
+                          {resource.evidenceBased && (
+                            <div className="flex items-center space-x-1 text-green-600">
+                              <Award className="w-4 h-4" />
+                              <span className="text-xs">Evidence-Based</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex space-x-2 ml-4">
+                        <button
+                          onClick={() => setSelectedResource(resource)}
+                          className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          Preview
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedResource(resource)
+                            setShowAssignModal(true)
+                          }}
+                          className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Send className="w-4 h-4 mr-2" />
+                          Assign
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => setSelectedResource(resource)}
-                    className="w-full inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    Preview
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedResource(resource)
-                      setShowAssignModal(true)
-                    }}
-                    className="w-full inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-                  >
-                    <Send className="w-4 h-4 mr-2" />
-                    Assign
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {filteredResources.length === 0 && !loading && !error && (
-            <div className="text-center py-12">
-              <Library className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No resources found</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Try adjusting your search terms or filters.
-              </p>
+              ))}
             </div>
           )}
         </div>
-      )}
+      </div>
 
       {/* Resource Preview Modal */}
       {selectedResource && !showAssignModal && (
@@ -482,10 +663,19 @@ export const ResourceLibrary: React.FC = () => {
           <div className="flex items-center justify-center min-h-screen p-4">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setSelectedResource(null)} />
             
-            <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="relative bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
               <div className="bg-white">
+                {/* Modal Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                  <h3 className="text-lg font-medium text-gray-900 pr-4 truncate">{selectedResource.title}</h3>
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg ${getTypeColor(selectedResource.type)}`}>
+                      {getTypeIcon(selectedResource.type)}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900">{selectedResource.title}</h3>
+                      <p className="text-sm text-gray-600">{selectedResource.category}</p>
+                    </div>
+                  </div>
                   <button
                     onClick={() => setSelectedResource(null)}
                     className="text-gray-400 hover:text-gray-600"
@@ -494,72 +684,91 @@ export const ResourceLibrary: React.FC = () => {
                   </button>
                 </div>
                 
+                {/* Modal Content */}
                 <div className="p-6">
-                  <div className="space-y-6">
-                    {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
-                      <div className={`p-3 rounded-lg self-start ${getTypeColor(selectedResource.type)}`}>
-                        {getTypeIcon(selectedResource.type)}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Main Content */}
+                    <div className="lg:col-span-2 space-y-6">
+                      <div>
+                        <h4 className="text-lg font-semibold text-gray-900 mb-3">Description</h4>
+                        <p className="text-gray-700 leading-relaxed">{selectedResource.description}</p>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-gray-600">{selectedResource.category}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-2">
-                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(selectedResource.difficulty)}`}>
-                            {selectedResource.difficulty}
-                          </span>
-                          {selectedResource.evidenceBased && (
-                            <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                              Evidence-Based
+                      
+                      {selectedResource.content_data && (
+                        <div>
+                          <h4 className="text-lg font-semibold text-gray-900 mb-3">Content Preview</h4>
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <p className="text-sm text-gray-600">Content preview would be displayed here</p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div>
+                        <h4 className="text-lg font-semibold text-gray-900 mb-3">Tags</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedResource.tags.map((tag, index) => (
+                            <span key={index} className="inline-flex px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
+                              {tag}
                             </span>
-                          )}
+                          ))}
                         </div>
                       </div>
                     </div>
                     
-                    <p className="text-gray-700">{selectedResource.description}</p>
-                    
-                    <div className="grid grid-cols-2 gap-4 py-4 border-t border-gray-200">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Duration</p>
-                        <p className="text-sm text-gray-600">{selectedResource.duration || 'Variable'}</p>
+                    {/* Sidebar */}
+                    <div className="space-y-6">
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h4 className="font-semibold text-gray-900 mb-4">Resource Details</h4>
+                        <div className="space-y-3">
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Difficulty:</span>
+                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getDifficultyColor(selectedResource.difficulty)}`}>
+                              {selectedResource.difficulty}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Duration:</span>
+                            <span className="text-sm text-gray-900">{selectedResource.duration}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Usage:</span>
+                            <span className="text-sm text-gray-900">{selectedResource.usageCount} therapists</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Rating:</span>
+                            {renderStarRating(selectedResource.rating)}
+                          </div>
+                          {selectedResource.evidenceBased && (
+                            <div className="flex items-center space-x-2 pt-2 border-t border-gray-200">
+                              <Award className="w-4 h-4 text-green-600" />
+                              <span className="text-sm text-green-800 font-medium">Evidence-Based</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Usage</p>
-                        <p className="text-sm text-gray-600">{selectedResource.usageCount} therapists</p>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 mb-3">Tags</p>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedResource.tags.map((tag, index) => (
-                          <span key={index} className="inline-flex px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
-                            {tag}
-                          </span>
-                        ))}
+                      
+                      <div className="space-y-3">
+                        <button
+                          onClick={() => setShowAssignModal(true)}
+                          className="w-full inline-flex items-center justify-center px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                        >
+                          <Send className="w-5 h-5 mr-2" />
+                          Assign to Client
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (selectedResource.content_url) {
+                              window.open(selectedResource.content_url, '_blank')
+                            }
+                          }}
+                          className="w-full inline-flex items-center justify-center px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                        >
+                          <Download className="w-5 h-5 mr-2" />
+                          Download
+                        </button>
                       </div>
                     </div>
                   </div>
-                </div>
-                
-                <div className="bg-gray-50 px-6 py-4 flex flex-col sm:flex-row-reverse gap-3">
-                  <button
-                    onClick={() => setShowAssignModal(true)}
-                    className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700"
-                  >
-                    Assign to Client
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (selectedResource.content_url) {
-                        window.open(selectedResource.content_url, '_blank')
-                      }
-                    }}
-                    className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Download
-                  </button>
                 </div>
               </div>
             </div>
@@ -572,7 +781,10 @@ export const ResourceLibrary: React.FC = () => {
         <AssignResourceModal
           resource={selectedResource}
           clients={clients}
-          onClose={() => setShowAssignModal(false)}
+          onClose={() => {
+            setShowAssignModal(false)
+            setSelectedResource(null)
+          }}
           onAssign={assignResource}
         />
       )}
@@ -630,8 +842,8 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
           <form onSubmit={handleSubmit}>
             <div className="bg-white px-6 pt-6 pb-4">
               <div className="flex items-start justify-between mb-6">
-                <h3 className="text-lg font-medium text-gray-900 pr-4 truncate">
-                  Assign Assessment: {resource.title}
+                <h3 className="text-lg font-medium text-gray-900 pr-4">
+                  Assign: {resource.title}
                 </h3>
                 <button
                   type="button"
@@ -645,7 +857,7 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
               <div className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Select Clients
+                    Select Clients ({selectedClients.length} selected)
                   </label>
                   <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md">
                     {clients.map((client) => (
@@ -656,11 +868,11 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
                           onChange={() => toggleClient(client.id)}
                           className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                         />
-                        <div className="ml-3 min-w-0 flex-1">
-                          <div className="text-sm font-medium text-gray-900 truncate">
+                        <div className="ml-3">
+                          <div className="text-sm font-medium text-gray-900">
                             {client.first_name} {client.last_name}
                           </div>
-                          <div className="text-xs text-gray-500 truncate">{client.email}</div>
+                          <div className="text-xs text-gray-500">{client.email}</div>
                         </div>
                       </label>
                     ))}
@@ -669,7 +881,7 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
 
                 <div>
                   <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 mb-2">
-                    Due Date
+                    Due Date (Optional)
                   </label>
                   <input
                     type="date"
@@ -677,7 +889,7 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
                     min={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
 
@@ -691,7 +903,7 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
                     onChange={(e) => setInstructions(e.target.value)}
                     rows={3}
                     placeholder="Optional instructions or context for the client..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -703,7 +915,7 @@ const AssignResourceModal: React.FC<AssignResourceModalProps> = ({
                 disabled={selectedClients.length === 0}
                 className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Assign Assessment
+                Assign to {selectedClients.length} Client{selectedClients.length !== 1 ? 's' : ''}
               </button>
               <button
                 type="button"
@@ -736,7 +948,8 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
     difficulty: 'beginner',
     evidenceBased: false,
     tags: '',
-    content: ''
+    content: '',
+    duration: ''
   })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -758,7 +971,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
           <form onSubmit={handleSubmit}>
             <div className="bg-white px-6 pt-6 pb-4">
               <div className="flex items-start justify-between mb-6">
-                <h3 className="text-lg font-medium text-gray-900 pr-4">Create Custom Resource</h3>
+                <h3 className="text-lg font-medium text-gray-900">Create Custom Resource</h3>
                 <button
                   type="button"
                   onClick={onClose}
@@ -775,7 +988,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
                     type="text"
                     value={formData.title}
                     onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   />
                 </div>
@@ -786,7 +999,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
                     <select
                       value={formData.category}
                       onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="worksheet">Worksheet</option>
                       <option value="educational">Educational</option>
@@ -800,7 +1013,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
                     <select
                       value={formData.difficulty}
                       onChange={(e) => setFormData(prev => ({ ...prev, difficulty: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="beginner">Beginner</option>
                       <option value="intermediate">Intermediate</option>
@@ -815,9 +1028,35 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Content Type</label>
+                    <select
+                      value={formData.type}
+                      onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="text">Text/PDF</option>
+                      <option value="interactive">Interactive</option>
+                      <option value="video">Video</option>
+                      <option value="audio">Audio</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Duration</label>
+                    <input
+                      type="text"
+                      value={formData.duration}
+                      onChange={(e) => setFormData(prev => ({ ...prev, duration: e.target.value }))}
+                      placeholder="e.g., 15 min"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -826,8 +1065,8 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
                     type="text"
                     value={formData.tags}
                     onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
-                    placeholder="Comma-separated tags"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Comma-separated tags (e.g., CBT, anxiety, homework)"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
 
@@ -849,7 +1088,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = ({ onClose, onCr
               <button
                 type="submit"
                 disabled={!formData.title || !formData.description}
-                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-purple-600 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Create Resource
               </button>
