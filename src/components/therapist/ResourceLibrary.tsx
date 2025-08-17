@@ -307,27 +307,27 @@ export const ResourceLibrary: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Header with Search and Actions */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 flex items-center">
-              <Library className="w-6 h-6 mr-3 text-blue-600" />
+            <h2 className="text-xl font-bold text-gray-900 flex items-center">
+              <Library className="w-5 h-5 mr-2 text-blue-600" />
               Resource Library
             </h2>
-            <p className="text-gray-600 mt-1">Evidence-based tools and therapeutic resources</p>
+            <p className="text-sm text-gray-600">Evidence-based tools and therapeutic resources</p>
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1 sm:flex-none sm:w-80">
+            <div className="relative flex-1 sm:flex-none sm:w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
                 placeholder="Search resources..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               />
             </div>
             
@@ -381,7 +381,7 @@ export const ResourceLibrary: React.FC = () => {
 
         {/* Advanced Filters */}
         {showFilters && (
-          <div className="mt-6 pt-6 border-t border-gray-200">
+          <div className="mt-4 pt-4 border-t border-gray-200">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty Level</label>
@@ -428,7 +428,7 @@ export const ResourceLibrary: React.FC = () => {
       </div>
 
       {/* Category Navigation */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {categories.map((category) => {
             const Icon = category.icon
@@ -448,13 +448,13 @@ export const ResourceLibrary: React.FC = () => {
               <button
                 key={category.id}
                 onClick={() => setActiveCategory(category.id)}
-                className={`p-4 rounded-lg border-2 transition-all text-center ${
+                className={`p-3 rounded-lg border-2 transition-all text-center ${
                   isActive
                     ? `border-${category.color}-500 bg-${category.color}-50`
                     : 'border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50'
                 }`}
               >
-                <Icon className={`w-8 h-8 mx-auto mb-2 ${
+                <Icon className={`w-6 h-6 mx-auto mb-2 ${
                   isActive ? `text-${category.color}-600` : 'text-gray-400'
                 }`} />
                 <div className={`text-sm font-medium ${
@@ -474,11 +474,11 @@ export const ResourceLibrary: React.FC = () => {
       </div>
 
       {/* Resources Content */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <div className="bg-white flex-1 flex flex-col overflow-hidden">
         {/* Content Header */}
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 className="text-base font-semibold text-gray-900">
               {categories.find(c => c.id === activeCategory)?.name || 'All Resources'}
             </h3>
             <div className="flex items-center space-x-2 text-sm text-gray-500">
@@ -488,7 +488,7 @@ export const ResourceLibrary: React.FC = () => {
         </div>
 
         {/* Resources Grid/List */}
-        <div className="p-6">
+        <div className="flex-1 overflow-y-auto p-4">
           {filteredResources.length === 0 ? (
             <div className="text-center py-12">
               <Library className="mx-auto h-12 w-12 text-gray-400 mb-4" />
@@ -508,11 +508,11 @@ export const ResourceLibrary: React.FC = () => {
               </button>
             </div>
           ) : viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredResources.map((resource) => (
-                <div key={resource.id} className="group bg-white border border-gray-200 rounded-lg hover:shadow-lg transition-all duration-200 overflow-hidden">
+                <div key={resource.id} className="group bg-white border border-gray-200 rounded-lg hover:shadow-md transition-all duration-200 overflow-hidden">
                   {/* Card Header */}
-                  <div className="p-6 pb-4">
+                  <div className="p-4">
                     <div className="flex items-start justify-between mb-4">
                       <div className={`p-3 rounded-lg ${getTypeColor(resource.type)}`}>
                         {getTypeIcon(resource.type)}
@@ -529,7 +529,7 @@ export const ResourceLibrary: React.FC = () => {
                       </div>
                     </div>
                     
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+                    <h4 className="text-base font-semibold text-gray-900 mb-2 line-clamp-2">
                       {resource.title}
                     </h4>
                     <p className="text-sm text-gray-600 mb-4 line-clamp-3">
@@ -569,10 +569,8 @@ export const ResourceLibrary: React.FC = () => {
                         </span>
                       )}
                     </div>
-                  </div>
-                  
-                  {/* Card Actions */}
-                  <div className="px-6 pb-6">
+                    
+                    {/* Card Actions */}
                     <div className="flex space-x-2">
                       <button
                         onClick={() => setSelectedResource(resource)}
@@ -600,7 +598,7 @@ export const ResourceLibrary: React.FC = () => {
             /* List View */
             <div className="space-y-4">
               {filteredResources.map((resource) => (
-                <div key={resource.id} className="flex items-center space-x-6 p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+                <div key={resource.id} className="flex items-center space-x-4 p-4 border border-gray-200 rounded-lg hover:shadow-sm transition-shadow">
                   <div className={`p-3 rounded-lg flex-shrink-0 ${getTypeColor(resource.type)}`}>
                     {getTypeIcon(resource.type)}
                   </div>
@@ -608,7 +606,7 @@ export const ResourceLibrary: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-lg font-semibold text-gray-900 truncate">{resource.title}</h4>
+                        <h4 className="text-base font-semibold text-gray-900 truncate">{resource.title}</h4>
                         <p className="text-sm text-gray-600 mt-1 line-clamp-2">{resource.description}</p>
                         
                         <div className="flex items-center space-x-4 mt-3">
