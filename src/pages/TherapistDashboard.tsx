@@ -41,12 +41,12 @@ import {
 import { Navigate } from 'react-router-dom'
 
 // Lazy load components for better performance
-const ClientManagement = React.lazy(() => import('../components/therapist/ClientManagement').then(m => ({ default: m.ClientManagement })))
-const CaseManagement = React.lazy(() => import('../components/therapist/CaseManagement').then(m => ({ default: m.CaseManagement })))
-const SessionManagement = React.lazy(() => import('../components/therapist/SessionManagement').then(m => ({ default: m.SessionManagement })))
-const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools').then(m => ({ default: m.CommunicationTools })))
-const ResourceLibrary = React.lazy(() => import('../components/therapist/ResourceLibrary').then(m => ({ default: m.ResourceLibrary })))
-const PracticeManagement = React.lazy(() => import('../components/therapist/PracticeManagement').then(m => ({ default: m.PracticeManagement })))
+const ClientManagement = React.lazy(() => import('../components/therapist/ClientManagement'))
+const CaseManagement = React.lazy(() => import('../components/therapist/CaseManagement'))
+const SessionManagement = React.lazy(() => import('../components/therapist/SessionManagement'))
+const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools'))
+const ResourceLibrary = React.lazy(() => import('../components/therapist/ResourceLibrary'))
+const PracticeManagement = React.lazy(() => import('../components/therapist/PracticeManagement'))
 
 interface DashboardStats {
   totalClients: number
@@ -85,7 +85,7 @@ interface Activity {
   icon: string
 }
 
-export const TherapistDashboard: React.FC = () => {
+export default function TherapistDashboard() {
   const [activeTab, setActiveTab] = useState<string>('overview')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)

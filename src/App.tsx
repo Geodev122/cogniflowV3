@@ -6,12 +6,8 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { useAuth } from './hooks/useAuth'
 
 // Lazy load dashboard components with preload
-const TherapistDashboard = React.lazy(() => 
-  import('./pages/TherapistDashboard').then(m => ({ default: m.TherapistDashboard }))
-)
-const ClientDashboard = React.lazy(() => 
-  import('./pages/ClientDashboard').then(m => ({ default: m.default }))
-)
+const TherapistDashboard = React.lazy(() => import('./pages/TherapistDashboard'))
+const ClientDashboard = React.lazy(() => import('./pages/ClientDashboard'))
 const ProgressMetrics = React.lazy(() => import('./pages/ProgressMetrics'))
 
 // Preload components on user interaction
