@@ -588,7 +588,7 @@ export default function TherapistDashboard() {
         )
       case 'resources':
         return (
-          <div className="h-full">
+          <div className="h-full overflow-hidden">
             <React.Suspense fallback={<div className="flex justify-center items-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
               <ResourceLibrary />
             </React.Suspense>

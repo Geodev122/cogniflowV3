@@ -23,7 +23,14 @@ import {
   Brain,
   Shield,
   Zap,
-  CheckCircle
+  CheckCircle,
+  BookmarkCheck,
+  Bookmark,
+  ExternalLink,
+  Download,
+  Share2,
+  Clock,
+  TrendingUp
 } from 'lucide-react'
 
 interface Resource {
@@ -118,16 +125,42 @@ const SAMPLE_RESOURCES: Resource[] = [
     evidence_level: 'research_based',
     is_public: true,
     created_at: '2024-01-10T13:30:00Z'
+  },
+  {
+    id: '7',
+    title: 'Exposure Therapy Hierarchy Builder',
+    category: 'intervention',
+    subcategory: 'exposure',
+    description: 'Interactive tool for building exposure hierarchies for anxiety disorders with step-by-step guidance.',
+    content_type: 'interactive',
+    tags: ['exposure-therapy', 'anxiety', 'phobias', 'hierarchy', 'CBT'],
+    difficulty_level: 'advanced',
+    evidence_level: 'research_based',
+    is_public: true,
+    created_at: '2024-01-09T08:30:00Z'
+  },
+  {
+    id: '8',
+    title: 'Sleep Hygiene Education Module',
+    category: 'educational',
+    subcategory: 'sleep',
+    description: 'Comprehensive educational module on sleep hygiene principles with practical tips and tracking sheets.',
+    content_type: 'video',
+    tags: ['sleep', 'insomnia', 'hygiene', 'education', 'wellness'],
+    difficulty_level: 'beginner',
+    evidence_level: 'clinical_consensus',
+    is_public: true,
+    created_at: '2024-01-08T15:20:00Z'
   }
 ]
 
 const CATEGORIES = [
-  { id: 'all', name: 'All', icon: Library, count: 0 },
-  { id: 'worksheet', name: 'Worksheets', icon: FileText, count: 0 },
-  { id: 'educational', name: 'Educational', icon: BookOpen, count: 0 },
-  { id: 'intervention', name: 'Interventions', icon: Target, count: 0 },
-  { id: 'protocol', name: 'Protocols', icon: Shield, count: 0 },
-  { id: 'research', name: 'Research', icon: Brain, count: 0 }
+  { id: 'all', name: 'All Resources', icon: Library, color: 'gray' },
+  { id: 'worksheet', name: 'Worksheets', icon: FileText, color: 'blue' },
+  { id: 'educational', name: 'Educational', icon: BookOpen, color: 'green' },
+  { id: 'intervention', name: 'Interventions', icon: Target, color: 'purple' },
+  { id: 'protocol', name: 'Protocols', icon: Shield, color: 'indigo' },
+  { id: 'research', name: 'Research', icon: Brain, color: 'pink' }
 ]
 
 export default function ResourceLibrary() {
@@ -163,7 +196,6 @@ export default function ResourceLibrary() {
         .order('created_at', { ascending: false })
 
       if (error || !data || data.length === 0) {
-        console.log('Using sample resources')
         setResources(SAMPLE_RESOURCES)
       } else {
         setResources(data)
@@ -226,57 +258,6 @@ export default function ResourceLibrary() {
     setFilteredResources(filtered)
   }
 
-  const getContentTypeIcon = (type?: string) => {
-    switch (type) {
-      case 'pdf': return <FileText className="w-4 h-4" />
-      case 'video': return <Video className="w-4 h-4" />
-      case 'audio': return <Headphones className="w-4 h-4" />
-      case 'interactive': return <Zap className="w-4 h-4" />
-      default: return <FileText className="w-4 h-4" />
-    }
-  }
-
-  const getContentTypeColor = (type?: string) => {
-    switch (type) {
-      case 'pdf': return 'text-red-600 bg-red-50'
-      case 'video': return 'text-purple-600 bg-purple-50'
-      case 'audio': return 'text-green-600 bg-green-50'
-      case 'interactive': return 'text-blue-600 bg-blue-50'
-      default: return 'text-gray-600 bg-gray-50'
-    }
-  }
-
-  const getDifficultyColor = (level?: string) => {
-    switch (level) {
-      case 'beginner': return 'text-emerald-700 bg-emerald-100'
-      case 'intermediate': return 'text-amber-700 bg-amber-100'
-      case 'advanced': return 'text-rose-700 bg-rose-100'
-      default: return 'text-gray-700 bg-gray-100'
-    }
-  }
-
-  const getEvidenceColor = (level?: string) => {
-    switch (level) {
-      case 'research_based': return 'text-blue-700 bg-blue-100'
-      case 'clinical_consensus': return 'text-violet-700 bg-violet-100'
-      case 'expert_opinion': return 'text-orange-700 bg-orange-100'
-      default: return 'text-gray-700 bg-gray-100'
-    }
-  }
-
-  const getCategoryIcon = (category: string) => {
-    const cat = CATEGORIES.find(c => c.id === category)
-    return cat ? cat.icon : FileText
-  }
-
-  const toggleBookmark = (resourceId: string) => {
-    setBookmarkedResources(prev => 
-      prev.includes(resourceId) 
-        ? prev.filter(id => id !== resourceId)
-        : [...prev, resourceId]
-    )
-  }
-
   const assignResource = async (resourceId: string, clientIds: string[]) => {
     try {
       const resource = resources.find(r => r.id === resourceId)
@@ -306,6 +287,70 @@ export default function ResourceLibrary() {
     }
   }
 
+  const toggleBookmark = (resourceId: string) => {
+    setBookmarkedResources(prev => 
+      prev.includes(resourceId) 
+        ? prev.filter(id => id !== resourceId)
+        : [...prev, resourceId]
+    )
+  }
+
+  const getContentTypeIcon = (type?: string) => {
+    switch (type) {
+      case 'pdf': return <FileText className="w-4 h-4" />
+      case 'video': return <Video className="w-4 h-4" />
+      case 'audio': return <Headphones className="w-4 h-4" />
+      case 'interactive': return <Zap className="w-4 h-4" />
+      default: return <FileText className="w-4 h-4" />
+    }
+  }
+
+  const getContentTypeColor = (type?: string) => {
+    switch (type) {
+      case 'pdf': return 'text-red-600 bg-red-50 border-red-200'
+      case 'video': return 'text-purple-600 bg-purple-50 border-purple-200'
+      case 'audio': return 'text-green-600 bg-green-50 border-green-200'
+      case 'interactive': return 'text-blue-600 bg-blue-50 border-blue-200'
+      default: return 'text-gray-600 bg-gray-50 border-gray-200'
+    }
+  }
+
+  const getDifficultyColor = (level?: string) => {
+    switch (level) {
+      case 'beginner': return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+      case 'intermediate': return 'bg-amber-100 text-amber-700 border-amber-200'
+      case 'advanced': return 'bg-rose-100 text-rose-700 border-rose-200'
+      default: return 'bg-gray-100 text-gray-700 border-gray-200'
+    }
+  }
+
+  const getEvidenceColor = (level?: string) => {
+    switch (level) {
+      case 'research_based': return 'bg-blue-100 text-blue-700 border-blue-200'
+      case 'clinical_consensus': return 'bg-violet-100 text-violet-700 border-violet-200'
+      case 'expert_opinion': return 'bg-orange-100 text-orange-700 border-orange-200'
+      default: return 'bg-gray-100 text-gray-700 border-gray-200'
+    }
+  }
+
+  const getCategoryIcon = (category: string) => {
+    const cat = CATEGORIES.find(c => c.id === category)
+    return cat ? cat.icon : FileText
+  }
+
+  const getCategoryColor = (category: string) => {
+    const cat = CATEGORIES.find(c => c.id === category)
+    const colors = {
+      gray: 'text-gray-600 bg-gray-100',
+      blue: 'text-blue-600 bg-blue-100',
+      green: 'text-green-600 bg-green-100',
+      purple: 'text-purple-600 bg-purple-100',
+      indigo: 'text-indigo-600 bg-indigo-100',
+      pink: 'text-pink-600 bg-pink-100'
+    }
+    return colors[cat?.color as keyof typeof colors] || colors.gray
+  }
+
   // Update category counts
   const categoriesWithCounts = CATEGORIES.map(cat => ({
     ...cat,
@@ -324,23 +369,23 @@ export default function ResourceLibrary() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-white">
-      {/* Fixed Header */}
+    <div className="h-full flex flex-col bg-gray-50">
+      {/* Fixed Header - No Padding */}
       <div className="flex-shrink-0 bg-white border-b border-gray-200">
         {/* Top Bar */}
-        <div className="p-4">
+        <div className="px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
                 <Library className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Resource Library</h1>
-                <p className="text-sm text-gray-600">Evidence-based therapeutic resources and tools</p>
+                <h1 className="text-xl font-bold text-gray-900">Resource Library</h1>
+                <p className="text-sm text-gray-600">Evidence-based therapeutic resources</p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
               {/* View Toggle */}
               <div className="flex bg-gray-100 rounded-lg p-1">
                 <button
@@ -364,10 +409,6 @@ export default function ResourceLibrary() {
                   <List className="w-4 h-4" />
                 </button>
               </div>
-
-              <button className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50">
-                <Filter className="w-4 h-4" />
-              </button>
             </div>
           </div>
 
@@ -384,7 +425,7 @@ export default function ResourceLibrary() {
           </div>
 
           {/* Category Pills */}
-          <div className="flex space-x-2 overflow-x-auto pb-2">
+          <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
             {categoriesWithCounts.map((category) => {
               const Icon = category.icon
               const isActive = selectedCategory === category.id
@@ -415,14 +456,14 @@ export default function ResourceLibrary() {
         </div>
       </div>
 
-      {/* Scrollable Content */}
+      {/* Scrollable Content - No Padding */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4">
           {/* Results Header */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">
-                Showing {filteredResources.length} of {resources.length} resources
+                {filteredResources.length} of {resources.length} resources
               </span>
               {(searchTerm || selectedCategory !== 'all') && (
                 <button
@@ -458,30 +499,28 @@ export default function ResourceLibrary() {
           ) : (
             <>
               {viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {filteredResources.map((resource) => {
                     const CategoryIcon = getCategoryIcon(resource.category)
                     const isBookmarked = bookmarkedResources.includes(resource.id)
                     
                     return (
-                      <div key={resource.id} className="group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg hover:border-blue-200 transition-all duration-200 hover:-translate-y-1">
+                      <div key={resource.id} className="group bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg hover:border-blue-200 transition-all duration-200 hover:-translate-y-1">
                         {/* Header */}
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="p-2 rounded-lg bg-blue-100">
-                            <CategoryIcon className="w-5 h-5 text-blue-600" />
+                        <div className="flex items-start justify-between mb-3">
+                          <div className={`p-2 rounded-lg ${getCategoryColor(resource.category)}`}>
+                            <CategoryIcon className="w-5 h-5" />
                           </div>
-                          <div className="flex items-center space-x-1">
-                            <button
-                              onClick={() => toggleBookmark(resource.id)}
-                              className={`p-1.5 rounded-lg transition-all ${
-                                isBookmarked 
-                                  ? 'text-yellow-500 bg-yellow-50' 
-                                  : 'text-gray-400 hover:text-yellow-500 hover:bg-yellow-50'
-                              }`}
-                            >
-                              <Star className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => toggleBookmark(resource.id)}
+                            className={`p-1.5 rounded-lg transition-all ${
+                              isBookmarked 
+                                ? 'text-yellow-500 bg-yellow-50' 
+                                : 'text-gray-400 hover:text-yellow-500 hover:bg-yellow-50'
+                            }`}
+                          >
+                            {isBookmarked ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
+                          </button>
                         </div>
 
                         {/* Content */}
@@ -495,9 +534,9 @@ export default function ResourceLibrary() {
                         </div>
 
                         {/* Metadata */}
-                        <div className="space-y-3 mb-4">
+                        <div className="space-y-2 mb-4">
                           <div className="flex items-center justify-between">
-                            <div className={`flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium ${getContentTypeColor(resource.content_type)}`}>
+                            <div className={`flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-medium border ${getContentTypeColor(resource.content_type)}`}>
                               {getContentTypeIcon(resource.content_type)}
                               <span className="capitalize">{resource.content_type}</span>
                             </div>
@@ -508,12 +547,12 @@ export default function ResourceLibrary() {
 
                           <div className="flex flex-wrap gap-1">
                             {resource.difficulty_level && (
-                              <span className={`px-2 py-1 text-xs font-medium rounded-md ${getDifficultyColor(resource.difficulty_level)}`}>
+                              <span className={`px-2 py-1 text-xs font-medium rounded-md border ${getDifficultyColor(resource.difficulty_level)}`}>
                                 {resource.difficulty_level}
                               </span>
                             )}
                             {resource.evidence_level && (
-                              <span className={`px-2 py-1 text-xs font-medium rounded-md ${getEvidenceColor(resource.evidence_level)}`}>
+                              <span className={`px-2 py-1 text-xs font-medium rounded-md border ${getEvidenceColor(resource.evidence_level)}`}>
                                 {resource.evidence_level?.replace('_', ' ')}
                               </span>
                             )}
@@ -528,7 +567,7 @@ export default function ResourceLibrary() {
                               ))}
                               {resource.tags.length > 3 && (
                                 <span className="px-2 py-1 text-xs bg-gray-100 text-gray-500 rounded-md">
-                                  +{resource.tags.length - 3} more
+                                  +{resource.tags.length - 3}
                                 </span>
                               )}
                             </div>
@@ -560,17 +599,17 @@ export default function ResourceLibrary() {
                   })}
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {filteredResources.map((resource) => {
                     const CategoryIcon = getCategoryIcon(resource.category)
                     const isBookmarked = bookmarkedResources.includes(resource.id)
                     
                     return (
-                      <div key={resource.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md hover:border-blue-200 transition-all">
+                      <div key={resource.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-blue-200 transition-all">
                         <div className="flex items-start justify-between">
                           <div className="flex items-start space-x-4 flex-1">
-                            <div className="p-3 rounded-xl bg-blue-100 flex-shrink-0">
-                              <CategoryIcon className="w-6 h-6 text-blue-600" />
+                            <div className={`p-3 rounded-xl ${getCategoryColor(resource.category)} flex-shrink-0`}>
+                              <CategoryIcon className="w-6 h-6" />
                             </div>
                             
                             <div className="flex-1 min-w-0">
@@ -579,7 +618,7 @@ export default function ResourceLibrary() {
                                   {resource.title}
                                 </h3>
                                 <div className="flex items-center space-x-2 ml-4">
-                                  <div className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-xs font-medium ${getContentTypeColor(resource.content_type)}`}>
+                                  <div className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-xs font-medium border ${getContentTypeColor(resource.content_type)}`}>
                                     {getContentTypeIcon(resource.content_type)}
                                     <span className="capitalize">{resource.content_type}</span>
                                   </div>
@@ -591,7 +630,7 @@ export default function ResourceLibrary() {
                                         : 'text-gray-400 hover:text-yellow-500 hover:bg-yellow-50'
                                     }`}
                                   >
-                                    <Star className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
+                                    {isBookmarked ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
                                   </button>
                                 </div>
                               </div>
@@ -600,14 +639,14 @@ export default function ResourceLibrary() {
                                 {resource.description}
                               </p>
                               
-                              <div className="flex flex-wrap items-center gap-2 mb-4">
+                              <div className="flex flex-wrap items-center gap-2 mb-3">
                                 {resource.difficulty_level && (
-                                  <span className={`px-3 py-1 text-xs font-medium rounded-full ${getDifficultyColor(resource.difficulty_level)}`}>
+                                  <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getDifficultyColor(resource.difficulty_level)}`}>
                                     {resource.difficulty_level}
                                   </span>
                                 )}
                                 {resource.evidence_level && (
-                                  <span className={`px-3 py-1 text-xs font-medium rounded-full ${getEvidenceColor(resource.evidence_level)}`}>
+                                  <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getEvidenceColor(resource.evidence_level)}`}>
                                     {resource.evidence_level?.replace('_', ' ')}
                                   </span>
                                 )}
@@ -617,7 +656,7 @@ export default function ResourceLibrary() {
                               </div>
 
                               {resource.tags && resource.tags.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mb-4">
+                                <div className="flex flex-wrap gap-1">
                                   {resource.tags.slice(0, 5).map((tag, index) => (
                                     <span key={index} className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-md">
                                       #{tag}
@@ -633,7 +672,7 @@ export default function ResourceLibrary() {
                             </div>
                           </div>
                           
-                          <div className="flex flex-col space-y-2 ml-4">
+                          <div className="flex flex-col space-y-2 ml-4 flex-shrink-0">
                             <button
                               onClick={() => setSelectedResource(resource)}
                               className="flex items-center px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
@@ -674,16 +713,16 @@ export default function ResourceLibrary() {
                 {/* Modal Header */}
                 <div className="flex items-start justify-between p-6 border-b border-gray-200">
                   <div className="flex items-start space-x-4">
-                    <div className="p-3 rounded-xl bg-blue-100">
+                    <div className={`p-3 rounded-xl ${getCategoryColor(selectedResource.category)}`}>
                       {React.createElement(getCategoryIcon(selectedResource.category), { 
-                        className: 'w-6 h-6 text-blue-600' 
+                        className: 'w-6 h-6' 
                       })}
                     </div>
                     <div>
                       <h3 className="text-xl font-bold text-gray-900 mb-1">{selectedResource.title}</h3>
                       <p className="text-gray-600">{selectedResource.description}</p>
                       <div className="flex items-center space-x-4 mt-2">
-                        <div className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-xs font-medium ${getContentTypeColor(selectedResource.content_type)}`}>
+                        <div className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-xs font-medium border ${getContentTypeColor(selectedResource.content_type)}`}>
                           {getContentTypeIcon(selectedResource.content_type)}
                           <span className="capitalize">{selectedResource.content_type}</span>
                         </div>
@@ -707,7 +746,7 @@ export default function ResourceLibrary() {
                     <div className="lg:col-span-2">
                       <div className="bg-gray-50 rounded-xl p-8 h-80 flex items-center justify-center">
                         <div className="text-center">
-                          <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+                          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${getCategoryColor(selectedResource.category)}`}>
                             {getContentTypeIcon(selectedResource.content_type)}
                           </div>
                           <h4 className="font-medium text-gray-900 mb-2">Resource Preview</h4>
@@ -729,7 +768,7 @@ export default function ResourceLibrary() {
                           {selectedResource.difficulty_level && (
                             <div className="flex justify-between items-center">
                               <span className="text-sm text-gray-600">Difficulty:</span>
-                              <span className={`px-3 py-1 text-xs font-medium rounded-full ${getDifficultyColor(selectedResource.difficulty_level)}`}>
+                              <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getDifficultyColor(selectedResource.difficulty_level)}`}>
                                 {selectedResource.difficulty_level}
                               </span>
                             </div>
@@ -737,7 +776,7 @@ export default function ResourceLibrary() {
                           {selectedResource.evidence_level && (
                             <div className="flex justify-between items-center">
                               <span className="text-sm text-gray-600">Evidence:</span>
-                              <span className={`px-3 py-1 text-xs font-medium rounded-full ${getEvidenceColor(selectedResource.evidence_level)}`}>
+                              <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getEvidenceColor(selectedResource.evidence_level)}`}>
                                 {selectedResource.evidence_level?.replace('_', ' ')}
                               </span>
                             </div>
@@ -774,6 +813,16 @@ export default function ResourceLibrary() {
                           <Send className="w-4 h-4 mr-2" />
                           Assign to Clients
                         </button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button className="flex items-center justify-center px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                            <Download className="w-4 h-4 mr-1" />
+                            Download
+                          </button>
+                          <button className="flex items-center justify-center px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                            <Share2 className="w-4 h-4 mr-1" />
+                            Share
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
