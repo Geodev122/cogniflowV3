@@ -44,11 +44,8 @@ import { Navigate } from 'react-router-dom'
 // Lazy load components for better performance
 const ClientManagement = React.lazy(() => import('../components/therapist/ClientManagement').then(module => ({ default: module.ClientManagement })))
 const CaseManagement = React.lazy(() => import('../components/therapist/CaseManagement').then(module => ({ default: module.CaseManagement })))
-const ClinicRental = React.lazy(() => import('../components/therapist/ClinicRental').then(module => ({ default: module.ClinicRental })))
+const ClinicRental = React.lazy(() => import('../components/therapist/ClinicRental'))
 const SessionManagement = React.lazy(() => import('../components/therapist/SessionManagement').then(module => ({ default: module.SessionManagement })))
-const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools').then(module => ({ default: module.CommunicationTools })))
-const ResourceLibrary = React.lazy(() => import('../components/therapist/ResourceLibrary').then(module => ({ default: module.ResourceLibrary })))
-const PracticeManagement = React.lazy(() => import('../components/therapist/PracticeManagement').then(module => ({ default: module.PracticeManagement })))
 
 interface DashboardStats {
   totalClients: number
