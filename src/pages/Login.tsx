@@ -41,15 +41,11 @@ export const Login: React.FC = () => {
           <div className="flex justify-center">
             <div className="flex flex-col items-center space-y-4">
               <img 
-                src="/revised logo icon copy.png" 
+                src="/thera-py-icon.png" 
                 alt="Thera-PY Logo" 
                 className="logo-image-large"
               />
-              <img 
-                src="/revised logo name copy.png" 
-                alt="Thera-PY" 
-                className="logo-name-large"
-              />
+              <span className="logo-text-large text-gray-900">Thera-PY</span>
             </div>
           </div>
           <h2 className="mt-6 text-2xl font-bold text-gray-900">

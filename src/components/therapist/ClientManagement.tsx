@@ -230,14 +230,11 @@ export const ClientManagement: React.FC = () => {
       // Generate patient code
       const patientCode = generatePatientCode()
       
-      // Generate a unique client ID
-      const clientId = crypto.randomUUID()
-      
-      // Create client profile directly (therapist creates client record)
+      // Create client profile directly
       const { error: profileError } = await supabase
         .from('profiles')
         .insert({
-          id: clientId,
+          id: crypto.randomUUID(),
           role: 'client',
           first_name: clientData.firstName,
           last_name: clientData.lastName,
@@ -247,28 +244,45 @@ export const ClientManagement: React.FC = () => {
           created_by_therapist: profile!.id,
           password_set: false
         })
+        .select('id')
+        .single()
 
       if (profileError) {
         console.error('Error creating client profile:', profileError)
-        throw new Error('Failed to create client profile. Please check permissions.')
+        throw new Error(`Failed to create client profile: ${profileError.message}`)
       }
 
-      // Create therapist-client relation
+      // Get the created client ID
+      const { data: newClient, error: clientError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', clientData.email)
+        .eq('created_by_therapist', profile!.id)
+        .single()
+
+      if (clientError || !newClient) {
+        throw new Error('Failed to retrieve created client')
+      }
+
+      // Create therapist-client relation (if not exists)
       const { error: relationError } = await supabase
         .from('therapist_client_relations')
         .insert({
           therapist_id: profile!.id,
-          client_id: clientId
+          client_id: newClient.id
         })
 
       if (relationError) {
-        console.error('Error creating therapist-client relation:', relationError)
-        throw new Error('Failed to establish therapist-client relationship.')
+        // Check if relation already exists
+        if (!relationError.message.includes('duplicate key')) {
+          console.error('Error creating therapist-client relation:', relationError)
+          throw new Error(`Failed to establish therapist-client relationship: ${relationError.message}`)
+        }
       }
 
       await fetchClients()
       setShowAddClient(false)
-      alert('Client profile created successfully! You can now manage their treatment plan.')
+      alert(`Client ${clientData.firstName} ${clientData.lastName} added successfully! Patient Code: ${patientCode}`)
     } catch (error) {
       console.error('Error adding client:', error)
       alert(error instanceof Error ? error.message : 'Error adding client to roster. Please try again.')
