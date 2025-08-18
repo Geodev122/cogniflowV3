@@ -67,11 +67,15 @@ export const Register: React.FC = () => {
           <div className="flex justify-center">
             <div className="flex flex-col items-center space-y-4">
               <img 
-                src="/thera-py-icon.png" 
+                src="/dist/thera-py-icon copy.png" 
                 alt="Thera-PY Logo" 
                 className="logo-image-large"
               />
-              <span className="logo-text-large text-gray-900">Thera-PY</span>
+              <img 
+                src="/dist/thera-py-image.png"
+                alt="Thera-PY" 
+                className="logo-name-large"
+              />
             </div>
           </div>
           <h2 className="mt-6 text-2xl font-bold text-gray-900">Create your account</h2>
@@ -117,7 +121,7 @@ export const Register: React.FC = () => {
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-center space-x-2">
-                <img src="/thera-py-icon.png" alt="Thera-PY" className="w-6 h-6" />
+                <img src="/dist/thera-py-icon copy.png" alt="Thera-PY" className="w-6 h-6" />
                 <span className="font-medium text-blue-900">Therapist Registration</span>
               </div>
               <p className="text-blue-700 text-sm mt-1">
