@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import { isRecursionError } from '../../utils/helpers'
 import { 
   BarChart3, 
   Users, 
@@ -25,7 +26,7 @@ interface PracticeStats {
   noShowRate: number
 }
 
-export const PracticeManagement: React.FC = () => {
+export default function PracticeManagement() {
   const [stats, setStats] = useState<PracticeStats>({
     totalClients: 0,
     activeClients: 0,
@@ -50,6 +51,7 @@ export const PracticeManagement: React.FC = () => {
     if (!profile) return
 
     try {
+      setLoading(true)
       setError(null)
 
       // Fetch practice analytics
@@ -60,19 +62,42 @@ export const PracticeManagement: React.FC = () => {
         .order('created_at', { ascending: false })
 
       if (analyticsError) {
+        if (isRecursionError(analyticsError)) {
+          console.error('RLS recursion error in practice analytics:', analyticsError)
+          setError('Database configuration error - please contact support')
+          return
+        }
         console.warn('Practice analytics not available:', analyticsError)
       }
 
       // Calculate stats from available data
-      const { data: clientRelations } = await supabase
+      const { data: clientRelations, error: relationsError } = await supabase
         .from('therapist_client_relations')
         .select('client_id')
         .eq('therapist_id', profile.id)
 
-      const { data: appointments } = await supabase
+      if (relationsError) {
+        if (isRecursionError(relationsError)) {
+          console.error('RLS recursion error in practice client relations:', relationsError)
+          setError('Database configuration error - please contact support')
+          return
+        }
+        console.warn('Error fetching client relations for practice stats:', relationsError)
+      }
+
+      const { data: appointments, error: appointmentsError } = await supabase
         .from('appointments')
         .select('status, appointment_date')
         .eq('therapist_id', profile.id)
+
+      if (appointmentsError) {
+        if (isRecursionError(appointmentsError)) {
+          console.error('RLS recursion error in practice appointments:', appointmentsError)
+          setError('Database configuration error - please contact support')
+          return
+        }
+        console.warn('Error fetching appointments for practice stats:', appointmentsError)
+      }
 
       const totalClients = clientRelations?.length || 0
       const completedSessions = appointments?.filter(a => a.status === 'completed').length || 0
@@ -91,7 +116,11 @@ export const PracticeManagement: React.FC = () => {
       })
     } catch (error) {
       console.error('Error fetching practice stats:', error)
-      setError('Failed to load practice statistics')
+      if (isRecursionError(error)) {
+        setError('Database configuration error - please contact support')
+      } else {
+        setError('Failed to load practice statistics')
+      }
     } finally {
       setLoading(false)
     }

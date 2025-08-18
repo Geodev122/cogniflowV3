@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { getRiskColor, formatDate, generatePatientCode } from '../../utils/helpers'
+import { getRiskColor, formatDate, generatePatientCode, isRecursionError } from '../../utils/helpers'
 import { 
   Users, 
   Plus, 
@@ -68,6 +68,7 @@ export const ClientManagement: React.FC = () => {
     if (!profile) return
 
     try {
+      setLoading(true)
       // Get clients for this therapist with error handling
       const { data: relations, error: relationsError } = await supabase
         .from('therapist_client_relations')
@@ -75,6 +76,11 @@ export const ClientManagement: React.FC = () => {
         .eq('therapist_id', profile.id)
 
       if (relationsError) {
+        if (isRecursionError(relationsError)) {
+          console.error('RLS recursion error in client relations:', relationsError)
+          setClients([])
+          return
+        }
         console.error('Error fetching client relations:', relationsError)
         setClients([])
         return
@@ -84,6 +90,7 @@ export const ClientManagement: React.FC = () => {
       const clientIds = relations?.map(r => r.client_id) || []
       if (clientIds.length === 0) {
         setClients([])
+        setLoading(false)
         return
       }
       
@@ -93,6 +100,11 @@ export const ClientManagement: React.FC = () => {
         .in('id', clientIds)
 
       if (profilesError) {
+        if (isRecursionError(profilesError)) {
+          console.error('RLS recursion error in client profiles:', profilesError)
+          setClients([])
+          return
+        }
         console.error('Error fetching client profiles:', profilesError)
         setClients([])
         return
@@ -101,49 +113,78 @@ export const ClientManagement: React.FC = () => {
       // Get extended client profiles
       const clientsWithProfiles = await Promise.all(
         (clientProfiles || []).map(async (client: any) => {
+          try {
+            // Get extended profile with error handling
+            const { data: clientProfile, error: extendedError } = await supabase
+              .from('client_profiles')
+              .select('*')
+              .eq('client_id', client.id)
+              .eq('therapist_id', profile.id)
+              .maybeSingle()
 
-          // Get extended profile
-          const { data: clientProfile } = await supabase
-            .from('client_profiles')
-            .select('*')
-            .eq('client_id', client.id)
-            .eq('therapist_id', profile.id)
-            .maybeSingle()
+            if (extendedError && !isRecursionError(extendedError)) {
+              console.warn('Error fetching extended profile for client:', client.id, extendedError)
+            }
 
-          // Get client stats
-          const { data: assessments } = await supabase
-            .from('form_assignments')
-            .select('status')
-            .eq('client_id', client.id)
-            .eq('therapist_id', profile.id)
+            // Get client stats with error handling
+            const { data: assessments, error: assessmentsError } = await supabase
+              .from('form_assignments')
+              .select('status')
+              .eq('client_id', client.id)
+              .eq('therapist_id', profile.id)
 
-          const { data: lastSession } = await supabase
-            .from('appointments')
-            .select('appointment_date')
-            .eq('client_id', client.id)
-            .eq('therapist_id', profile.id)
-            .eq('status', 'completed')
-            .order('appointment_date', { ascending: false })
-            .limit(1)
+            if (assessmentsError && !isRecursionError(assessmentsError)) {
+              console.warn('Error fetching assessments for client:', client.id, assessmentsError)
+            }
 
-          const { data: nextAppointment } = await supabase
-            .from('appointments')
-            .select('appointment_date')
-            .eq('client_id', client.id)
-            .eq('therapist_id', profile.id)
-            .eq('status', 'scheduled')
-            .gte('appointment_date', new Date().toISOString())
-            .order('appointment_date', { ascending: true })
-            .limit(1)
+            const { data: lastSession, error: lastSessionError } = await supabase
+              .from('appointments')
+              .select('appointment_date')
+              .eq('client_id', client.id)
+              .eq('therapist_id', profile.id)
+              .eq('status', 'completed')
+              .order('appointment_date', { ascending: false })
+              .limit(1)
 
-          return {
-            ...client,
-            profile: clientProfile,
-            stats: {
-              totalAssessments: assessments?.length || 0,
-              completedAssessments: assessments?.filter(a => a.status === 'completed').length || 0,
-              lastSession: lastSession?.[0]?.appointment_date,
-              nextAppointment: nextAppointment?.[0]?.appointment_date
+            if (lastSessionError && !isRecursionError(lastSessionError)) {
+              console.warn('Error fetching last session for client:', client.id, lastSessionError)
+            }
+
+            const { data: nextAppointment, error: nextAppointmentError } = await supabase
+              .from('appointments')
+              .select('appointment_date')
+              .eq('client_id', client.id)
+              .eq('therapist_id', profile.id)
+              .eq('status', 'scheduled')
+              .gte('appointment_date', new Date().toISOString())
+              .order('appointment_date', { ascending: true })
+              .limit(1)
+
+            if (nextAppointmentError && !isRecursionError(nextAppointmentError)) {
+              console.warn('Error fetching next appointment for client:', client.id, nextAppointmentError)
+            }
+
+            return {
+              ...client,
+              profile: clientProfile,
+              stats: {
+                totalAssessments: assessments?.length || 0,
+                completedAssessments: assessments?.filter(a => a.status === 'completed').length || 0,
+                lastSession: lastSession?.[0]?.appointment_date,
+                nextAppointment: nextAppointment?.[0]?.appointment_date
+              }
+            }
+          } catch (clientError) {
+            console.error('Error processing client data:', client.id, clientError)
+            return {
+              ...client,
+              profile: null,
+              stats: {
+                totalAssessments: 0,
+                completedAssessments: 0,
+                lastSession: undefined,
+                nextAppointment: undefined
+              }
             }
           }
         })
@@ -152,6 +193,9 @@ export const ClientManagement: React.FC = () => {
       setClients(clientsWithProfiles)
     } catch (error) {
       console.error('Error fetching clients:', error)
+      if (isRecursionError(error)) {
+        console.error('RLS recursion detected in client management')
+      }
       setClients([])
     } finally {
       setLoading(false)
@@ -186,58 +230,77 @@ export const ClientManagement: React.FC = () => {
       // Generate patient code
       const patientCode = generatePatientCode()
       
-      // For demo purposes, create client directly in profiles table
-      const clientId = crypto.randomUUID()
-
-      // Create profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: clientId,
-          role: 'client',
+      // Create user account first
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: clientData.email,
+        password: Math.random().toString(36).slice(-8), // Temporary password
+        email_confirm: true,
+        user_metadata: {
           first_name: clientData.firstName,
           last_name: clientData.lastName,
-          email: clientData.email,
-          whatsapp_number: clientData.whatsappNumber,
-          patient_code: patientCode,
-          created_by_therapist: profile!.id,
-          password_set: false
-        })
-
-      if (profileError) throw profileError
-
-      // Create therapist-client relation
-      const { error: relationError } = await supabase
-        .from('therapist_client_relations')
-        .insert({
-          therapist_id: profile!.id,
-          client_id: clientId
-        })
-
-      if (relationError) throw relationError
-
-      // Create case
-      const { data: caseData, error: caseError } = await supabase
-        .rpc('create_case_with_milestone', {
-          p_client_id: clientId,
-          p_therapist_id: profile!.id
-        })
-
-      if (caseError) {
-        console.warn('Case creation failed, creating manually:', caseError)
-        // Fallback to manual case creation
-        const { error: manualCaseError } = await supabase
-          .from('cases')
-          .insert({
-            client_id: clientId,
-            therapist_id: profile!.id,
-            case_number: `CASE-${Date.now()}`,
-            status: 'active'
-          })
-        
-        if (manualCaseError) {
-          console.error('Manual case creation also failed:', manualCaseError)
+          role: 'client'
         }
+      })
+
+      if (authError) {
+        // Fallback: create profile directly if admin.createUser fails
+        console.warn('Admin createUser failed, creating profile directly:', authError)
+        const clientId = crypto.randomUUID()
+        
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: clientId,
+            role: 'client',
+            first_name: clientData.firstName,
+            last_name: clientData.lastName,
+            email: clientData.email,
+            whatsapp_number: clientData.whatsappNumber,
+            patient_code: patientCode,
+            created_by_therapist: profile!.id,
+            password_set: false
+          })
+
+        if (profileError) throw profileError
+
+        // Create therapist-client relation
+        const { error: relationError } = await supabase
+          .from('therapist_client_relations')
+          .insert({
+            therapist_id: profile!.id,
+            client_id: clientId
+          })
+
+        if (relationError) throw relationError
+      } else {
+        const clientId = authData.user.id
+
+        // Create profile
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: clientId,
+            role: 'client',
+            first_name: clientData.firstName,
+            last_name: clientData.lastName,
+            email: clientData.email,
+            whatsapp_number: clientData.whatsappNumber,
+            patient_code: patientCode,
+            created_by_therapist: profile!.id,
+            password_set: false
+          })
+
+        if (profileError) throw profileError
+
+        // Create therapist-client relation
+        const { error: relationError } = await supabase
+          .from('therapist_client_relations')
+          .insert({
+            therapist_id: profile!.id,
+            client_id: clientId
+          })
+
+        if (relationError) throw relationError
       }
 
       await fetchClients()

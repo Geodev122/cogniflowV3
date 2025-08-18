@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { formatDateTime } from '../../utils/helpers'
+import { formatDateTime, isRecursionError } from '../../utils/helpers'
 import { 
   MessageSquare, 
   Send, 
@@ -32,7 +32,7 @@ interface CommunicationLog {
   }
 }
 
-export const CommunicationTools: React.FC = () => {
+export default function CommunicationTools() {
   const [communications, setCommunications] = useState<CommunicationLog[]>([])
   const [clients, setClients] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -53,6 +53,7 @@ export const CommunicationTools: React.FC = () => {
     if (!profile) return
 
     try {
+      setLoading(true)
       setError(null)
       const { data, error } = await supabase
         .from('communication_logs')
@@ -60,15 +61,33 @@ export const CommunicationTools: React.FC = () => {
         .eq('therapist_id', profile.id)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        if (isRecursionError(error)) {
+          console.error('RLS recursion error in communications:', error)
+          setError('Database configuration error - please contact support')
+          setCommunications([])
+          return
+        }
+        throw error
+      }
 
       // Get client data
       const clientIds = [...new Set(data?.map(c => c.client_id) || [])]
       if (clientIds.length > 0) {
-        const { data: clientData } = await supabase
+        const { data: clientData, error: clientError } = await supabase
           .from('profiles')
           .select('id, first_name, last_name, email')
           .in('id', clientIds)
+
+        if (clientError) {
+          if (isRecursionError(clientError)) {
+            console.error('RLS recursion error in communication client data:', clientError)
+            setError('Database configuration error - please contact support')
+            setCommunications([])
+            return
+          }
+          console.warn('Error fetching client data for communications:', clientError)
+        }
 
         const communicationsWithClients = data?.map(comm => ({
           ...comm,
@@ -85,7 +104,11 @@ export const CommunicationTools: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching communications:', error)
-      setError('Failed to load communications')
+      if (isRecursionError(error)) {
+        setError('Database configuration error - please contact support')
+      } else {
+        setError('Failed to load communications')
+      }
       setCommunications([])
     } finally {
       setLoading(false)
@@ -96,19 +119,41 @@ export const CommunicationTools: React.FC = () => {
     if (!profile) return
 
     try {
-      const { data: relations } = await supabase
+      const { data: relations, error: relationsError } = await supabase
         .from('therapist_client_relations')
         .select('client_id')
         .eq('therapist_id', profile.id)
 
+      if (relationsError) {
+        if (isRecursionError(relationsError)) {
+          console.error('RLS recursion error in communication client relations:', relationsError)
+          setClients([])
+          return
+        }
+        console.warn('Error fetching client relations for communications:', relationsError)
+        setClients([])
+        return
+      }
+
       const clientIds = relations?.map(r => r.client_id) || []
       if (clientIds.length > 0) {
-        const { data: clientData } = await supabase
+        const { data: clientData, error: clientDataError } = await supabase
           .from('profiles')
           .select('id, first_name, last_name, email, whatsapp_number')
           .in('id', clientIds)
 
+        if (clientDataError) {
+          if (isRecursionError(clientDataError)) {
+            console.error('RLS recursion error in communication client profiles:', clientDataError)
+            setClients([])
+            return
+          }
+          console.warn('Error fetching client profiles for communications:', clientDataError)
+        }
+
         setClients(clientData || [])
+      } else {
+        setClients([])
       }
     } catch (error) {
       console.error('Error fetching clients:', error)

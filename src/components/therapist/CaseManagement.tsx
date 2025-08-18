@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { getRiskColor, getStatusColor, formatDate } from '../../utils/helpers'
+import { getRiskColor, getStatusColor, formatDate, isRecursionError } from '../../utils/helpers'
 import { CaseFormulation } from './CaseFormulation'
 import { InBetweenSessions } from './InBetweenSessions'
 import { FileText, User, Calendar, TrendingUp, ClipboardList, Plus, Search, Filter, Eye, BarChart3, Clock, CheckCircle, AlertTriangle, Brain, Target, Activity, BookOpen, Award, MessageSquare, Send, PlayCircle, PlusCircle, Stethoscope, Baseline as Timeline, Archive } from 'lucide-react'
@@ -83,6 +83,7 @@ export const CaseManagement: React.FC = () => {
     if (!profile) return
 
     try {
+      setLoading(true)
       // Get clients for this therapist with proper error handling
       const { data: relations, error: relationsError } = await supabase
         .from('therapist_client_relations')
@@ -90,6 +91,11 @@ export const CaseManagement: React.FC = () => {
         .eq('therapist_id', profile.id)
 
       if (relationsError) {
+        if (isRecursionError(relationsError)) {
+          console.error('RLS recursion error in case management relations:', relationsError)
+          setCaseFiles([])
+          return
+        }
         console.error('Error fetching client relations:', relationsError)
         setCaseFiles([])
         return
@@ -99,6 +105,7 @@ export const CaseManagement: React.FC = () => {
       const clientIds = relations?.map(r => r.client_id) || []
       if (clientIds.length === 0) {
         setCaseFiles([])
+        setLoading(false)
         return
       }
       
@@ -108,6 +115,11 @@ export const CaseManagement: React.FC = () => {
           .in('id', clientIds)
 
       if (profilesError) {
+        if (isRecursionError(profilesError)) {
+          console.error('RLS recursion error in case management profiles:', profilesError)
+          setCaseFiles([])
+          return
+        }
         console.error('Error fetching client profiles:', profilesError)
         setCaseFiles([])
         return
@@ -115,34 +127,203 @@ export const CaseManagement: React.FC = () => {
 
         const cases = await Promise.all(
           (clientProfiles || []).map(async (client: Client) => {
+            try {
+              // Get session count with error handling
+              const { data: sessions, error: sessionsError } = await supabase
+                .from('appointments')
+                .select('id, appointment_date, status')
+                .eq('client_id', client.id)
+                .eq('therapist_id', profile.id)
 
-            // Get session count
-            const { data: sessions } = await supabase
-              .from('appointments')
-              .select('id, appointment_date, status')
-              .eq('client_id', client.id)
-              .eq('therapist_id', profile.id)
+              if (sessionsError && !isRecursionError(sessionsError)) {
+                console.warn('Error fetching sessions for client:', client.id, sessionsError)
+              }
 
-            // Get assessments
-            const { data: assessments } = await supabase
-              .from('assessment_reports')
-              .select('*')
-              .eq('client_id', client.id)
-              .eq('therapist_id', profile.id)
-              .order('created_at', { ascending: false })
+              // Get assessments with error handling
+              const { data: assessments, error: assessmentsError } = await supabase
+                .from('assessment_reports')
+                .select('*')
+                .eq('client_id', client.id)
+                .eq('therapist_id', profile.id)
+                .order('created_at', { ascending: false })
 
-            // Get treatment plan
-            const { data: plan } = await supabase
-              .from('treatment_plans')
-              .select('id, title')
-              .eq('client_id', client.id)
-              .eq('therapist_id', profile.id)
-              .maybeSingle()
+              if (assessmentsError && !isRecursionError(assessmentsError)) {
+                console.warn('Error fetching assessments for client:', client.id, assessmentsError)
+              }
 
-            // Get goals with interventions
-            let goals: Goal[] = []
-            if (plan) {
-              const { data: goalData } = await supabase
+              // Get treatment plan with error handling
+              const { data: plan, error: planError } = await supabase
+                .from('treatment_plans')
+                .select('id, title')
+                .eq('client_id', client.id)
+                .eq('therapist_id', profile.id)
+                .maybeSingle()
+
+              if (planError && !isRecursionError(planError)) {
+                console.warn('Error fetching treatment plan for client:', client.id, planError)
+              }
+
+              // Get goals with interventions
+              let goals: Goal[] = []
+              if (plan) {
+                const { data: goalData, error: goalsError } = await supabase
+                  .from('therapy_goals')
+                  .select('*')
+                  .eq('treatment_plan_id', plan.id)
+                  .order('created_at', { ascending: false })
+
+                if (goalsError && !isRecursionError(goalsError)) {
+                  console.warn('Error fetching goals for client:', client.id, goalsError)
+                }
+
+                goals = (goalData || []).map((g: any) => ({
+                  id: g.id,
+                  title: g.goal_text,
+                  description: '',
+                  target_date: g.target_date || '',
+                  progress: g.progress_percentage || 0,
+                  status: g.status,
+                  interventions: []
+                }))
+              }
+
+              // Get assignments with error handling
+              const { data: assignments, error: assignmentsError } = await supabase
+                .from('form_assignments')
+                .select('*')
+                .eq('client_id', client.id)
+                .eq('therapist_id', profile.id)
+                .order('assigned_at', { ascending: false })
+
+              if (assignmentsError && !isRecursionError(assignmentsError)) {
+                console.warn('Error fetching assignments for client:', client.id, assignmentsError)
+              }
+
+              // Get client profile for risk level with error handling
+              const { data: clientProfile, error: clientProfileError } = await supabase
+                .from('client_profiles')
+                .select('risk_level, notes')
+                .eq('client_id', client.id)
+                .eq('therapist_id', profile.id)
+                .maybeSingle()
+
+              if (clientProfileError && !isRecursionError(clientProfileError)) {
+                console.warn('Error fetching client profile for client:', client.id, clientProfileError)
+              }
+
+              const completedSessions = sessions?.filter(s => s.status === 'completed') || []
+              const upcomingSessions = sessions?.filter(s => s.status === 'scheduled' && new Date(s.appointment_date) > new Date()) || []
+
+              return {
+                client,
+                sessionCount: completedSessions.length,
+                lastSession: completedSessions.length > 0 ? completedSessions[completedSessions.length - 1].appointment_date : undefined,
+                nextAppointment: upcomingSessions.length > 0 ? upcomingSessions[0].appointment_date : undefined,
+                assessments: assessments?.map(a => ({
+                  id: a.id,
+                  assessment_name: a.title,
+                  score: a.content?.score || 0,
+                  max_score: a.content?.max_score || 100,
+                  date: a.created_at,
+                  interpretation: a.content?.interpretation || ''
+                })) || [],
+                treatmentPlanId: plan?.id,
+                treatmentPlanTitle: plan?.title,
+                goals,
+                assignments: assignments?.map(a => ({
+                  id: a.id,
+                  type: a.form_type as 'worksheet' | 'exercise' | 'assessment' | 'homework',
+                  title: a.title,
+                  description: a.instructions || '',
+                  due_date: a.due_date,
+                  status: a.status as 'assigned' | 'in_progress' | 'completed' | 'overdue',
+                  assigned_date: a.assigned_at
+                })) || [],
+                riskLevel: clientProfile?.risk_level || 'low',
+                progressSummary: clientProfile?.notes || 'No progress notes available',
+                caseNotes: clientProfile?.notes || ''
+              }
+            } catch (clientError) {
+              console.error('Error processing case data for client:', client.id, clientError)
+              return {
+                client,
+                sessionCount: 0,
+                lastSession: undefined,
+                nextAppointment: undefined,
+                assessments: [],
+                treatmentPlanId: undefined,
+                treatmentPlanTitle: undefined,
+                goals: [],
+                assignments: [],
+                riskLevel: 'low',
+                progressSummary: 'Error loading case data',
+                caseNotes: ''
+              }
+            }
+          })
+        )
+
+        setCaseFiles(cases)
+      } catch (error) {
+        console.error('Error fetching case files:', error)
+        if (isRecursionError(error)) {
+          console.error('RLS recursion detected in case management')
+        }
+        setCaseFiles([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    const handleCreatePlan = async () => {
+      if (!selectedCase || !profile) return
+      const title = prompt('Treatment plan title:')
+      if (!title) return
+      
+      try {
+        const { error } = await supabase
+          .from('treatment_plans')
+          .insert({
+            client_id: selectedCase.client.id,
+            therapist_id: profile.id,
+            title: title,
+            status: 'active'
+          })
+        
+        if (error) throw error
+        
+        await fetchCaseFiles()
+        alert('Treatment plan created successfully!')
+      } catch (error) {
+        console.error('Error creating plan:', error)
+        alert('Error creating treatment plan. Please try again.')
+      }
+    }
+
+    const handleAddGoal = async () => {
+      if (!selectedCase?.treatmentPlanId) return
+      const text = prompt('Goal description:')
+      if (!text) return
+      
+      try {
+        const { error } = await supabase
+          .from('therapy_goals')
+          .insert({
+            treatment_plan_id: selectedCase.treatmentPlanId,
+            goal_text: text,
+            progress_percentage: 0,
+            status: 'active'
+          })
+        
+        if (error) throw error
+        
+        await fetchCaseFiles()
+        alert('Goal added successfully!')
+      } catch (error) {
+        console.error('Error adding goal:', error)
+        alert('Error adding goal. Please try again.')
+      }
+    }
                 .from('therapy_goals')
                 .select('*')
                 .eq('treatment_plan_id', plan.id)

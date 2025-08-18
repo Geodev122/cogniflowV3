@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { formatDate, formatDateTime } from '../../utils/helpers'
+import { formatDate, formatDateTime, isRecursionError } from '../../utils/helpers'
 import { 
   Calendar, 
   Plus, 
@@ -54,6 +54,7 @@ export const SessionManagement: React.FC = () => {
     if (!profile) return
 
     try {
+      setLoading(true)
       setError(null)
       const { data, error } = await supabase
         .from('appointments')
@@ -61,15 +62,33 @@ export const SessionManagement: React.FC = () => {
         .eq('therapist_id', profile.id)
         .order('appointment_date', { ascending: true })
 
-      if (error) throw error
+      if (error) {
+        if (isRecursionError(error)) {
+          console.error('RLS recursion error in appointments:', error)
+          setError('Database configuration error - please contact support')
+          setAppointments([])
+          return
+        }
+        throw error
+      }
 
       // Get client data for appointments
       const clientIds = [...new Set(data?.map(a => a.client_id) || [])]
       if (clientIds.length > 0) {
-        const { data: clientData } = await supabase
+        const { data: clientData, error: clientError } = await supabase
           .from('profiles')
           .select('id, first_name, last_name, email')
           .in('id', clientIds)
+
+        if (clientError) {
+          if (isRecursionError(clientError)) {
+            console.error('RLS recursion error in session client data:', clientError)
+            setError('Database configuration error - please contact support')
+            setAppointments([])
+            return
+          }
+          console.warn('Error fetching client data for appointments:', clientError)
+        }
 
         const appointmentsWithClients = data?.map(appointment => ({
           ...appointment,
@@ -86,7 +105,11 @@ export const SessionManagement: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching appointments:', error)
-      setError('Failed to load appointments')
+      if (isRecursionError(error)) {
+        setError('Database configuration error - please contact support')
+      } else {
+        setError('Failed to load appointments')
+      }
       setAppointments([])
     } finally {
       setLoading(false)
@@ -102,6 +125,11 @@ export const SessionManagement: React.FC = () => {
         .select('client_id')
         .eq('therapist_id', profile.id)
 
+      if (!relations) {
+        setClients([])
+        return
+      }
+
       const clientIds = relations?.map(r => r.client_id) || []
       if (clientIds.length > 0) {
         const { data: clientData } = await supabase
@@ -110,6 +138,8 @@ export const SessionManagement: React.FC = () => {
           .in('id', clientIds)
 
         setClients(clientData || [])
+      } else {
+        setClients([])
       }
     } catch (error) {
       console.error('Error fetching clients:', error)

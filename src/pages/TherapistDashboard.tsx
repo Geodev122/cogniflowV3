@@ -146,22 +146,31 @@ export default function TherapistDashboard() {
     if (!profile) return
 
     try {
+      setLoading(true)
       // Fetch total clients
-      const { data: clientRelations } = await supabase
+      const { data: clientRelations, error: relationsError } = await supabase
         .from('therapist_client_relations')
         .select('client_id')
         .eq('therapist_id', profile.id)
 
+      if (relationsError) {
+        console.warn('Error fetching client relations for dashboard:', relationsError)
+      }
+
       // Fetch active cases
-      const { data: activeCases } = await supabase
+      const { data: activeCases, error: casesError } = await supabase
         .from('cases')
         .select('id')
         .eq('therapist_id', profile.id)
         .eq('status', 'active')
 
+      if (casesError) {
+        console.warn('Error fetching active cases for dashboard:', casesError)
+      }
+
       // Fetch today's sessions
       const today = new Date().toISOString().split('T')[0]
-      const { data: todayAppointments } = await supabase
+      const { data: todayAppointments, error: appointmentsError } = await supabase
         .from('appointments')
         .select(`
           id,
@@ -173,6 +182,10 @@ export default function TherapistDashboard() {
         .eq('therapist_id', profile.id)
         .gte('appointment_date', today)
         .lt('appointment_date', today + 'T23:59:59')
+
+      if (appointmentsError) {
+        console.warn('Error fetching today appointments for dashboard:', appointmentsError)
+      }
 
       // Calculate profile completion
       const steps = [
@@ -252,6 +265,9 @@ export default function TherapistDashboard() {
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
+      if (isRecursionError(error)) {
+        console.error('RLS recursion detected in dashboard data fetch')
+      }
     } finally {
       setLoading(false)
     }
