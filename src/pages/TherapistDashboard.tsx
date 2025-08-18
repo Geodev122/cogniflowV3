@@ -49,6 +49,9 @@ const SessionManagement = React.lazy(() => import('../components/therapist/Sessi
 const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools'))
 const ResourceLibrary = React.lazy(() => import('../components/therapist/ResourceLibrary'))
 const PracticeManagement = React.lazy(() => import('../components/therapist/PracticeManagement'))
+
+interface DashboardStats {
+  totalClients: number
   activeCases: number
   patientsToday: number
   profileCompletion: number
