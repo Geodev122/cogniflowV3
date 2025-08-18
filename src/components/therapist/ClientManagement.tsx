@@ -230,85 +230,48 @@ export const ClientManagement: React.FC = () => {
       // Generate patient code
       const patientCode = generatePatientCode()
       
-      // Create user account first
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: clientData.email,
-        password: Math.random().toString(36).slice(-8), // Temporary password
-        email_confirm: true,
-        user_metadata: {
+      // Generate a unique client ID
+      const clientId = crypto.randomUUID()
+      
+      // Create client profile directly (therapist creates client record)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: clientId,
+          role: 'client',
           first_name: clientData.firstName,
           last_name: clientData.lastName,
-          role: 'client'
-        }
-      })
+          email: clientData.email,
+          whatsapp_number: clientData.whatsappNumber,
+          patient_code: patientCode,
+          created_by_therapist: profile!.id,
+          password_set: false
+        })
 
-      if (authError) {
-        // Fallback: create profile directly if admin.createUser fails
-        console.warn('Admin createUser failed, creating profile directly:', authError)
-        const clientId = crypto.randomUUID()
-        
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: clientId,
-            role: 'client',
-            first_name: clientData.firstName,
-            last_name: clientData.lastName,
-            email: clientData.email,
-            whatsapp_number: clientData.whatsappNumber,
-            patient_code: patientCode,
-            created_by_therapist: profile!.id,
-            password_set: false
-          })
+      if (profileError) {
+        console.error('Error creating client profile:', profileError)
+        throw new Error('Failed to create client profile. Please check permissions.')
+      }
 
-        if (profileError) throw profileError
+      // Create therapist-client relation
+      const { error: relationError } = await supabase
+        .from('therapist_client_relations')
+        .insert({
+          therapist_id: profile!.id,
+          client_id: clientId
+        })
 
-        // Create therapist-client relation
-        const { error: relationError } = await supabase
-          .from('therapist_client_relations')
-          .insert({
-            therapist_id: profile!.id,
-            client_id: clientId
-          })
-
-        if (relationError) throw relationError
-      } else {
-        const clientId = authData.user.id
-
-        // Create profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: clientId,
-            role: 'client',
-            first_name: clientData.firstName,
-            last_name: clientData.lastName,
-            email: clientData.email,
-            whatsapp_number: clientData.whatsappNumber,
-            patient_code: patientCode,
-            created_by_therapist: profile!.id,
-            password_set: false
-          })
-
-        if (profileError) throw profileError
-
-        // Create therapist-client relation
-        const { error: relationError } = await supabase
-          .from('therapist_client_relations')
-          .insert({
-            therapist_id: profile!.id,
-            client_id: clientId
-          })
-
-        if (relationError) throw relationError
+      if (relationError) {
+        console.error('Error creating therapist-client relation:', relationError)
+        throw new Error('Failed to establish therapist-client relationship.')
       }
 
       await fetchClients()
       setShowAddClient(false)
-      alert('Client added successfully! They will receive setup instructions via email.')
+      alert('Client profile created successfully! You can now manage their treatment plan.')
     } catch (error) {
       console.error('Error adding client:', error)
-      alert('Error adding client to roster. Please try again.')
+      alert(error instanceof Error ? error.message : 'Error adding client to roster. Please try again.')
     }
   }
 
