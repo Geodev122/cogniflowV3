@@ -46,9 +46,9 @@ const ClientManagement = React.lazy(() => import('../components/therapist/Client
 const CaseManagement = React.lazy(() => import('../components/therapist/CaseManagement').then(module => ({ default: module.CaseManagement })))
 const ClinicRental = React.lazy(() => import('../components/therapist/ClinicRental'))
 const SessionManagement = React.lazy(() => import('../components/therapist/SessionManagement').then(module => ({ default: module.SessionManagement })))
-
-interface DashboardStats {
-  totalClients: number
+const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools'))
+const ResourceLibrary = React.lazy(() => import('../components/therapist/ResourceLibrary'))
+const PracticeManagement = React.lazy(() => import('../components/therapist/PracticeManagement'))
   activeCases: number
   patientsToday: number
   profileCompletion: number
