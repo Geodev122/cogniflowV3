@@ -1,8 +1,44 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
-import { AssessmentTemplate, AssessmentInstance } from '../types/assessment'
 import { isRecursionError } from '../utils/helpers'
+
+interface AssessmentTemplate {
+  id: string
+  name: string
+  abbreviation: string
+  category: string
+  description: string
+  questions: any[]
+  scoring_config: any
+  interpretation_rules: any
+  clinical_cutoffs: any
+  instructions: string
+  estimated_duration_minutes: number
+  evidence_level: string
+  is_active: boolean
+  created_at: string
+}
+
+interface AssessmentInstance {
+  id: string
+  template_id: string
+  therapist_id: string
+  client_id: string
+  case_id?: string
+  title: string
+  instructions?: string
+  status: string
+  assigned_at: string
+  due_date?: string
+  completed_at?: string
+  template?: AssessmentTemplate
+  client?: {
+    first_name: string
+    last_name: string
+    email: string
+  }
+}
 
 export const useAssessments = () => {
   const [templates, setTemplates] = useState<AssessmentTemplate[]>([])
@@ -13,6 +49,7 @@ export const useAssessments = () => {
 
   const fetchTemplates = useCallback(async () => {
     try {
+      setError(null)
       const { data, error } = await supabase
         .from('assessment_templates')
         .select('*')
@@ -23,15 +60,21 @@ export const useAssessments = () => {
         if (isRecursionError(error)) {
           console.error('RLS recursion error in assessment templates:', error)
           setError('Database configuration error')
+          setTemplates([])
           return
         }
-        throw error
+        console.error('Error fetching assessment templates:', error)
+        setError('Failed to load assessment templates')
+        setTemplates([])
+        return
       }
 
       setTemplates(data || [])
+      setError(null)
     } catch (error) {
       console.error('Error fetching assessment templates:', error)
       setError('Failed to load assessment templates')
+      setTemplates([])
     }
   }, [])
 
@@ -39,14 +82,10 @@ export const useAssessments = () => {
     if (!profile) return
 
     try {
+      setError(null)
       const { data, error } = await supabase
         .from('assessment_instances')
-        .select(`
-          *,
-          assessment_templates(*),
-          assessment_scores(*),
-          profiles!assessment_instances_client_id_fkey(first_name, last_name, email)
-        `)
+        .select('*')
         .eq('therapist_id', profile.id)
         .order('assigned_at', { ascending: false })
 
@@ -54,22 +93,51 @@ export const useAssessments = () => {
         if (isRecursionError(error)) {
           console.error('RLS recursion error in assessment instances:', error)
           setError('Database configuration error')
+          setInstances([])
           return
         }
-        throw error
+        console.error('Error fetching assessment instances:', error)
+        setError('Failed to load assessment instances')
+        setInstances([])
+        return
+      }
+
+      // Get additional data separately to avoid complex joins
+      const instanceIds = data?.map(i => i.id) || []
+      const templateIds = [...new Set(data?.map(i => i.template_id) || [])]
+      const clientIds = [...new Set(data?.map(i => i.client_id) || [])]
+
+      let templatesData: any[] = []
+      let clientsData: any[] = []
+
+      if (templateIds.length > 0) {
+        const { data: templates } = await supabase
+          .from('assessment_templates')
+          .select('*')
+          .in('id', templateIds)
+        templatesData = templates || []
+      }
+
+      if (clientIds.length > 0) {
+        const { data: clients } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email')
+          .in('id', clientIds)
+        clientsData = clients || []
       }
 
       const formattedInstances = data?.map(instance => ({
         ...instance,
-        template: instance.assessment_templates,
-        score: instance.assessment_scores?.[0],
-        client: instance.profiles
+        template: templatesData.find(t => t.id === instance.template_id),
+        client: clientsData.find(c => c.id === instance.client_id)
       })) || []
 
       setInstances(formattedInstances)
+      setError(null)
     } catch (error) {
       console.error('Error fetching assessment instances:', error)
       setError('Failed to load assessment instances')
+      setInstances([])
     }
   }, [profile])
 
@@ -180,7 +248,6 @@ export const useAssessments = () => {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
-      setError(null)
       
       try {
         await Promise.all([
@@ -189,7 +256,6 @@ export const useAssessments = () => {
         ])
       } catch (error) {
         console.error('Error fetching assessment data:', error)
-      } finally {
         setLoading(false)
       }
     }
