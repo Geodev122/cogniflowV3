@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import { AssessmentLibrary } from '../assessment/AssessmentLibrary'
+import { useAssessments } from '../../hooks/useAssessments'
 import { 
   Library, 
   Search, 
@@ -32,6 +34,147 @@ import {
   Clock,
   TrendingUp
 } from 'lucide-react'
+
+interface AssignModalProps {
+  templateId: string
+  templateName: string
+  clients: any[]
+  onClose: () => void
+  onAssign: (templateId: string, clientIds: string[], options: any) => void
+}
+
+const AssignModal: React.FC<AssignModalProps> = ({ templateId, templateName, clients, onClose, onAssign }) => {
+  const [selectedClients, setSelectedClients] = useState<string[]>([])
+  const [dueDate, setDueDate] = useState('')
+  const [instructions, setInstructions] = useState('')
+  const [reminderFrequency, setReminderFrequency] = useState('none')
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (selectedClients.length > 0) {
+      onAssign(templateId, selectedClients, {
+        dueDate,
+        instructions,
+        reminderFrequency
+      })
+    }
+  }
+
+  const toggleClient = (clientId: string) => {
+    setSelectedClients(prev => 
+      prev.includes(clientId) 
+        ? prev.filter(id => id !== clientId)
+        : [...prev, clientId]
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50" onClick={onClose} />
+        
+        <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full">
+          <form onSubmit={handleSubmit}>
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Assign Assessment</h3>
+                <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-gray-600 mt-1">{templateName}</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Select Clients
+                </label>
+                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+                  {clients.map(client => (
+                    <label key={client.id} className="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedClients.includes(client.id)}
+                        onChange={() => toggleClient(client.id)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-3"
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {client.first_name} {client.last_name}
+                        </div>
+                        <div className="text-xs text-gray-500">{client.email}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Due Date (Optional)
+                </label>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Reminder Frequency
+                </label>
+                <select
+                  value={reminderFrequency}
+                  onChange={(e) => setReminderFrequency(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="none">No Reminders</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="before_due">Before Due Date</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Instructions for Client (Optional)
+                </label>
+                <textarea
+                  value={instructions}
+                  onChange={(e) => setInstructions(e.target.value)}
+                  rows={3}
+                  placeholder="Additional instructions or context for the client..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={selectedClients.length === 0}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Assign Assessment
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 interface Resource {
   id: string
@@ -139,24 +282,33 @@ const CATEGORIES = [
 export default function ResourceLibrary() {
   const [resources, setResources] = useState<Resource[]>([])
   const [filteredResources, setFilteredResources] = useState<Resource[]>([])
+  const [activeTab, setActiveTab] = useState<'assessments' | 'resources'>('assessments')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null)
   const [showAssignModal, setShowAssignModal] = useState(false)
+  const [showAssessmentAssignModal, setShowAssessmentAssignModal] = useState(false)
+  const [selectedAssessmentId, setSelectedAssessmentId] = useState<string>('')
+  const [selectedAssessmentName, setSelectedAssessmentName] = useState<string>('')
   const [clients, setClients] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [bookmarkedResources, setBookmarkedResources] = useState<string[]>([])
   const { profile } = useAuth()
+  const { templates, assignAssessment } = useAssessments()
 
   useEffect(() => {
-    fetchResources()
     fetchClients()
-  }, [profile])
+    if (activeTab === 'resources') {
+      fetchResources()
+    }
+  }, [profile, activeTab])
 
   useEffect(() => {
-    filterResources()
-  }, [resources, selectedCategory, searchTerm])
+    if (activeTab === 'resources') {
+      filterResources()
+    }
+  }, [resources, selectedCategory, searchTerm, activeTab])
 
   const fetchResources = async () => {
     try {
@@ -258,6 +410,22 @@ export default function ResourceLibrary() {
     )
   }
 
+  const handleAssessmentAssign = async (templateId: string, clientIds: string[], options: any) => {
+    try {
+      await assignAssessment(templateId, clientIds, options)
+      setShowAssessmentAssignModal(false)
+      alert('Assessment assigned successfully!')
+    } catch (error) {
+      console.error('Error assigning assessment:', error)
+      alert('Error assigning assessment. Please try again.')
+    }
+  }
+
+  const handleAssessmentPreview = (template: any) => {
+    // Handle assessment preview
+    console.log('Preview assessment:', template)
+  }
+
   const getContentTypeIcon = (type?: string) => {
     switch (type) {
       case 'pdf': return <FileText className="w-3 h-3" />
@@ -298,6 +466,265 @@ export default function ResourceLibrary() {
     count: cat.id === 'all' ? resources.length : resources.filter(r => r.category === cat.id).length
   }))
 
+  const renderBrowseTab = () => {
+    if (loading) {
+      return (
+        <div className="h-full flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="h-full flex flex-col bg-gray-50">
+        {/* Fixed Header - Compact */}
+        <div className="flex-shrink-0 bg-white border-b border-gray-200 p-3">
+          {/* Title */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <Library className="w-5 h-5 text-blue-600" />
+              <h2 className="text-lg font-bold text-gray-900">Resource Library</h2>
+            </div>
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                <Grid3X3 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Compact Search */}
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search resources..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          {/* Compact Category Pills */}
+          <div className="flex space-x-1 overflow-x-auto scrollbar-hide">
+            {categoriesWithCounts.map((category) => {
+              const Icon = category.icon
+              const isActive = selectedCategory === category.id
+              
+              return (
+                <button
+                  key={category.id}
+                  onClick={() => setSelectedCategory(category.id)}
+                  className={`flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+                    isActive
+                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  <span>{category.name}</span>
+                  <span className={`px-1.5 py-0.5 text-xs rounded-full ${
+                    isActive ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    {category.count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto p-3">
+          {filteredResources.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <Library className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <h3 className="text-sm font-medium text-gray-900 mb-1">No resources found</h3>
+                <p className="text-xs text-gray-500">Try adjusting your search or filters</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {filteredResources.map((resource) => {
+                    const CategoryIcon = getCategoryIcon(resource.category)
+                    const isBookmarked = bookmarkedResources.includes(resource.id)
+                    
+                    return (
+                      <div key={resource.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-200 transition-all">
+                        {/* Compact Header */}
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <CategoryIcon className="w-4 h-4 text-blue-600" />
+                            <div className={`flex items-center space-x-1 px-1.5 py-0.5 rounded text-xs ${getContentTypeColor(resource.content_type)}`}>
+                              {getContentTypeIcon(resource.content_type)}
+                              <span className="capitalize">{resource.content_type}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => toggleBookmark(resource.id)}
+                            className={`p-1 rounded transition-all ${
+                              isBookmarked ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'
+                            }`}
+                          >
+                            {isBookmarked ? <BookmarkCheck className="w-3 h-3" /> : <Bookmark className="w-3 h-3" />}
+                          </button>
+                        </div>
+
+                        {/* Content */}
+                        <h3 className="font-medium text-gray-900 text-sm mb-1 line-clamp-2">
+                          {resource.title}
+                        </h3>
+                        <p className="text-xs text-gray-600 mb-2 line-clamp-2">
+                          {resource.description}
+                        </p>
+
+                        {/* Compact Metadata */}
+                        <div className="flex items-center justify-between mb-2">
+                          {resource.difficulty_level && (
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${getDifficultyColor(resource.difficulty_level)}`}>
+                              {resource.difficulty_level}
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-500">
+                            {new Date(resource.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+
+                        {/* Compact Tags */}
+                        {resource.tags && resource.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {resource.tags.slice(0, 2).map((tag, index) => (
+                              <span key={index} className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
+                                #{tag}
+                              </span>
+                            ))}
+                            {resource.tags.length > 2 && (
+                              <span className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-500 rounded">
+                                +{resource.tags.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Compact Actions */}
+                        <div className="flex space-x-1">
+                          <button
+                            onClick={() => setSelectedResource(resource)}
+                            className="flex-1 flex items-center justify-center px-2 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
+                            View
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedResource(resource)
+                              setShowAssignModal(true)
+                            }}
+                            className="flex-1 flex items-center justify-center px-2 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
+                          >
+                            <Send className="w-3 h-3 mr-1" />
+                            Assign
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredResources.map((resource) => {
+                    const CategoryIcon = getCategoryIcon(resource.category)
+                    const isBookmarked = bookmarkedResources.includes(resource.id)
+                    
+                    return (
+                      <div key={resource.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-sm hover:border-blue-200 transition-all">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-3 flex-1 min-w-0">
+                            <CategoryIcon className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                            
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between mb-1">
+                                <h3 className="font-medium text-gray-900 text-sm truncate pr-2">
+                                  {resource.title}
+                                </h3>
+                                <div className="flex items-center space-x-1 flex-shrink-0">
+                                  <div className={`flex items-center space-x-1 px-1.5 py-0.5 rounded text-xs ${getContentTypeColor(resource.content_type)}`}>
+                                    {getContentTypeIcon(resource.content_type)}
+                                    <span className="capitalize">{resource.content_type}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => toggleBookmark(resource.id)}
+                                    className={`p-1 rounded transition-all ${
+                                      isBookmarked ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'
+                                    }`}
+                                  >
+                                    {isBookmarked ? <BookmarkCheck className="w-3 h-3" /> : <Bookmark className="w-3 h-3" />}
+                                  </button>
+                                </div>
+                              </div>
+                              
+                              <p className="text-xs text-gray-600 mb-2 line-clamp-1">
+                                {resource.description}
+                              </p>
+                              
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  {resource.difficulty_level && (
+                                    <span className={`px-2 py-0.5 text-xs rounded-full ${getDifficultyColor(resource.difficulty_level)}`}>
+                                      {resource.difficulty_level}
+                                    </span>
+                                  )}
+                                  <span className="text-xs text-gray-500">
+                                    {new Date(resource.created_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex space-x-1">
+                                  <button
+                                    onClick={() => setSelectedResource(resource)}
+                                    className="flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
+                                  >
+                                    <Eye className="w-3 h-3 mr-1" />
+                                    View
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedResource(resource)
+                                      setShowAssignModal(true)
+                                    }}
+                                    className="flex items-center px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
+                                  >
+                                    <Send className="w-3 h-3 mr-1" />
+                                    Assign
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -308,248 +735,55 @@ export default function ResourceLibrary() {
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
-      {/* Fixed Header - Compact */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-200 p-3">
-        {/* Title */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center space-x-2">
-            <Library className="w-5 h-5 text-blue-600" />
-            <h2 className="text-lg font-bold text-gray-900">Resource Library</h2>
-          </div>
-          <div className="flex items-center space-x-1">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              <Grid3X3 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Compact Search */}
-        <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Search resources..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-
-        {/* Compact Category Pills */}
-        <div className="flex space-x-1 overflow-x-auto scrollbar-hide">
-          {categoriesWithCounts.map((category) => {
-            const Icon = category.icon
-            const isActive = selectedCategory === category.id
-            
-            return (
-              <button
-                key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
-                className={`flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
-                  isActive
-                    ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <Icon className="w-3 h-3" />
-                <span>{category.name}</span>
-                <span className={`px-1.5 py-0.5 text-xs rounded-full ${
-                  isActive ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'
-                }`}>
-                  {category.count}
-                </span>
-              </button>
-            )
-          })}
+      {/* Tab Navigation */}
+      <div className="flex-shrink-0 bg-white border-b border-gray-200">
+        <div className="flex space-x-8 px-4">
+          <button
+            onClick={() => setActiveTab('assessments')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'assessments'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center space-x-2">
+              <Brain className="w-5 h-5" />
+              <span>Psychometric Assessments</span>
+            </div>
+          </button>
+          
+          <button
+            onClick={() => setActiveTab('resources')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'resources'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center space-x-2">
+              <Library className="w-5 h-5" />
+              <span>Resource Library</span>
+            </div>
+          </button>
         </div>
       </div>
 
-      {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto p-3">
-        {filteredResources.length === 0 ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center">
-              <Library className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <h3 className="text-sm font-medium text-gray-900 mb-1">No resources found</h3>
-              <p className="text-xs text-gray-500">Try adjusting your search or filters</p>
-            </div>
+      {/* Tab Content */}
+      <div className="flex-1 min-h-0">
+        {activeTab === 'assessments' ? (
+          <div className="h-full p-4">
+            <AssessmentLibrary
+              onAssign={(templateId, clientIds) => {
+                const template = templates.find(t => t.id === templateId)
+                setSelectedAssessmentId(templateId)
+                setSelectedAssessmentName(template?.name || 'Assessment')
+                setShowAssessmentAssignModal(true)
+              }}
+              onPreview={handleAssessmentPreview}
+            />
           </div>
         ) : (
-          <>
-            {viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {filteredResources.map((resource) => {
-                  const CategoryIcon = getCategoryIcon(resource.category)
-                  const isBookmarked = bookmarkedResources.includes(resource.id)
-                  
-                  return (
-                    <div key={resource.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-200 transition-all">
-                      {/* Compact Header */}
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center space-x-2">
-                          <CategoryIcon className="w-4 h-4 text-blue-600" />
-                          <div className={`flex items-center space-x-1 px-1.5 py-0.5 rounded text-xs ${getContentTypeColor(resource.content_type)}`}>
-                            {getContentTypeIcon(resource.content_type)}
-                            <span className="capitalize">{resource.content_type}</span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => toggleBookmark(resource.id)}
-                          className={`p-1 rounded transition-all ${
-                            isBookmarked ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'
-                          }`}
-                        >
-                          {isBookmarked ? <BookmarkCheck className="w-3 h-3" /> : <Bookmark className="w-3 h-3" />}
-                        </button>
-                      </div>
-
-                      {/* Content */}
-                      <h3 className="font-medium text-gray-900 text-sm mb-1 line-clamp-2">
-                        {resource.title}
-                      </h3>
-                      <p className="text-xs text-gray-600 mb-2 line-clamp-2">
-                        {resource.description}
-                      </p>
-
-                      {/* Compact Metadata */}
-                      <div className="flex items-center justify-between mb-2">
-                        {resource.difficulty_level && (
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${getDifficultyColor(resource.difficulty_level)}`}>
-                            {resource.difficulty_level}
-                          </span>
-                        )}
-                        <span className="text-xs text-gray-500">
-                          {new Date(resource.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-
-                      {/* Compact Tags */}
-                      {resource.tags && resource.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {resource.tags.slice(0, 2).map((tag, index) => (
-                            <span key={index} className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
-                              #{tag}
-                            </span>
-                          ))}
-                          {resource.tags.length > 2 && (
-                            <span className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-500 rounded">
-                              +{resource.tags.length - 2}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Compact Actions */}
-                      <div className="flex space-x-1">
-                        <button
-                          onClick={() => setSelectedResource(resource)}
-                          className="flex-1 flex items-center justify-center px-2 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
-                        >
-                          <Eye className="w-3 h-3 mr-1" />
-                          View
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedResource(resource)
-                            setShowAssignModal(true)
-                          }}
-                          className="flex-1 flex items-center justify-center px-2 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
-                        >
-                          <Send className="w-3 h-3 mr-1" />
-                          Assign
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {filteredResources.map((resource) => {
-                  const CategoryIcon = getCategoryIcon(resource.category)
-                  const isBookmarked = bookmarkedResources.includes(resource.id)
-                  
-                  return (
-                    <div key={resource.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-sm hover:border-blue-200 transition-all">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-3 flex-1 min-w-0">
-                          <CategoryIcon className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between mb-1">
-                              <h3 className="font-medium text-gray-900 text-sm truncate pr-2">
-                                {resource.title}
-                              </h3>
-                              <div className="flex items-center space-x-1 flex-shrink-0">
-                                <div className={`flex items-center space-x-1 px-1.5 py-0.5 rounded text-xs ${getContentTypeColor(resource.content_type)}`}>
-                                  {getContentTypeIcon(resource.content_type)}
-                                  <span className="capitalize">{resource.content_type}</span>
-                                </div>
-                                <button
-                                  onClick={() => toggleBookmark(resource.id)}
-                                  className={`p-1 rounded transition-all ${
-                                    isBookmarked ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'
-                                  }`}
-                                >
-                                  {isBookmarked ? <BookmarkCheck className="w-3 h-3" /> : <Bookmark className="w-3 h-3" />}
-                                </button>
-                              </div>
-                            </div>
-                            
-                            <p className="text-xs text-gray-600 mb-2 line-clamp-1">
-                              {resource.description}
-                            </p>
-                            
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                {resource.difficulty_level && (
-                                  <span className={`px-2 py-0.5 text-xs rounded-full ${getDifficultyColor(resource.difficulty_level)}`}>
-                                    {resource.difficulty_level}
-                                  </span>
-                                )}
-                                <span className="text-xs text-gray-500">
-                                  {new Date(resource.created_at).toLocaleDateString()}
-                                </span>
-                              </div>
-                              
-                              <div className="flex space-x-1">
-                                <button
-                                  onClick={() => setSelectedResource(resource)}
-                                  className="flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
-                                >
-                                  <Eye className="w-3 h-3 mr-1" />
-                                  View
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setSelectedResource(resource)
-                                    setShowAssignModal(true)
-                                  }}
-                                  className="flex items-center px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
-                                >
-                                  <Send className="w-3 h-3 mr-1" />
-                                  Assign
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </>
+          renderBrowseTab()
         )}
       </div>
 
@@ -626,88 +860,114 @@ export default function ResourceLibrary() {
 
       {/* Assign Resource Modal */}
       {showAssignModal && selectedResource && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen p-4">
-            <div className="fixed inset-0 bg-gray-900 bg-opacity-50" onClick={() => setShowAssignModal(false)} />
-            
-            <div className="relative bg-white rounded-xl shadow-xl max-w-lg w-full">
-              <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Assign Resource</h3>
-                <button
-                  onClick={() => setShowAssignModal(false)}
-                  className="p-1 text-gray-400 hover:text-gray-600 rounded"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+        <AssignResourceModal
+          resource={selectedResource}
+          clients={clients}
+          onClose={() => setShowAssignModal(false)}
+          onAssign={assignResource}
+        />
+      )}
 
-              <div className="p-4">
-                <div className="mb-4">
-                  <h4 className="font-medium text-gray-900 mb-2">{selectedResource.title}</h4>
-                  <p className="text-sm text-gray-600">{selectedResource.description}</p>
-                </div>
+      {/* Assessment Assign Modal */}
+      {showAssessmentAssignModal && (
+        <AssignModal
+          templateId={selectedAssessmentId}
+          templateName={selectedAssessmentName}
+          clients={clients}
+          onClose={() => setShowAssessmentAssignModal(false)}
+          onAssign={handleAssessmentAssign}
+        />
+      )}
+    </div>
+  )
+}
 
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Clients
-                  </label>
-                  <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
-                    {clients.length === 0 ? (
-                      <div className="p-4 text-center text-gray-500">
-                        <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                        <p className="text-sm">No clients available</p>
-                      </div>
-                    ) : (
-                      clients.map((client) => (
-                        <label key={client.id} className="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-3"
-                          />
-                          <div className="flex items-center space-x-2">
-                            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                              <span className="text-xs font-medium text-blue-600">
-                                {client.first_name[0]}{client.last_name[0]}
-                              </span>
-                            </div>
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {client.first_name} {client.last_name}
-                              </div>
-                              <div className="text-xs text-gray-500">{client.email}</div>
-                            </div>
-                          </div>
-                        </label>
-                      ))
-                    )}
+// Assign Resource Modal Component
+interface AssignResourceModalProps {
+  resource: Resource
+  clients: any[]
+  onClose: () => void
+  onAssign: (resourceId: string, clientIds: string[]) => void
+}
+
+const AssignResourceModal: React.FC<AssignResourceModalProps> = ({ resource, clients, onClose, onAssign }) => {
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50" onClick={onClose} />
+        
+        <div className="relative bg-white rounded-xl shadow-xl max-w-lg w-full">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Assign Resource</h3>
+            <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-4">
+            <div className="mb-4">
+              <h4 className="font-medium text-gray-900 mb-2">{resource.title}</h4>
+              <p className="text-sm text-gray-600">{resource.description}</p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Clients
+              </label>
+              <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+                {clients.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500">
+                    <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                    <p className="text-sm">No clients available</p>
                   </div>
-                </div>
-              </div>
-
-              <div className="p-4 border-t border-gray-200 flex space-x-2">
-                <button
-                  onClick={() => setShowAssignModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    // Get selected clients (simplified for demo)
-                    const selectedClients = clients.map(c => c.id)
-                    if (selectedClients.length > 0) {
-                      assignResource(selectedResource.id, selectedClients)
-                    }
-                  }}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Assign Resource
-                </button>
+                ) : (
+                  clients.map((client) => (
+                    <label key={client.id} className="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-3"
+                      />
+                      <div className="flex items-center space-x-2">
+                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                          <span className="text-xs font-medium text-blue-600">
+                            {client.first_name[0]}{client.last_name[0]}
+                          </span>
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {client.first_name} {client.last_name}
+                          </div>
+                          <div className="text-xs text-gray-500">{client.email}</div>
+                        </div>
+                      </div>
+                    </label>
+                  ))
+                )}
               </div>
             </div>
           </div>
+
+          <div className="p-4 border-t border-gray-200 flex space-x-2">
+            <button
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                const selectedClients = clients.map(c => c.id)
+                if (selectedClients.length > 0) {
+                  onAssign(resource.id, selectedClients)
+                }
+              }}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Assign Resource
+            </button>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

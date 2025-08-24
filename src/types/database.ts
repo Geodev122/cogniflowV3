@@ -1,6 +1,195 @@
 export interface Database {
   public: {
     Tables: {
+      assessment_templates: {
+        Row: {
+          id: string
+          name: string
+          abbreviation: string
+          category: string
+          description: string
+          version: string
+          questions: any
+          scoring_config: any
+          interpretation_rules: any
+          clinical_cutoffs: any
+          instructions: string
+          estimated_duration_minutes: number
+          evidence_level: string
+          is_active: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          name: string
+          abbreviation: string
+          category: string
+          description?: string
+          version?: string
+          questions: any
+          scoring_config: any
+          interpretation_rules: any
+          clinical_cutoffs?: any
+          instructions?: string
+          estimated_duration_minutes?: number
+          evidence_level?: string
+          is_active?: boolean
+          created_by?: string | null
+        }
+        Update: {
+          name?: string
+          abbreviation?: string
+          category?: string
+          description?: string
+          version?: string
+          questions?: any
+          scoring_config?: any
+          interpretation_rules?: any
+          clinical_cutoffs?: any
+          instructions?: string
+          estimated_duration_minutes?: number
+          evidence_level?: string
+          is_active?: boolean
+          created_by?: string | null
+        }
+      }
+      assessment_instances: {
+        Row: {
+          id: string
+          template_id: string
+          therapist_id: string
+          client_id: string
+          case_id: string | null
+          title: string
+          instructions: string | null
+          status: string
+          assigned_at: string
+          due_date: string | null
+          started_at: string | null
+          completed_at: string | null
+          expires_at: string | null
+          reminder_frequency: string
+          metadata: any
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          template_id: string
+          therapist_id: string
+          client_id: string
+          case_id?: string | null
+          title: string
+          instructions?: string | null
+          status?: string
+          due_date?: string | null
+          reminder_frequency?: string
+          metadata?: any
+        }
+        Update: {
+          template_id?: string
+          therapist_id?: string
+          client_id?: string
+          case_id?: string | null
+          title?: string
+          instructions?: string | null
+          status?: string
+          assigned_at?: string
+          due_date?: string | null
+          started_at?: string | null
+          completed_at?: string | null
+          expires_at?: string | null
+          reminder_frequency?: string
+          metadata?: any
+        }
+      }
+      assessment_responses: {
+        Row: {
+          id: string
+          instance_id: string
+          question_id: string
+          response_value: any
+          response_text: string | null
+          response_timestamp: string
+          is_final: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          instance_id: string
+          question_id: string
+          response_value: any
+          response_text?: string | null
+          response_timestamp?: string
+          is_final?: boolean
+        }
+        Update: {
+          instance_id?: string
+          question_id?: string
+          response_value?: any
+          response_text?: string | null
+          response_timestamp?: string
+          is_final?: boolean
+        }
+      }
+      assessment_scores: {
+        Row: {
+          id: string
+          instance_id: string
+          raw_score: number
+          scaled_score: number | null
+          percentile: number | null
+          t_score: number | null
+          z_score: number | null
+          interpretation_category: string
+          interpretation_description: string
+          clinical_significance: string | null
+          severity_level: string | null
+          recommendations: string | null
+          therapist_notes: string | null
+          auto_generated: boolean
+          calculated_at: string
+          reviewed_by: string | null
+          reviewed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          instance_id: string
+          raw_score: number
+          scaled_score?: number | null
+          percentile?: number | null
+          t_score?: number | null
+          z_score?: number | null
+          interpretation_category: string
+          interpretation_description: string
+          clinical_significance?: string | null
+          severity_level?: string | null
+          recommendations?: string | null
+          therapist_notes?: string | null
+          auto_generated?: boolean
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+        }
+        Update: {
+          instance_id?: string
+          raw_score?: number
+          scaled_score?: number | null
+          percentile?: number | null
+          t_score?: number | null
+          z_score?: number | null
+          interpretation_category?: string
+          interpretation_description?: string
+          clinical_significance?: string | null
+          severity_level?: string | null
+          recommendations?: string | null
+          therapist_notes?: string | null
+          auto_generated?: boolean
+          calculated_at?: string
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+        }
+      }
       profiles: {
         Row: {
           id: string
