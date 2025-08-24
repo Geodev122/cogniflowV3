@@ -692,24 +692,26 @@ export default function TherapistDashboard() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
               <div className="logo-container">
-                <img 
-                  src="/thera-py-icon.png"
-                  alt="Thera-PY Logo" 
-                  className="logo-image"
-                  onError={(e) => {
-                    console.error('Logo icon failed to load')
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
-                <img 
-                  src="/thera-py-image.png"
-                  alt="Thera-PY" 
-                  className="logo-text h-6"
-                  onError={(e) => {
-                    console.error('Logo text failed to load')
-                    e.currentTarget.outerHTML = '<span class="logo-text text-xl font-bold text-gray-900">Thera-PY</span>'
-                  }}
-                />
+                <div className="flex items-center space-x-3">
+                  <img 
+                    src="/thera-py-icon.png"
+                    alt="Thera-PY Logo" 
+                    className="w-8 h-8"
+                    onError={(e) => {
+                      console.error('Logo icon failed to load')
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                  <img 
+                    src="/thera-py-image.png"
+                    alt="Thera-PY" 
+                    className="h-6"
+                    onError={(e) => {
+                      console.error('Logo text failed to load')
+                      e.currentTarget.outerHTML = '<span class="text-xl font-bold text-gray-900">Thera-PY</span>'
+                    }}
+                  />
+                </div>
               </div>
               <div className="hidden sm:block">
                 <p className="text-sm text-gray-500">Therapist Portal</p>
