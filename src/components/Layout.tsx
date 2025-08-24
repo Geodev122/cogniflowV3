@@ -67,12 +67,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, title }) => {
                   src="/dist/thera-py-icon copy.png"
                   alt="Thera-PY Logo" 
                   className="logo-image"
+                  onError={(e) => {
+                    console.error('Logo icon failed to load')
+                    e.currentTarget.style.display = 'none'
+                  }}
                 />
-                <img 
-                  src="/dist/thera-py-image.png"
-                  alt="Thera-PY" 
-                  className="logo-name"
-                />
+                <span className="logo-text text-xl font-bold text-gray-900">Thera-PY</span>
               </div>
               <div>
                 <p className="text-xs sm:text-sm text-gray-500 capitalize">
