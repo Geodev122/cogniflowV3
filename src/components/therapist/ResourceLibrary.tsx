@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { AssessmentLibrary } from '../assessment/AssessmentLibrary'
 import { useAssessments } from '../../hooks/useAssessments'
 import { 
   Library, 
@@ -32,8 +31,151 @@ import {
   Download,
   Share2,
   Clock,
-  TrendingUp
+  TrendingUp,
+  AlertTriangle
 } from 'lucide-react'
+
+// Simple Assessment Library Component
+interface AssessmentLibraryProps {
+  onAssign: (templateId: string, clientIds: string[]) => void
+  onPreview: (template: any) => void
+}
+
+const AssessmentLibrary: React.FC<AssessmentLibraryProps> = ({ onAssign, onPreview }) => {
+  const { templates, loading, error } = useAssessments()
+  const [searchTerm, setSearchTerm] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+
+  const filteredTemplates = templates.filter(template => {
+    const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         template.description.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = categoryFilter === 'all' || template.category === categoryFilter
+    return matchesSearch && matchesCategory
+  })
+
+  const categories = [
+    { id: 'all', name: 'All Categories', count: templates.length },
+    { id: 'depression', name: 'Depression', count: templates.filter(t => t.category === 'depression').length },
+    { id: 'anxiety', name: 'Anxiety', count: templates.filter(t => t.category === 'anxiety').length },
+    { id: 'trauma', name: 'Trauma', count: templates.filter(t => t.category === 'trauma').length },
+    { id: 'stress', name: 'Stress', count: templates.filter(t => t.category === 'stress').length },
+    { id: 'wellbeing', name: 'Wellbeing', count: templates.filter(t => t.category === 'wellbeing').length }
+  ]
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex items-center space-x-2">
+          <AlertTriangle className="w-5 h-5 text-red-600" />
+          <span className="text-red-800">{error}</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <Brain className="w-6 h-6 text-blue-600" />
+          <h2 className="text-2xl font-bold text-gray-900">Psychometric Assessments</h2>
+        </div>
+        <div className="text-sm text-gray-600">
+          {filteredTemplates.length} of {templates.length} assessments
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search assessments..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            {categories.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.name} ({cat.count})</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Assessment Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredTemplates.map(template => (
+          <div key={template.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="font-semibold text-gray-900">{template.name}</h3>
+                <p className="text-sm text-blue-600 font-medium">{template.abbreviation}</p>
+              </div>
+              <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                {template.category}
+              </span>
+            </div>
+            
+            <p className="text-gray-600 text-sm mb-4 line-clamp-2">{template.description}</p>
+            
+            <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+              <span>{template.questions?.length || 0} questions</span>
+              <span>~{template.estimated_duration_minutes} min</span>
+            </div>
+            
+            <div className="flex space-x-2">
+              <button
+                onClick={() => onPreview(template)}
+                className="flex-1 inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100"
+              >
+                <Eye className="w-4 h-4 mr-1" />
+                Preview
+              </button>
+              <button
+                onClick={() => onAssign(template.id, [])}
+                className="flex-1 inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+              >
+                <Send className="w-4 h-4 mr-1" />
+                Assign
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Empty State */}
+      {filteredTemplates.length === 0 && (
+        <div className="text-center py-12">
+          <Brain className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No assessments found</h3>
+          <p className="text-gray-600">
+            {searchTerm || categoryFilter !== 'all'
+              ? 'Try adjusting your search or filters.'
+              : 'No assessment templates are available.'
+            }
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface AssignModalProps {
   templateId: string
@@ -292,8 +434,8 @@ export default function ResourceLibrary() {
   const [selectedAssessmentId, setSelectedAssessmentId] = useState<string>('')
   const [selectedAssessmentName, setSelectedAssessmentName] = useState<string>('')
   const [clients, setClients] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
   const [bookmarkedResources, setBookmarkedResources] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
   const { profile } = useAuth()
   const { templates, assignAssessment } = useAssessments()
 
@@ -312,6 +454,7 @@ export default function ResourceLibrary() {
 
   const fetchResources = async () => {
     try {
+      setLoading(true)
       const { data, error } = await supabase
         .from('resource_library')
         .select('*')
@@ -319,6 +462,7 @@ export default function ResourceLibrary() {
         .order('created_at', { ascending: false })
 
       if (error || !data || data.length === 0) {
+        console.warn('Using sample resources, database may not be populated:', error)
         setResources(SAMPLE_RESOURCES)
       } else {
         setResources(data)
@@ -335,19 +479,33 @@ export default function ResourceLibrary() {
     if (!profile) return
 
     try {
-      const { data: relations } = await supabase
+      const { data: relations, error: relationsError } = await supabase
         .from('therapist_client_relations')
         .select('client_id')
         .eq('therapist_id', profile.id)
 
+      if (relationsError) {
+        console.error('Error fetching client relations:', relationsError)
+        setClients([])
+        return
+      }
+
       const clientIds = relations?.map(r => r.client_id) || []
       if (clientIds.length > 0) {
-        const { data: clientData } = await supabase
+        const { data: clientData, error: clientError } = await supabase
           .from('profiles')
           .select('id, first_name, last_name, email')
           .in('id', clientIds)
 
+        if (clientError) {
+          console.error('Error fetching client profiles:', clientError)
+          setClients([])
+          return
+        }
+
         setClients(clientData || [])
+      } else {
+        setClients([])
       }
     } catch (error) {
       console.error('Error fetching clients:', error)
@@ -422,7 +580,6 @@ export default function ResourceLibrary() {
   }
 
   const handleAssessmentPreview = (template: any) => {
-    // Handle assessment preview
     console.log('Preview assessment:', template)
   }
 
@@ -775,8 +932,9 @@ export default function ResourceLibrary() {
             <AssessmentLibrary
               onAssign={(templateId, clientIds) => {
                 const template = templates.find(t => t.id === templateId)
+                if (!template) return
                 setSelectedAssessmentId(templateId)
-                setSelectedAssessmentName(template?.name || 'Assessment')
+                setSelectedAssessmentName(template.name)
                 setShowAssessmentAssignModal(true)
               }}
               onPreview={handleAssessmentPreview}
@@ -882,7 +1040,6 @@ export default function ResourceLibrary() {
   )
 }
 
-// Assign Resource Modal Component
 interface AssignResourceModalProps {
   resource: Resource
   clients: any[]
@@ -891,81 +1048,99 @@ interface AssignResourceModalProps {
 }
 
 const AssignResourceModal: React.FC<AssignResourceModalProps> = ({ resource, clients, onClose, onAssign }) => {
+  const [selectedClients, setSelectedClients] = useState<string[]>([])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (selectedClients.length > 0) {
+      onAssign(resource.id, selectedClients)
+    }
+  }
+
+  const toggleClient = (clientId: string) => {
+    setSelectedClients(prev => 
+      prev.includes(clientId) 
+        ? prev.filter(id => id !== clientId)
+        : [...prev, clientId]
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen p-4">
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50" onClick={onClose} />
         
         <div className="relative bg-white rounded-xl shadow-xl max-w-lg w-full">
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Assign Resource</h3>
-            <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="p-4">
-            <div className="mb-4">
-              <h4 className="font-medium text-gray-900 mb-2">{resource.title}</h4>
-              <p className="text-sm text-gray-600">{resource.description}</p>
+          <form onSubmit={handleSubmit}>
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Assign Resource</h3>
+              <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Clients
-              </label>
-              <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
-                {clients.length === 0 ? (
-                  <div className="p-4 text-center text-gray-500">
-                    <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                    <p className="text-sm">No clients available</p>
-                  </div>
-                ) : (
-                  clients.map((client) => (
-                    <label key={client.id} className="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-3"
-                      />
-                      <div className="flex items-center space-x-2">
-                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                          <span className="text-xs font-medium text-blue-600">
-                            {client.first_name[0]}{client.last_name[0]}
-                          </span>
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {client.first_name} {client.last_name}
+            <div className="p-4">
+              <div className="mb-4">
+                <h4 className="font-medium text-gray-900 mb-2">{resource.title}</h4>
+                <p className="text-sm text-gray-600">{resource.description}</p>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Clients
+                </label>
+                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+                  {clients.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500">
+                      <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      <p className="text-sm">No clients available</p>
+                    </div>
+                  ) : (
+                    clients.map((client) => (
+                      <label key={client.id} className="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedClients.includes(client.id)}
+                          onChange={() => toggleClient(client.id)}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-3"
+                        />
+                        <div className="flex items-center space-x-2">
+                          <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-xs font-medium text-blue-600">
+                              {client.first_name[0]}{client.last_name[0]}
+                            </span>
                           </div>
-                          <div className="text-xs text-gray-500">{client.email}</div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {client.first_name} {client.last_name}
+                            </div>
+                            <div className="text-xs text-gray-500">{client.email}</div>
+                          </div>
                         </div>
-                      </div>
-                    </label>
-                  ))
-                )}
+                      </label>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="p-4 border-t border-gray-200 flex space-x-2">
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => {
-                const selectedClients = clients.map(c => c.id)
-                if (selectedClients.length > 0) {
-                  onAssign(resource.id, selectedClients)
-                }
-              }}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Assign Resource
-            </button>
-          </div>
+            <div className="p-4 border-t border-gray-200 flex space-x-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={selectedClients.length === 0}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Assign Resource
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
