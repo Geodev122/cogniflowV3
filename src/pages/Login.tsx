@@ -41,7 +41,7 @@ export const Login: React.FC = () => {
           <div className="flex justify-center">
             <div className="flex flex-col items-center space-y-4">
               <img 
-                src="/dist/thera-py-icon copy.png"
+                src="/thera-py-icon.png"
                 alt="Thera-PY Logo" 
                 className="logo-image-large"
                 onError={(e) => {
@@ -49,7 +49,15 @@ export const Login: React.FC = () => {
                   e.currentTarget.style.display = 'none'
                 }}
               />
-              <span className="logo-text-large text-3xl font-bold text-gray-900">Thera-PY</span>
+              <img 
+                src="/thera-py-image.png"
+                alt="Thera-PY" 
+                className="logo-text-large h-12"
+                onError={(e) => {
+                  console.error('Logo text failed to load')
+                  e.currentTarget.outerHTML = '<span class="logo-text-large text-3xl font-bold text-gray-900">Thera-PY</span>'
+                }}
+              />
             </div>
           </div>
           <h2 className="mt-6 text-2xl font-bold text-gray-900">
