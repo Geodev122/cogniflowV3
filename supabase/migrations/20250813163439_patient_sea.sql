@@ -315,7 +315,7 @@ INSERT INTO profiles (
   'John',
   'Smith',
   'john.smith@example.com',
-  'PT123456',
+  'PT123457',
   '+1 (555) 234-5678',
   'f7cb820b-f73e-4bfe-9571-261c7eef79e0',
   true,
