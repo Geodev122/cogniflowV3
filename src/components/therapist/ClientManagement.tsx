@@ -427,9 +427,9 @@ export const ClientManagement: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getRiskColor(client.profile?.risk_level)}`}>
-                          {client.profile?.risk_level || 'low'}
-                        </span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getRiskBadgeClass(client.profile?.risk_level)}`}>
+  {client.profile?.risk_level || 'low'}
+                          </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {client.stats?.completedAssessments}/{client.stats?.totalAssessments}
