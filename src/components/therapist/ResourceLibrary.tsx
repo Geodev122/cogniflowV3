@@ -527,7 +527,7 @@ export default function ResourceLibrary() {
       filtered = filtered.filter(r =>
         r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
+        (r.tags ?? []).some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
       )
     }
 
