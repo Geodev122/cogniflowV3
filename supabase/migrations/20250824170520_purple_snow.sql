@@ -347,7 +347,7 @@ BEGIN
     password_set, created_at
   ) VALUES (
     demo_client_id, 'client', 'John', 'Smith',
-    'demo.client@thera-py.com', '+1-555-0124', 'PT123456',
+    'demo.client@thera-py.com', '+1-555-0124', 'PT123455',
     demo_therapist_id, TRUE, now() - INTERVAL '3 months'
   )
   ON CONFLICT (id) DO UPDATE
