@@ -95,6 +95,7 @@ export const ClientManagement: React.FC = () => {
 
       // Get client profiles
       const clientIds = relations?.map(r => r.client_id) || []
+      console.debug('[ClientMgmt] derived clientIds', { clientIds })
       if (clientIds.length === 0) {
         setClients([])
         setLoading(false)
