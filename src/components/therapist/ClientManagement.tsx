@@ -76,6 +76,12 @@ export const ClientManagement: React.FC = () => {
         .select('client_id')
         .eq('therapist_id', profile.id)
 
+      console.debug('[ClientMgmt] relations', {
+  therapist_id: profile.id,
+  relations,
+  relationsError,
+})
+
       if (relationsError) {
         if (isRecursionError(relationsError)) {
           console.error('RLS recursion error in client relations:', relationsError)
