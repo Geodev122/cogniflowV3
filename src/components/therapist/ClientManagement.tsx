@@ -126,84 +126,120 @@ console.debug('[ClientMgmt] clientProfiles', {
       }
 
       // Get extended client profiles
-      const clientsWithProfiles = await Promise.all(
-        (clientProfiles || []).map(async (client: any) => {
-          try {
-            // Get extended profile with error handling
-            const { data: clientProfile, error: extendedError } = await supabase
-              .from('client_profiles')
-              .select('*')
-              .eq('client_id', client.id)
-              .eq('therapist_id', profile.id)
-              .maybeSingle()
+    // Get extended client profiles
+const clientsWithProfiles = await Promise.all(
+  (clientProfiles || []).map(async (client: any) => {
+    try {
+      // 🔎 BEFORE any per-client queries:
+      console.debug('[ClientMgmt] hydrate client', {
+        client_id: client.id,
+        therapist_id: profile.id,
+      })
 
-            if (extendedError && !isRecursionError(extendedError)) {
-              console.warn('Error fetching extended profile for client:', client.id, extendedError)
-            }
+      // Get extended profile with error handling
+      const { data: clientProfile, error: extendedError } = await supabase
+        .from('client_profiles')
+        .select('*')
+        .eq('client_id', client.id)
+        .eq('therapist_id', profile.id)
+        .maybeSingle()
 
-            // Get client stats with error handling
-            const { data: assessments, error: assessmentsError } = await supabase
-              .from('form_assignments')
-              .select('status')
-              .eq('client_id', client.id)
-              .eq('therapist_id', profile.id)
+      // 🔎 After client_profiles query
+      console.debug('[ClientMgmt] client_profile', {
+        client_id: client.id,
+        clientProfile,
+        extendedError,
+      })
 
-            if (assessmentsError && !isRecursionError(assessmentsError)) {
-              console.warn('Error fetching assessments for client:', client.id, assessmentsError)
-            }
+      if (extendedError && !isRecursionError(extendedError)) {
+        console.warn('Error fetching extended profile for client:', client.id, extendedError)
+      }
 
-            const { data: lastSession, error: lastSessionError } = await supabase
-              .from('appointments')
-              .select('appointment_date')
-              .eq('client_id', client.id)
-              .eq('therapist_id', profile.id)
-              .eq('status', 'completed')
-              .order('appointment_date', { ascending: false })
-              .limit(1)
+      // Get client stats with error handling
+      const { data: assessments, error: assessmentsError } = await supabase
+        .from('form_assignments')
+        .select('status')
+        .eq('client_id', client.id)
+        .eq('therapist_id', profile.id)
 
-            if (lastSessionError && !isRecursionError(lastSessionError)) {
-              console.warn('Error fetching last session for client:', client.id, lastSessionError)
-            }
+      // 🔎 After form_assignments query
+      console.debug('[ClientMgmt] assessments', {
+        client_id: client.id,
+        count: assessments?.length ?? 0,
+        assessmentsError,
+      })
 
-            const { data: nextAppointment, error: nextAppointmentError } = await supabase
-              .from('appointments')
-              .select('appointment_date')
-              .eq('client_id', client.id)
-              .eq('therapist_id', profile.id)
-              .eq('status', 'scheduled')
-              .gte('appointment_date', new Date().toISOString())
-              .order('appointment_date', { ascending: true })
-              .limit(1)
+      if (assessmentsError && !isRecursionError(assessmentsError)) {
+        console.warn('Error fetching assessments for client:', client.id, assessmentsError)
+      }
 
-            if (nextAppointmentError && !isRecursionError(nextAppointmentError)) {
-              console.warn('Error fetching next appointment for client:', client.id, nextAppointmentError)
-            }
+      const { data: lastSession, error: lastSessionError } = await supabase
+        .from('appointments')
+        .select('appointment_date')
+        .eq('client_id', client.id)
+        .eq('therapist_id', profile.id)
+        .eq('status', 'completed')
+        .order('appointment_date', { ascending: false })
+        .limit(1)
 
-            return {
-              ...client,
-              profile: clientProfile,
-              stats: {
-                totalAssessments: assessments?.length || 0,
-                completedAssessments: assessments?.filter(a => a.status === 'completed').length || 0,
-                lastSession: lastSession?.[0]?.appointment_date,
-                nextAppointment: nextAppointment?.[0]?.appointment_date
-              }
-            }
-          } catch (clientError) {
-            console.error('Error processing client data:', client.id, clientError)
-            return {
-              ...client,
-              profile: null,
-              stats: {
-                totalAssessments: 0,
-                completedAssessments: 0,
-                lastSession: undefined,
-                nextAppointment: undefined
-              }
-            }
-          }
-        })
-      )
+      // 🔎 After lastSession query
+      console.debug('[ClientMgmt] lastSession', {
+        client_id: client.id,
+        last: lastSession?.[0]?.appointment_date,
+        lastSessionError,
+      })
+
+      if (lastSessionError && !isRecursionError(lastSessionError)) {
+        console.warn('Error fetching last session for client:', client.id, lastSessionError)
+      }
+
+      const { data: nextAppointment, error: nextAppointmentError } = await supabase
+        .from('appointments')
+        .select('appointment_date')
+        .eq('client_id', client.id)
+        .eq('therapist_id', profile.id)
+        .eq('status', 'scheduled')
+        .gte('appointment_date', new Date().toISOString())
+        .order('appointment_date', { ascending: true })
+        .limit(1)
+
+      // 🔎 After nextAppointment query
+      console.debug('[ClientMgmt] nextAppointment', {
+        client_id: client.id,
+        next: nextAppointment?.[0]?.appointment_date,
+        nextAppointmentError,
+      })
+
+      if (nextAppointmentError && !isRecursionError(nextAppointmentError)) {
+        console.warn('Error fetching next appointment for client:', client.id, nextAppointmentError)
+      }
+
+      return {
+        ...client,
+        profile: clientProfile,
+        stats: {
+          totalAssessments: assessments?.length || 0,
+          completedAssessments: assessments?.filter(a => a.status === 'completed').length || 0,
+          lastSession: lastSession?.[0]?.appointment_date,
+          nextAppointment: nextAppointment?.[0]?.appointment_date
+        }
+      }
+    } catch (clientError) {
+      console.error('Error processing client data:', client.id, clientError)
+      return {
+        ...client,
+        profile: null,
+        stats: {
+          totalAssessments: 0,
+          completedAssessments: 0,
+          lastSession: undefined,
+          nextAppointment: undefined
+        }
+      }
+    }
+  })
+)
+
 
       setClients(clientsWithProfiles)
     } catch (error) {
