@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { getRiskColor, formatDate, generatePatientCode, isRecursionError } from '../../utils/helpers'
+const getRiskBadgeClass = (riskLevel?: string) => getRiskColor(riskLevel)
 import { 
   Users, 
   Plus, 
