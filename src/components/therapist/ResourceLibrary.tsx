@@ -435,7 +435,7 @@ export default function ResourceLibrary() {
   const [selectedAssessmentName, setSelectedAssessmentName] = useState<string>('')
   const [clients, setClients] = useState<any[]>([])
   const [bookmarkedResources, setBookmarkedResources] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
+  const [resourcesLoading, setResourcesLoading] = useState(false)
   const { profile } = useAuth()
   const { templates, assignAssessment } = useAssessments()
 
