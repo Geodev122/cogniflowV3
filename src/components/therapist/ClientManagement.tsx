@@ -103,9 +103,16 @@ export const ClientManagement: React.FC = () => {
       }
       
       const { data: clientProfiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .in('id', clientIds)
+  .from('profiles')
+  .select('id, first_name, last_name, email') // minimal fields help with RLS
+  .in('id', clientIds)
+
+console.debug('[ClientMgmt] clientProfiles', {
+  clientIds,
+  clientProfiles,
+  profilesError,
+})
+
 
       if (profilesError) {
         if (isRecursionError(profilesError)) {
