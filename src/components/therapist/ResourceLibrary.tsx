@@ -453,27 +453,30 @@ export default function ResourceLibrary() {
   }, [resources, selectedCategory, searchTerm, activeTab])
 
   const fetchResources = async () => {
-    try {
-      setLoading(true)
-      const { data, error } = await supabase
-        .from('resource_library')
-        .select('*')
-        .eq('is_public', true)
-        .order('created_at', { ascending: false })
+  try {
+    setResourcesLoading(true)
+    console.debug('[ResourceLibrary] fetching resources…', { is_public: true })
+    const { data, error } = await supabase
+      .from('resource_library')
+      .select('id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at') // minimal fields = fewer RLS surprises
+      .eq('is_public', true)
+      .order('created_at', { ascending: false })
 
-      if (error || !data || data.length === 0) {
-        console.warn('Using sample resources, database may not be populated:', error)
-        setResources(SAMPLE_RESOURCES)
-      } else {
-        setResources(data)
-      }
-    } catch (error) {
-      console.error('Error fetching resources:', error)
+    console.debug('[ResourceLibrary] resources result', { error, count: data?.length ?? 0 })
+    if (error || !data || data.length === 0) {
+      console.warn('[ResourceLibrary] Using SAMPLE_RESOURCES. DB may be empty or blocked by RLS.', { error })
       setResources(SAMPLE_RESOURCES)
-    } finally {
-      setLoading(false)
+    } else {
+      setResources(data)
     }
+  } catch (err) {
+    console.error('[ResourceLibrary] fetchResources crash', err)
+    setResources(SAMPLE_RESOURCES)
+  } finally {
+    setResourcesLoading(false)
   }
+}
+
 
   const fetchClients = async () => {
     if (!profile) return
