@@ -440,6 +440,10 @@ export default function ResourceLibrary() {
   const { templates, assignAssessment } = useAssessments()
 
   useEffect(() => {
+  console.debug('[ResourceLibrary] tab change', { activeTab })
+}, [activeTab])
+
+  useEffect(() => {
     fetchClients()
     if (activeTab === 'resources') {
       fetchResources()
