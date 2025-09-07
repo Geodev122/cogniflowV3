@@ -1,3 +1,4 @@
+// src/App.tsx
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { Login } from './pages/Login'
@@ -5,28 +6,49 @@ import { Register } from './pages/Register'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { useAuth } from './hooks/useAuth'
 
-// Lazy load dashboard components with preload
+// --- Lazy pages (top-level) ---
 const TherapistDashboard = React.lazy(() => import('./pages/TherapistDashboard'))
 const ClientDashboard = React.lazy(() => import('./pages/ClientDashboard'))
 const ProgressMetrics = React.lazy(() => import('./pages/ProgressMetrics'))
 
-// Preload components on user interaction
-const preloadDashboards = () => {
+// --- Lazy therapist tools (component pages) ---
+const ClientManagement = React.lazy(() =>
+  import('./components/therapist/ClientManagement').then(m => ({ default: m.ClientManagement }))
+)
+const SessionManagement = React.lazy(() =>
+  import('./components/therapist/SessionManagement').then(m => ({ default: m.SessionManagement }))
+)
+const CaseManagement = React.lazy(() =>
+  import('./components/therapist/CaseManagement').then(m => ({ default: m.CaseManagement }))
+)
+// CommunicationTools has a default export already
+const CommunicationTools = React.lazy(() => import('./components/therapist/CommunicationTools'))
+
+// --- Preload helpers ---
+const preloadTherapistArea = () => {
   import('./pages/TherapistDashboard')
+  import('./pages/ProgressMetrics')
+  import('./components/therapist/ClientManagement').then(m => m)
+  import('./components/therapist/SessionManagement').then(m => m)
+  import('./components/therapist/CaseManagement').then(m => m)
+  import('./components/therapist/CommunicationTools').then(m => m)
+}
+
+const preloadClientArea = () => {
   import('./pages/ClientDashboard')
 }
 
-// Loading component
-const LoadingSpinner = ({ message = "Loading..." }: { message?: string }) => (
+// --- Loading states ---
+const LoadingSpinner = ({ message = 'Loading...' }: { message?: string }) => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
     <div className="text-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
       <p className="text-gray-600">{message}</p>
     </div>
   </div>
 )
 
-// Error boundary component
+// --- Error boundary ---
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error?: Error }
@@ -74,16 +96,14 @@ class ErrorBoundary extends React.Component<
 function App() {
   const { user, profile, loading, error } = useAuth()
 
-  // Preload dashboards when user is detected
+  // Preload by role once authenticated
   React.useEffect(() => {
-    if (user) {
-      preloadDashboards()
-    }
-  }, [user])
+    if (!user || !profile) return
+    if (profile.role === 'therapist') preloadTherapistArea()
+    if (profile.role === 'client') preloadClientArea()
+  }, [user, profile])
 
-  if (loading) {
-    return <LoadingSpinner message="Initializing Thera-PY..." />
-  }
+  if (loading) return <LoadingSpinner message="Initializing Thera-PY..." />
 
   if (error) {
     return (
@@ -112,16 +132,50 @@ function App() {
       <Router>
         <React.Suspense fallback={<LoadingSpinner message="Loading page..." />}>
           <Routes>
+            {/* Auth */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            
-            <Route 
-              path="/therapist" 
+
+            {/* Therapist area */}
+            <Route
+              path="/therapist"
               element={
                 <ProtectedRoute role="therapist">
                   <TherapistDashboard />
                 </ProtectedRoute>
-              } 
+              }
+            />
+            <Route
+              path="/therapist/clients"
+              element={
+                <ProtectedRoute role="therapist">
+                  <ClientManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/therapist/sessions"
+              element={
+                <ProtectedRoute role="therapist">
+                  <SessionManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/therapist/cases"
+              element={
+                <ProtectedRoute role="therapist">
+                  <CaseManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/therapist/comms"
+              element={
+                <ProtectedRoute role="therapist">
+                  <CommunicationTools />
+                </ProtectedRoute>
+              }
             />
             <Route
               path="/metrics"
@@ -132,32 +186,30 @@ function App() {
               }
             />
 
-            
-            <Route 
-              path="/client" 
+            {/* Client area */}
+            <Route
+              path="/client"
               element={
                 <ProtectedRoute role="client">
                   <ClientDashboard />
                 </ProtectedRoute>
-              } 
+              }
             />
-            
-            <Route 
-              path="/" 
+
+            {/* Root redirect */}
+            <Route
+              path="/"
               element={
                 user && profile ? (
                   <Navigate to={profile.role === 'therapist' ? '/therapist' : '/client'} replace />
                 ) : (
                   <Navigate to="/login" replace />
                 )
-              } 
+              }
             />
-            
-            {/* Catch all route */}
-            <Route 
-              path="*" 
-              element={<Navigate to="/" replace />} 
-            />
+
+            {/* Catch-all */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </React.Suspense>
       </Router>
