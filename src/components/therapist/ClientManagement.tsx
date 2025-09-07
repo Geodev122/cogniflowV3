@@ -1,23 +1,42 @@
-import React, { useState, useEffect } from 'react'
+// src/components/therapist/ClientManagement.tsx
+
+import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { getRiskColor, formatDate, generatePatientCode, isRecursionError } from '../../utils/helpers'
-const getRiskBadgeClass = (riskLevel?: string) => getRiskColor(riskLevel)
-import { 
-  Users, 
-  Plus, 
-  Search, 
-  Filter, 
-  Edit, 
-  Trash2, 
-  Phone, 
-  Mail, 
-  AlertTriangle,
-  User,
-  Calendar,
-  FileText,
-  TrendingUp
+import {
+  getRiskColor as riskClassFromLevel,
+  formatDate,
+  generatePatientCode,
+  isRecursionError,
+} from '../../utils/helpers'
+import {
+  Users,
+  Plus,
+  Search,
+  Filter,
+  Edit,
+  Phone,
+  Mail,
 } from 'lucide-react'
+
+interface ClientProfileExtras {
+  emergency_contact_name?: string
+  emergency_contact_phone?: string
+  emergency_contact_relationship?: string
+  medical_history?: string
+  current_medications?: string
+  presenting_concerns?: string
+  therapy_history?: string
+  risk_level?: string
+  notes?: string
+}
+
+interface ClientStats {
+  totalAssessments: number
+  completedAssessments: number
+  lastSession?: string
+  nextAppointment?: string
+}
 
 interface Client {
   id: string
@@ -25,23 +44,8 @@ interface Client {
   last_name: string
   email: string
   created_at: string
-  profile?: {
-    emergency_contact_name?: string
-    emergency_contact_phone?: string
-    emergency_contact_relationship?: string
-    medical_history?: string
-    current_medications?: string
-    presenting_concerns?: string
-    therapy_history?: string
-    risk_level?: string
-    notes?: string
-  }
-  stats?: {
-    totalAssessments: number
-    completedAssessments: number
-    lastSession?: string
-    nextAppointment?: string
-  }
+  profile?: ClientProfileExtras | null
+  stats?: ClientStats
 }
 
 export const ClientManagement: React.FC = () => {
@@ -56,197 +60,139 @@ export const ClientManagement: React.FC = () => {
   const { profile } = useAuth()
 
   useEffect(() => {
-    if (profile) {
-      fetchClients()
-    }
+    if (profile) fetchClients()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile])
 
   useEffect(() => {
     filterClients()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clients, searchTerm, riskFilter])
 
   const fetchClients = async () => {
     if (!profile) return
-
     try {
       setLoading(true)
-      // Get clients for this therapist with error handling
+
+      // 1) relations
       const { data: relations, error: relationsError } = await supabase
         .from('therapist_client_relations')
         .select('client_id')
         .eq('therapist_id', profile.id)
 
-      console.debug('[ClientMgmt] relations', {
-  therapist_id: profile.id,
-  relations,
-  relationsError,
-})
-
       if (relationsError) {
         if (isRecursionError(relationsError)) {
           console.error('RLS recursion error in client relations:', relationsError)
-          setClients([])
-          return
+        } else {
+          console.error('Error fetching client relations:', relationsError)
         }
-        console.error('Error fetching client relations:', relationsError)
         setClients([])
         return
       }
 
-      // Get client profiles
       const clientIds = relations?.map(r => r.client_id) || []
-      console.debug('[ClientMgmt] derived clientIds', { clientIds })
       if (clientIds.length === 0) {
         setClients([])
-        setLoading(false)
         return
       }
-      
+
+      // 2) basic client profiles
       const { data: clientProfiles, error: profilesError } = await supabase
-  .from('profiles')
-  .select('id, first_name, last_name, email') // minimal fields help with RLS
-  .in('id', clientIds)
-
-console.debug('[ClientMgmt] clientProfiles', {
-  clientIds,
-  clientProfiles,
-  profilesError,
-})
-
+        .from('profiles')
+        .select('id, first_name, last_name, email, created_at')
+        .in('id', clientIds)
 
       if (profilesError) {
         if (isRecursionError(profilesError)) {
           console.error('RLS recursion error in client profiles:', profilesError)
-          setClients([])
-          return
+        } else {
+          console.error('Error fetching client profiles:', profilesError)
         }
-        console.error('Error fetching client profiles:', profilesError)
         setClients([])
         return
       }
 
-      // Get extended client profiles
-    // Get extended client profiles
-const clientsWithProfiles = await Promise.all(
-  (clientProfiles || []).map(async (client: any) => {
-    try {
-      // 🔎 BEFORE any per-client queries:
-      console.debug('[ClientMgmt] hydrate client', {
-        client_id: client.id,
-        therapist_id: profile.id,
-      })
+      // 3) hydrate each client with extras/stats
+      const enriched = await Promise.all(
+        (clientProfiles || []).map(async (client: any) => {
+          try {
+            const [{ data: clientProfile, error: extendedError }, { data: assessments, error: assessmentsError }, { data: lastSession, error: lastSessionError }, { data: nextAppointment, error: nextAppointmentError }] =
+              await Promise.all([
+                supabase
+                  .from('client_profiles')
+                  .select('*')
+                  .eq('client_id', client.id)
+                  .eq('therapist_id', profile.id)
+                  .maybeSingle(),
+                supabase
+                  .from('form_assignments')
+                  .select('status')
+                  .eq('client_id', client.id)
+                  .eq('therapist_id', profile.id),
+                supabase
+                  .from('appointments')
+                  .select('appointment_date')
+                  .eq('client_id', client.id)
+                  .eq('therapist_id', profile.id)
+                  .eq('status', 'completed')
+                  .order('appointment_date', { ascending: false })
+                  .limit(1),
+                supabase
+                  .from('appointments')
+                  .select('appointment_date')
+                  .eq('client_id', client.id)
+                  .eq('therapist_id', profile.id)
+                  .eq('status', 'scheduled')
+                  .gte('appointment_date', new Date().toISOString())
+                  .order('appointment_date', { ascending: true })
+                  .limit(1),
+              ])
 
-      // Get extended profile with error handling
-      const { data: clientProfile, error: extendedError } = await supabase
-        .from('client_profiles')
-        .select('*')
-        .eq('client_id', client.id)
-        .eq('therapist_id', profile.id)
-        .maybeSingle()
+            if (extendedError && !isRecursionError(extendedError)) {
+              console.warn('Error fetching extended profile for client:', client.id, extendedError)
+            }
+            if (assessmentsError && !isRecursionError(assessmentsError)) {
+              console.warn('Error fetching assessments for client:', client.id, assessmentsError)
+            }
+            if (lastSessionError && !isRecursionError(lastSessionError)) {
+              console.warn('Error fetching last session for client:', client.id, lastSessionError)
+            }
+            if (nextAppointmentError && !isRecursionError(nextAppointmentError)) {
+              console.warn('Error fetching next appointment for client:', client.id, nextAppointmentError)
+            }
 
-      // 🔎 After client_profiles query
-      console.debug('[ClientMgmt] client_profile', {
-        client_id: client.id,
-        clientProfile,
-        extendedError,
-      })
+            const stats: ClientStats = {
+              totalAssessments: assessments?.length || 0,
+              completedAssessments: assessments?.filter(a => a.status === 'completed').length || 0,
+              lastSession: lastSession?.[0]?.appointment_date,
+              nextAppointment: nextAppointment?.[0]?.appointment_date,
+            }
 
-      if (extendedError && !isRecursionError(extendedError)) {
-        console.warn('Error fetching extended profile for client:', client.id, extendedError)
-      }
+            return {
+              ...client,
+              profile: clientProfile || null,
+              stats,
+            } as Client
+          } catch (e) {
+            console.error('Error processing client data:', client.id, e)
+            return {
+              ...client,
+              profile: null,
+              stats: {
+                totalAssessments: 0,
+                completedAssessments: 0,
+                lastSession: undefined,
+                nextAppointment: undefined,
+              },
+            } as Client
+          }
+        })
+      )
 
-      // Get client stats with error handling
-      const { data: assessments, error: assessmentsError } = await supabase
-        .from('form_assignments')
-        .select('status')
-        .eq('client_id', client.id)
-        .eq('therapist_id', profile.id)
-
-      // 🔎 After form_assignments query
-      console.debug('[ClientMgmt] assessments', {
-        client_id: client.id,
-        count: assessments?.length ?? 0,
-        assessmentsError,
-      })
-
-      if (assessmentsError && !isRecursionError(assessmentsError)) {
-        console.warn('Error fetching assessments for client:', client.id, assessmentsError)
-      }
-
-      const { data: lastSession, error: lastSessionError } = await supabase
-        .from('appointments')
-        .select('appointment_date')
-        .eq('client_id', client.id)
-        .eq('therapist_id', profile.id)
-        .eq('status', 'completed')
-        .order('appointment_date', { ascending: false })
-        .limit(1)
-
-      // 🔎 After lastSession query
-      console.debug('[ClientMgmt] lastSession', {
-        client_id: client.id,
-        last: lastSession?.[0]?.appointment_date,
-        lastSessionError,
-      })
-
-      if (lastSessionError && !isRecursionError(lastSessionError)) {
-        console.warn('Error fetching last session for client:', client.id, lastSessionError)
-      }
-
-      const { data: nextAppointment, error: nextAppointmentError } = await supabase
-        .from('appointments')
-        .select('appointment_date')
-        .eq('client_id', client.id)
-        .eq('therapist_id', profile.id)
-        .eq('status', 'scheduled')
-        .gte('appointment_date', new Date().toISOString())
-        .order('appointment_date', { ascending: true })
-        .limit(1)
-
-      // 🔎 After nextAppointment query
-      console.debug('[ClientMgmt] nextAppointment', {
-        client_id: client.id,
-        next: nextAppointment?.[0]?.appointment_date,
-        nextAppointmentError,
-      })
-
-      if (nextAppointmentError && !isRecursionError(nextAppointmentError)) {
-        console.warn('Error fetching next appointment for client:', client.id, nextAppointmentError)
-      }
-
-      return {
-        ...client,
-        profile: clientProfile,
-        stats: {
-          totalAssessments: assessments?.length || 0,
-          completedAssessments: assessments?.filter(a => a.status === 'completed').length || 0,
-          lastSession: lastSession?.[0]?.appointment_date,
-          nextAppointment: nextAppointment?.[0]?.appointment_date
-        }
-      }
-    } catch (clientError) {
-      console.error('Error processing client data:', client.id, clientError)
-      return {
-        ...client,
-        profile: null,
-        stats: {
-          totalAssessments: 0,
-          completedAssessments: 0,
-          lastSession: undefined,
-          nextAppointment: undefined
-        }
-      }
-    }
-  })
-)
-
-
-      setClients(clientsWithProfiles)
+      setClients(enriched)
     } catch (error) {
       console.error('Error fetching clients:', error)
-      if (isRecursionError(error)) {
-        console.error('RLS recursion detected in client management')
-      }
+      if (isRecursionError(error)) console.error('RLS recursion detected in client management')
       setClients([])
     } finally {
       setLoading(false)
@@ -254,34 +200,35 @@ const clientsWithProfiles = await Promise.all(
   }
 
   const filterClients = () => {
-    let filtered = clients
+    let next = [...clients]
 
-    // Search filter
-    if (searchTerm) {
-      filtered = filtered.filter(client =>
-        `${client.first_name} ${client.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        client.email.toLowerCase().includes(searchTerm.toLowerCase())
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase()
+      next = next.filter(
+        c =>
+          `${c.first_name} ${c.last_name}`.toLowerCase().includes(q) ||
+          c.email.toLowerCase().includes(q)
       )
     }
 
-    // Risk level filter
     if (riskFilter !== 'all') {
-      filtered = filtered.filter(client => client.profile?.risk_level === riskFilter)
+      next = next.filter(c => (c.profile?.risk_level || 'low') === riskFilter)
     }
 
-    setFilteredClients(filtered)
+    setFilteredClients(next)
   }
 
-  const getRiskColor = (riskLevel?: string) => {
-    return getRiskColor(riskLevel)
-  }
-
-  const addClientToRoster = async (clientData: { firstName: string; lastName: string; email: string; whatsappNumber: string }) => {
+  const addClientToRoster = async (clientData: {
+    firstName: string
+    lastName: string
+    email: string
+    whatsappNumber: string
+  }) => {
     try {
-      // Generate patient code
+      // generate a unique patient code (server also validates uniqueness via constraint ideally)
       const patientCode = generatePatientCode()
-      
-      // Create client profile directly
+
+      // create profile (let DB generate UUID if your schema supports; keeping explicit for your current flow)
       const { error: profileError } = await supabase
         .from('profiles')
         .insert({
@@ -293,7 +240,7 @@ const clientsWithProfiles = await Promise.all(
           whatsapp_number: clientData.whatsappNumber,
           patient_code: patientCode,
           created_by_therapist: profile!.id,
-          password_set: false
+          password_set: false,
         })
         .select('id')
         .single()
@@ -303,7 +250,7 @@ const clientsWithProfiles = await Promise.all(
         throw new Error(`Failed to create client profile: ${profileError.message}`)
       }
 
-      // Get the created client ID
+      // fetch the created client id
       const { data: newClient, error: clientError } = await supabase
         .from('profiles')
         .select('id')
@@ -315,32 +262,31 @@ const clientsWithProfiles = await Promise.all(
         throw new Error('Failed to retrieve created client')
       }
 
-      // Create therapist-client relation (if not exists)
+      // create relation (idempotent-ish)
       const { error: relationError } = await supabase
         .from('therapist_client_relations')
         .insert({
           therapist_id: profile!.id,
-          client_id: newClient.id
+          client_id: newClient.id,
         })
 
-      if (relationError) {
-        // Check if relation already exists
-        if (!relationError.message.includes('duplicate key')) {
-          console.error('Error creating therapist-client relation:', relationError)
-          throw new Error(`Failed to establish therapist-client relationship: ${relationError.message}`)
-        }
+      if (relationError && !String(relationError.message || '').includes('duplicate key')) {
+        console.error('Error creating therapist-client relation:', relationError)
+        throw new Error(`Failed to establish therapist-client relationship: ${relationError.message}`)
       }
 
       await fetchClients()
       setShowAddClient(false)
-      alert(`Client ${clientData.firstName} ${clientData.lastName} added successfully! Patient Code: ${patientCode}`)
+      alert(
+        `Client ${clientData.firstName} ${clientData.lastName} added successfully! Patient Code: ${patientCode}`
+      )
     } catch (error) {
       console.error('Error adding client:', error)
       alert(error instanceof Error ? error.message : 'Error adding client to roster. Please try again.')
     }
   }
 
-  const updateClientProfile = async (clientId: string, updates: any) => {
+  const updateClientProfile = async (clientId: string, updates: ClientProfileExtras) => {
     try {
       const { error } = await supabase
         .from('client_profiles')
@@ -348,7 +294,7 @@ const clientsWithProfiles = await Promise.all(
           client_id: clientId,
           therapist_id: profile!.id,
           ...updates,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
 
       if (error) throw error
@@ -360,17 +306,8 @@ const clientsWithProfiles = await Promise.all(
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
+  const header = useMemo(
+    () => (
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Client Management</h2>
@@ -378,34 +315,59 @@ const clientsWithProfiles = await Promise.all(
         </div>
         <button
           onClick={() => setShowAddClient(true)}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+          className="hidden sm:inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
         >
           <Plus className="w-4 h-4 mr-2" />
           Add Client
         </button>
       </div>
+    ),
+    []
+  )
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      {header}
+
+      {/* Mobile primary action */}
+      <button
+        onClick={() => setShowAddClient(true)}
+        className="sm:hidden w-full inline-flex items-center justify-center rounded-lg bg-blue-600 text-white py-2"
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        Add Client
+      </button>
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Search clients..."
+                placeholder="Search clients by name or email…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             <Filter className="w-5 h-5 text-gray-400" />
             <select
               value={riskFilter}
               onChange={(e) => setRiskFilter(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">All Risk Levels</option>
               <option value="low">Low Risk</option>
@@ -417,41 +379,107 @@ const clientsWithProfiles = await Promise.all(
         </div>
       </div>
 
-      {/* Client List */}
-      <div className="bg-white shadow-sm rounded-lg border border-gray-200">
-        <div className="overflow-hidden">
-          {filteredClients.length === 0 ? (
-            <div className="text-center py-12">
-              <Users className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No clients found</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                {searchTerm || riskFilter !== 'all' 
-                  ? 'Try adjusting your search or filters.'
-                  : 'Add clients to your roster to get started.'
-                }
-              </p>
-            </div>
-          ) : (
+      {/* Empty state */}
+      {filteredClients.length === 0 ? (
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-10 text-center">
+          <Users className="mx-auto h-12 w-12 text-gray-300" />
+          <h3 className="mt-3 text-gray-900 font-medium">No clients found</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            {searchTerm || riskFilter !== 'all'
+              ? 'Try adjusting your search or filters.'
+              : 'Add clients to your roster to get started.'}
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Mobile card layout */}
+          <div className="grid gap-4 sm:hidden">
+            {filteredClients.map((client) => (
+              <div key={client.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                      <span className="text-sm font-semibold text-blue-700">
+                        {client.first_name?.[0]}
+                        {client.last_name?.[0]}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900">
+                        {client.first_name} {client.last_name}
+                      </div>
+                      <div className="text-sm text-gray-600">{client.email}</div>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${riskClassFromLevel(
+                      client.profile?.risk_level
+                    )}`}
+                  >
+                    {client.profile?.risk_level || 'low'}
+                  </span>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-gray-600">
+                  <div>
+                    <div className="text-gray-500">Assessments</div>
+                    <div className="font-medium">
+                      {client.stats?.completedAssessments ?? 0}/{client.stats?.totalAssessments ?? 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Last Session</div>
+                    <div className="font-medium">{formatDate(client.stats?.lastSession)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Next Appt</div>
+                    <div className="font-medium">{formatDate(client.stats?.nextAppointment)}</div>
+                  </div>
+                  <div className="flex items-center gap-2 justify-end">
+                    <button
+                      onClick={() => {
+                        setSelectedClient(client)
+                        setShowClientDetails(true)
+                      }}
+                      className="inline-flex items-center rounded-md px-2 py-1 text-blue-700 hover:text-blue-900"
+                    >
+                      <Edit className="w-4 h-4 mr-1" />
+                      Edit
+                    </button>
+                    <button className="inline-flex items-center rounded-md px-2 py-1 text-green-700 hover:text-green-900">
+                      <Phone className="w-4 h-4" />
+                    </button>
+                    <button className="inline-flex items-center rounded-md px-2 py-1 text-purple-700 hover:text-purple-900">
+                      <Mail className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden sm:block bg-white shadow-sm rounded-lg border border-gray-200">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Client
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Risk Level
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Assessments
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Last Session
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Next Appointment
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -461,50 +489,53 @@ const clientsWithProfiles = await Promise.all(
                     <tr key={client.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                              <span className="text-sm font-medium text-blue-600">
-                                {client.first_name[0]}{client.last_name[0]}
-                              </span>
-                            </div>
+                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <span className="text-sm font-semibold text-blue-700">
+                              {client.first_name?.[0]}
+                              {client.last_name?.[0]}
+                            </span>
                           </div>
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">
                               {client.first_name} {client.last_name}
                             </div>
-                            <div className="text-sm text-gray-500">{client.email}</div>
+                            <div className="text-sm text-gray-600">{client.email}</div>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getRiskBadgeClass(client.profile?.risk_level)}`}>
-  {client.profile?.risk_level || 'low'}
-                          </span>
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${riskClassFromLevel(
+                            client.profile?.risk_level
+                          )}`}
+                        >
+                          {client.profile?.risk_level || 'low'}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {client.stats?.completedAssessments}/{client.stats?.totalAssessments}
+                        {client.stats?.completedAssessments ?? 0}/{client.stats?.totalAssessments ?? 0}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {formatDate(client.stats?.lastSession)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {formatDate(client.stats?.nextAppointment)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
+                        <div className="flex items-center gap-2">
                           <button
                             onClick={() => {
                               setSelectedClient(client)
                               setShowClientDetails(true)
                             }}
-                            className="text-blue-600 hover:text-blue-900"
+                            className="text-blue-700 hover:text-blue-900"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
-                          <button className="text-green-600 hover:text-green-900">
+                          <button className="text-green-700 hover:text-green-900">
                             <Phone className="w-4 h-4" />
                           </button>
-                          <button className="text-purple-600 hover:text-purple-900">
+                          <button className="text-purple-700 hover:text-purple-900">
                             <Mail className="w-4 h-4" />
                           </button>
                         </div>
@@ -514,16 +545,13 @@ const clientsWithProfiles = await Promise.all(
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
 
       {/* Add Client Modal */}
       {showAddClient && (
-        <AddClientModal
-          onClose={() => setShowAddClient(false)}
-          onAdd={addClientToRoster}
-        />
+        <AddClientModal onClose={() => setShowAddClient(false)} onAdd={addClientToRoster} />
       )}
 
       {/* Client Details Modal */}
@@ -538,10 +566,16 @@ const clientsWithProfiles = await Promise.all(
   )
 }
 
-// Add Client Modal Component
+/* ----------------------------- Add Client Modal ---------------------------- */
+
 interface AddClientModalProps {
   onClose: () => void
-  onAdd: (clientData: { firstName: string; lastName: string; email: string; whatsappNumber: string }) => void
+  onAdd: (clientData: {
+    firstName: string
+    lastName: string
+    email: string
+    whatsappNumber: string
+  }) => void
 }
 
 const AddClientModal: React.FC<AddClientModalProps> = ({ onClose, onAdd }) => {
@@ -549,17 +583,11 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ onClose, onAdd }) => {
     firstName: '',
     lastName: '',
     email: '',
-    whatsappNumber: ''
+    whatsappNumber: '',
   })
   const [patientCode, setPatientCode] = useState('')
 
-  // Generate patient code when modal opens
-  React.useEffect(() => {
-    const generatePatientCode = () => {
-      const prefix = 'PT'
-      const randomNum = Math.floor(Math.random() * 900000) + 100000
-      return `${prefix}${randomNum}`
-    }
+  useEffect(() => {
     setPatientCode(generatePatientCode())
   }, [])
 
@@ -570,116 +598,116 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ onClose, onAdd }) => {
     }
   }
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: string, value: string) =>
     setFormData(prev => ({ ...prev, [field]: value }))
-  }
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div className="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
-        
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div className="inline-block w-full max-w-lg transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all sm:my-8 sm:align-middle">
           <form onSubmit={handleSubmit}>
-            <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-              <div className="sm:flex sm:items-start">
-                <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
-                  <Plus className="h-6 w-6 text-blue-600" />
-                </div>
-                <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900">
-                    Create New Client Account
-                  </h3>
-                  
-                  <div className="mt-4 space-y-4">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-medium text-blue-900">Patient Code:</span>
-                        <span className="text-sm font-mono text-blue-700 bg-white px-2 py-1 rounded">{patientCode}</span>
-                      </div>
-                      <p className="text-xs text-blue-700 mt-1">Auto-generated unique identifier for this client</p>
-                    </div>
+            <div className="bg-white px-6 pt-6 pb-4">
+              <h3 className="text-lg font-medium text-gray-900">Create New Client Account</h3>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
-                          First Name *
-                        </label>
-                        <input
-                          type="text"
-                          id="firstName"
-                          value={formData.firstName}
-                          onChange={(e) => handleChange('firstName', e.target.value)}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
-                          Last Name *
-                        </label>
-                        <input
-                          type="text"
-                          id="lastName"
-                          value={formData.lastName}
-                          onChange={(e) => handleChange('lastName', e.target.value)}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                        Email Address *
-                      </label>
-                      <input
-                        type="email"
-                        id="email"
-                        value={formData.email}
-                        onChange={(e) => handleChange('email', e.target.value)}
-                        placeholder="client@example.com"
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="whatsappNumber" className="block text-sm font-medium text-gray-700">
-                        WhatsApp Number *
-                      </label>
-                      <input
-                        type="tel"
-                        id="whatsappNumber"
-                        value={formData.whatsappNumber}
-                        onChange={(e) => handleChange('whatsappNumber', e.target.value)}
-                        placeholder="+1 (555) 123-4567"
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      />
-                    </div>
-
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                      <p className="text-sm text-amber-800">
-                        <strong>Note:</strong> The client will receive an email with their patient code and instructions to set up their password.
-                      </p>
-                    </div>
+              <div className="mt-4 space-y-4">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-blue-900">Patient Code:</span>
+                    <span className="rounded bg-white px-2 py-1 font-mono text-sm text-blue-700">
+                      {patientCode}
+                    </span>
                   </div>
+                  <p className="mt-1 text-xs text-blue-700">
+                    Auto-generated unique identifier for this client
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
+                      First Name *
+                    </label>
+                    <input
+                      id="firstName"
+                      type="text"
+                      value={formData.firstName}
+                      onChange={(e) => handleChange('firstName', e.target.value)}
+                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
+                      Last Name *
+                    </label>
+                    <input
+                      id="lastName"
+                      type="text"
+                      value={formData.lastName}
+                      onChange={(e) => handleChange('lastName', e.target.value)}
+                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    Email Address *
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleChange('email', e.target.value)}
+                    placeholder="client@example.com"
+                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="whatsappNumber" className="block text-sm font-medium text-gray-700">
+                    WhatsApp Number *
+                  </label>
+                  <input
+                    id="whatsappNumber"
+                    type="tel"
+                    value={formData.whatsappNumber}
+                    onChange={(e) => handleChange('whatsappNumber', e.target.value)}
+                    placeholder="+1 (555) 123-4567"
+                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-sm text-amber-800">
+                    <strong>Note:</strong> The client will receive an email with their patient code and
+                    instructions to set up their password.
+                  </p>
                 </div>
               </div>
             </div>
-            <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+
+            <div className="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse">
               <button
                 type="submit"
-                disabled={!formData.firstName || !formData.lastName || !formData.email || !formData.whatsappNumber}
-                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={
+                  !formData.firstName ||
+                  !formData.lastName ||
+                  !formData.email ||
+                  !formData.whatsappNumber
+                }
+                className="inline-flex w-full justify-center rounded-md bg-blue-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
               >
                 Create Client Account
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
               >
                 Cancel
               </button>
@@ -691,15 +719,16 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ onClose, onAdd }) => {
   )
 }
 
-// Client Details Modal Component
+/* --------------------------- Client Details Modal -------------------------- */
+
 interface ClientDetailsModalProps {
   client: Client
   onClose: () => void
-  onUpdate: (clientId: string, updates: any) => void
+  onUpdate: (clientId: string, updates: ClientProfileExtras) => void
 }
 
 const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ client, onClose, onUpdate }) => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ClientProfileExtras>({
     emergency_contact_name: client.profile?.emergency_contact_name || '',
     emergency_contact_phone: client.profile?.emergency_contact_phone || '',
     emergency_contact_relationship: client.profile?.emergency_contact_relationship || '',
@@ -708,7 +737,7 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ client, onClose
     presenting_concerns: client.profile?.presenting_concerns || '',
     therapy_history: client.profile?.therapy_history || '',
     risk_level: client.profile?.risk_level || 'low',
-    notes: client.profile?.notes || ''
+    notes: client.profile?.notes || '',
   })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -716,79 +745,64 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ client, onClose
     onUpdate(client.id, formData)
   }
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: keyof ClientProfileExtras, value: string) =>
     setFormData(prev => ({ ...prev, [field]: value }))
-  }
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div className="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
-        
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+        <div className="inline-block w-full max-w-4xl transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all sm:my-8 sm:align-middle">
           <form onSubmit={handleSubmit}>
-            <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
+            <div className="bg-white px-6 pt-6 pb-4">
+              <div className="mb-6 flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900">
                   Client Profile: {client.first_name} {client.last_name}
                 </h3>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <span className="sr-only">Close</span>
+                <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
                   <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-h-96 overflow-y-auto">
+              <div className="grid max-h-96 grid-cols-1 gap-6 overflow-y-auto md:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Emergency Contact Name
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Emergency Contact Name</label>
                   <input
                     type="text"
                     value={formData.emergency_contact_name}
                     onChange={(e) => handleChange('emergency_contact_name', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Emergency Contact Phone
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Emergency Contact Phone</label>
                   <input
                     type="tel"
                     value={formData.emergency_contact_phone}
                     onChange={(e) => handleChange('emergency_contact_phone', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Relationship
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Relationship</label>
                   <input
                     type="text"
                     value={formData.emergency_contact_relationship}
                     onChange={(e) => handleChange('emergency_contact_relationship', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Risk Level
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Risk Level</label>
                   <select
                     value={formData.risk_level}
                     onChange={(e) => handleChange('risk_level', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="low">Low Risk</option>
                     <option value="moderate">Moderate Risk</option>
@@ -798,78 +812,68 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ client, onClose
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Presenting Concerns
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Presenting Concerns</label>
                   <textarea
+                    rows={3}
                     value={formData.presenting_concerns}
                     onChange={(e) => handleChange('presenting_concerns', e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Medical History
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Medical History</label>
                   <textarea
+                    rows={3}
                     value={formData.medical_history}
                     onChange={(e) => handleChange('medical_history', e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Current Medications
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Current Medications</label>
                   <textarea
+                    rows={2}
                     value={formData.current_medications}
                     onChange={(e) => handleChange('current_medications', e.target.value)}
-                    rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Therapy History
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Therapy History</label>
                   <textarea
+                    rows={3}
                     value={formData.therapy_history}
                     onChange={(e) => handleChange('therapy_history', e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Clinical Notes
-                  </label>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Clinical Notes</label>
                   <textarea
+                    rows={4}
                     value={formData.notes}
                     onChange={(e) => handleChange('notes', e.target.value)}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
             </div>
-            
-            <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+
+            <div className="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse">
               <button
                 type="submit"
-                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
+                className="inline-flex w-full justify-center rounded-md bg-blue-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm"
               >
                 Update Profile
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
               >
                 Cancel
               </button>
