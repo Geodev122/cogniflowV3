@@ -1,7 +1,21 @@
+// src/components/therapist/InBetweenSessions.tsx
+
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { Baseline as Timeline, Plus, Calendar, TrendingUp, Clock, CheckCircle, AlertTriangle, BarChart3, MessageSquare, Target, Activity, Send, Eye, Filter } from 'lucide-react'
+import {
+  Baseline as Timeline,
+  Plus,
+  TrendingUp,
+  Clock,
+  CheckCircle,
+  BarChart3,
+  Target,
+  Activity,
+  Eye,
+  Filter,
+  Brain
+} from 'lucide-react'
 
 interface InBetweenSessionsProps {
   caseFile: any
@@ -60,12 +74,18 @@ export const InBetweenSessions: React.FC<InBetweenSessionsProps> = ({ caseFile, 
   const [submissions, setSubmissions] = useState<TaskSubmission[]>([])
   const [showNewTaskModal, setShowNewTaskModal] = useState(false)
   const [selectedTask, setSelectedTask] = useState<InBetweenTask | null>(null)
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
   const [filterStatus, setFilterStatus] = useState('all')
   const [loading, setLoading] = useState(true)
   const { profile } = useAuth()
 
+  const toggleExpanded = (id: string) => {
+    setExpandedTaskId(prev => (prev === id ? null : id))
+  }
+
   useEffect(() => {
     fetchInBetweenData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseFile])
 
   const fetchInBetweenData = async () => {
@@ -87,25 +107,28 @@ export const InBetweenSessions: React.FC<InBetweenSessionsProps> = ({ caseFile, 
         .eq('source_type', 'manual')
         .order('recorded_at', { ascending: false })
 
-      setTasks(taskData?.map(task => ({
-        id: task.id,
-        task_type: 'homework',
-        title: task.title,
-        description: task.instructions || '',
-        frequency: 'as_needed',
-        status: task.status === 'completed' ? 'completed' : 'active',
-        created_at: task.assigned_at,
-        submissions: []
-      })) || [])
+      setTasks(
+        taskData?.map(task => ({
+          id: task.id,
+          task_type: 'homework',
+          title: task.title,
+          description: task.instructions || '',
+          frequency: (task.reminder_frequency as 'daily' | 'weekly' | 'as_needed') || 'as_needed',
+          status: task.status === 'completed' ? 'completed' : 'active',
+          created_at: task.assigned_at,
+          submissions: []
+        })) || []
+      )
 
-      setSubmissions(submissionData?.map(sub => ({
-        id: sub.id,
-        task_id: sub.source_id || '',
-        submitted_at: sub.recorded_at,
-        data: { value: sub.value },
-        mood_rating: sub.value
-      })) || [])
-
+      setSubmissions(
+        submissionData?.map(sub => ({
+          id: sub.id,
+          task_id: sub.source_id || '',
+          submitted_at: sub.recorded_at,
+          data: { value: sub.value },
+          mood_rating: sub.value
+        })) || []
+      )
     } catch (error) {
       console.error('Error fetching in-between data:', error)
     } finally {
@@ -130,20 +153,18 @@ export const InBetweenSessions: React.FC<InBetweenSessionsProps> = ({ caseFile, 
       if (error) throw error
 
       // Log milestone
-      await supabase
-        .from('audit_logs')
-        .insert({
-          user_id: profile!.id,
-          action: 'between_session_task_created',
-          resource_type: 'task',
-          resource_id: null,
-          client_id: caseFile.client.id,
-          details: {
-            milestone: 'In-Between Progress Recorded',
-            task_type: taskData.type,
-            frequency: taskData.frequency
-          }
-        })
+      await supabase.from('audit_logs').insert({
+        user_id: profile!.id,
+        action: 'between_session_task_created',
+        resource_type: 'task',
+        resource_id: null,
+        client_id: caseFile.client.id,
+        details: {
+          milestone: 'In-Between Progress Recorded',
+          task_type: taskData.type,
+          frequency: taskData.frequency
+        }
+      })
 
       fetchInBetweenData()
       setShowNewTaskModal(false)
@@ -154,26 +175,54 @@ export const InBetweenSessions: React.FC<InBetweenSessionsProps> = ({ caseFile, 
 
   const getTaskTypeIcon = (type: string) => {
     switch (type) {
-      case 'mood_log': return <Activity className="w-5 h-5 text-blue-600" />
-      case 'thought_record': return <Brain className="w-5 h-5 text-purple-600" />
-      case 'assessment_checkin': return <BarChart3 className="w-5 h-5 text-green-600" />
-      case 'homework': return <Target className="w-5 h-5 text-orange-600" />
-      default: return <Clock className="w-5 h-5 text-gray-600" />
+      case 'mood_log':
+        return <Activity className="w-5 h-5 text-blue-600" />
+      case 'thought_record':
+        return <Brain className="w-5 h-5 text-purple-600" />
+      case 'assessment_checkin':
+        return <BarChart3 className="w-5 h-5 text-green-600" />
+      case 'homework':
+        return <Target className="w-5 h-5 text-orange-600" />
+      default:
+        return <Clock className="w-5 h-5 text-gray-600" />
     }
   }
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'text-green-600 bg-green-100'
-      case 'paused': return 'text-yellow-600 bg-yellow-100'
-      case 'completed': return 'text-blue-600 bg-blue-100'
-      default: return 'text-gray-600 bg-gray-100'
+      case 'active':
+        return 'text-green-600 bg-green-100'
+      case 'paused':
+        return 'text-yellow-600 bg-yellow-100'
+      case 'completed':
+        return 'text-blue-600 bg-blue-100'
+      default:
+        return 'text-gray-600 bg-gray-100'
     }
   }
 
-  const filteredTasks = tasks.filter(task => 
-    filterStatus === 'all' || task.status === filterStatus
+  // Memoized derived stats for perf & smoother UI
+  const activeCount = React.useMemo(
+    () => tasks.filter(t => t.status === 'active').length,
+    [tasks]
   )
+
+  const avgMood = React.useMemo(() => {
+    if (submissions.length === 0) return null
+    const total = submissions.reduce((sum, s) => sum + (s.mood_rating || 0), 0)
+    return Number((total / submissions.length).toFixed(1))
+  }, [submissions])
+
+  const compliancePct = React.useMemo(() => {
+    // naive: assume 7 opportunities/week per task
+    if (tasks.length === 0) return 0
+    const pct = Math.round((submissions.length / (tasks.length * 7)) * 100)
+    return isFinite(pct) && pct >= 0 ? pct : 0
+  }, [tasks, submissions])
+
+  const filteredTasks = React.useMemo(() => {
+    return tasks.filter(task => filterStatus === 'all' || task.status === filterStatus)
+  }, [tasks, filterStatus])
 
   if (loading) {
     return (
@@ -191,9 +240,10 @@ export const InBetweenSessions: React.FC<InBetweenSessionsProps> = ({ caseFile, 
             <Timeline className="w-6 h-6 text-blue-600" />
             <h3 className="text-xl font-semibold text-gray-900">In-Between Sessions Progress</h3>
           </div>
+          {/* Desktop primary action */}
           <button
             onClick={() => setShowNewTaskModal(true)}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="hidden sm:inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             <Plus className="w-4 h-4 mr-2" />
             New Task
@@ -207,9 +257,9 @@ export const InBetweenSessions: React.FC<InBetweenSessionsProps> = ({ caseFile, 
               <Activity className="w-5 h-5 text-blue-600" />
               <span className="font-medium text-blue-900">Active Tasks</span>
             </div>
-            <div className="text-2xl font-bold text-blue-600">{tasks.filter(t => t.status === 'active').length}</div>
+            <div className="text-2xl font-bold text-blue-600">{activeCount}</div>
           </div>
-          
+
           <div className="bg-green-50 p-4 rounded-lg">
             <div className="flex items-center space-x-2">
               <CheckCircle className="w-5 h-5 text-green-600" />
@@ -217,44 +267,55 @@ export const InBetweenSessions: React.FC<InBetweenSessionsProps> = ({ caseFile, 
             </div>
             <div className="text-2xl font-bold text-green-600">{submissions.length}</div>
           </div>
-          
+
           <div className="bg-purple-50 p-4 rounded-lg">
             <div className="flex items-center space-x-2">
               <TrendingUp className="w-5 h-5 text-purple-600" />
               <span className="font-medium text-purple-900">Avg Mood</span>
             </div>
             <div className="text-2xl font-bold text-purple-600">
-              {submissions.length > 0 
-                ? (submissions.reduce((sum, s) => sum + (s.mood_rating || 0), 0) / submissions.length).toFixed(1)
-                : 'N/A'
-              }
+              {avgMood !== null ? avgMood : 'N/A'}
             </div>
           </div>
-          
+
           <div className="bg-amber-50 p-4 rounded-lg">
             <div className="flex items-center space-x-2">
               <Clock className="w-5 h-5 text-amber-600" />
               <span className="font-medium text-amber-900">Compliance</span>
             </div>
-            <div className="text-2xl font-bold text-amber-600">
-              {tasks.length > 0 ? Math.round((submissions.length / (tasks.length * 7)) * 100) : 0}%
-            </div>
+            <div className="text-2xl font-bold text-amber-600">{compliancePct}%</div>
           </div>
         </div>
 
         {/* Filter */}
-        <div className="flex items-center space-x-4 mb-6">
-          <Filter className="w-5 h-5 text-gray-400" />
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="all">All Tasks</option>
-            <option value="active">Active</option>
-            <option value="paused">Paused</option>
-            <option value="completed">Completed</option>
-          </select>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-6">
+          <div className="flex items-center space-x-2">
+            <Filter className="w-5 h-5 text-gray-400" />
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              aria-label="Filter tasks by status"
+            >
+              <option value="all">All Tasks</option>
+              <option value="active">Active</option>
+              <option value="paused">Paused</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Sticky New Task on mobile */}
+        <div className="sm:hidden sticky top-[calc(100vh-5.5rem)] z-20">
+          <div className="px-1">
+            <button
+              onClick={() => setShowNewTaskModal(true)}
+              className="w-full inline-flex items-center justify-center rounded-full px-5 py-3 bg-blue-600 text-white shadow-lg"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              New Task
+            </button>
+          </div>
         </div>
 
         {/* Tasks List */}
@@ -262,9 +323,7 @@ export const InBetweenSessions: React.FC<InBetweenSessionsProps> = ({ caseFile, 
           <div className="text-center py-12">
             <Timeline className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">No between-session tasks</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Create tasks to track client progress between sessions.
-            </p>
+            <p className="mt-1 text-sm text-gray-500">Create tasks to track client progress between sessions.</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -287,12 +346,57 @@ export const InBetweenSessions: React.FC<InBetweenSessionsProps> = ({ caseFile, 
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(task.status)}`}>
                       {task.status}
                     </span>
+                    {/* Desktop: open modal */}
                     <button
                       onClick={() => setSelectedTask(task)}
-                      className="text-blue-600 hover:text-blue-800"
+                      className="hidden sm:inline-flex text-blue-600 hover:text-blue-800"
+                      aria-label="Open task details"
                     >
                       <Eye className="w-4 h-4" />
                     </button>
+                    {/* Mobile: toggle inline collapse */}
+                    <button
+                      onClick={() => toggleExpanded(task.id)}
+                      className="sm:hidden text-blue-600 hover:text-blue-800 text-xs font-medium"
+                      aria-expanded={expandedTaskId === task.id}
+                      aria-controls={`task-panel-${task.id}`}
+                    >
+                      {expandedTaskId === task.id ? 'Hide' : 'Details'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mobile inline details */}
+                <div
+                  id={`task-panel-${task.id}`}
+                  className={`sm:hidden overflow-hidden transition-[max-height] duration-300 ${expandedTaskId === task.id ? 'max-h-64' : 'max-h-0'}`}
+                >
+                  <div className="mt-3 border-t border-gray-200 pt-3">
+                    <div className="text-xs text-gray-500 mb-2">Recent Submissions</div>
+                    {submissions.filter(s => s.task_id === task.id).slice(0, 5).length === 0 ? (
+                      <p className="text-sm text-gray-500">No submissions yet</p>
+                    ) : (
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {submissions
+                          .filter(s => s.task_id === task.id)
+                          .slice(0, 5)
+                          .map((submission) => (
+                            <div key={submission.id} className="border border-gray-200 rounded-md p-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-gray-900">
+                                  {new Date(submission.submitted_at).toLocaleDateString()}
+                                </span>
+                                {typeof submission.mood_rating === 'number' && (
+                                  <span className="text-xs text-blue-600">Mood: {submission.mood_rating}/10</span>
+                                )}
+                              </div>
+                              {submission.client_notes && (
+                                <p className="text-xs text-gray-600 mt-1">{submission.client_notes}</p>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -303,10 +407,7 @@ export const InBetweenSessions: React.FC<InBetweenSessionsProps> = ({ caseFile, 
 
       {/* New Task Modal */}
       {showNewTaskModal && (
-        <NewTaskModal
-          onClose={() => setShowNewTaskModal(false)}
-          onCreate={createTask}
-        />
+        <NewTaskModal onClose={() => setShowNewTaskModal(false)} onCreate={createTask} />
       )}
 
       {/* Task Details Modal */}
@@ -359,11 +460,10 @@ const NewTaskModal: React.FC<NewTaskModalProps> = ({ onClose, onCreate }) => {
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
-        
         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
           <div className="bg-white px-6 pt-6 pb-4">
             <h3 className="text-lg font-medium text-gray-900 mb-6">Create Between-Session Task</h3>
-            
+
             <div className="space-y-6">
               <div>
                 <h4 className="font-medium text-gray-900 mb-4">Choose from Templates</h4>
@@ -421,7 +521,7 @@ const NewTaskModal: React.FC<NewTaskModalProps> = ({ onClose, onCreate }) => {
               </div>
             </div>
           </div>
-          
+
           <div className="bg-gray-50 px-6 py-4">
             <button
               onClick={onClose}
@@ -448,19 +548,17 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({ task, submissions, 
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
-        
         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
           <div className="bg-white px-6 pt-6 pb-4">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-medium text-gray-900">{task.title}</h3>
-              <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                <span className="sr-only">Close</span>
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" role="img" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            
+
             <div className="space-y-6">
               <div>
                 <h4 className="font-medium text-gray-900 mb-2">Task Details</h4>
@@ -484,10 +582,8 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({ task, submissions, 
                           <span className="text-sm font-medium text-gray-900">
                             {new Date(submission.submitted_at).toLocaleDateString()}
                           </span>
-                          {submission.mood_rating && (
-                            <span className="text-sm text-blue-600">
-                              Mood: {submission.mood_rating}/10
-                            </span>
+                          {typeof submission.mood_rating === 'number' && (
+                            <span className="text-sm text-blue-600">Mood: {submission.mood_rating}/10</span>
                           )}
                         </div>
                         {submission.client_notes && (
@@ -500,7 +596,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({ task, submissions, 
               </div>
             </div>
           </div>
-          
+
           <div className="bg-gray-50 px-6 py-4">
             <button
               onClick={onClose}
