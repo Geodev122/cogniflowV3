@@ -1,17 +1,15 @@
+// src/components/therapist/CommunicationTools.tsx
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDateTime, isRecursionError } from '../../utils/helpers'
-import { 
-  MessageSquare, 
-  Send, 
-  Phone, 
-  Mail, 
-  Search, 
+import {
+  MessageSquare,
+  Send,
+  Phone,
+  Mail,
+  Search,
   Filter,
-  User,
-  Clock,
-  CheckCircle,
   AlertTriangle,
   Plus
 } from 'lucide-react'
@@ -47,6 +45,7 @@ export default function CommunicationTools() {
       fetchCommunications()
       fetchClients()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile])
 
   const fetchCommunications = async () => {
@@ -89,14 +88,16 @@ export default function CommunicationTools() {
           console.warn('Error fetching client data for communications:', clientError)
         }
 
-        const communicationsWithClients = data?.map(comm => ({
-          ...comm,
-          client: clientData?.find(c => c.id === comm.client_id) || {
-            first_name: 'Unknown',
-            last_name: 'Client',
-            email: 'unknown@example.com'
-          }
-        })) || []
+        const communicationsWithClients =
+          data?.map(comm => ({
+            ...comm,
+            client:
+              clientData?.find(c => c.id === comm.client_id) || {
+                first_name: 'Unknown',
+                last_name: 'Client',
+                email: 'unknown@example.com'
+              }
+          })) || []
 
         setCommunications(communicationsWithClients)
       } else {
@@ -188,27 +189,39 @@ export default function CommunicationTools() {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'email': return <Mail className="w-4 h-4" />
-      case 'phone': return <Phone className="w-4 h-4" />
-      case 'text': return <MessageSquare className="w-4 h-4" />
-      default: return <MessageSquare className="w-4 h-4" />
+      case 'email':
+        return <Mail className="w-4 h-4" />
+      case 'phone':
+        return <Phone className="w-4 h-4" />
+      case 'text':
+        return <MessageSquare className="w-4 h-4" />
+      default:
+        return <MessageSquare className="w-4 h-4" />
     }
   }
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'sent': return 'text-blue-600 bg-blue-100'
-      case 'delivered': return 'text-green-600 bg-green-100'
-      case 'read': return 'text-purple-600 bg-purple-100'
-      case 'failed': return 'text-red-600 bg-red-100'
-      default: return 'text-gray-600 bg-gray-100'
+      case 'sent':
+        return 'text-blue-600 bg-blue-100'
+      case 'delivered':
+        return 'text-green-600 bg-green-100'
+      case 'read':
+        return 'text-purple-600 bg-purple-100'
+      case 'failed':
+        return 'text-red-600 bg-red-100'
+      default:
+        return 'text-gray-600 bg-gray-100'
     }
   }
 
   const filteredCommunications = communications.filter(comm => {
     const matchesType = typeFilter === 'all' || comm.communication_type === typeFilter
-    const matchesSearch = `${comm.client.first_name} ${comm.client.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (comm.subject || '').toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch =
+      `${comm.client.first_name} ${comm.client.last_name}`
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (comm.subject || '').toLowerCase().includes(searchTerm.toLowerCase())
     return matchesType && matchesSearch
   })
 
@@ -241,34 +254,51 @@ export default function CommunicationTools() {
         </div>
         <button
           onClick={() => setShowNewMessage(true)}
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="hidden sm:inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           <Plus className="w-4 h-4 mr-2" />
           New Message
         </button>
       </div>
 
+      {/* Mobile FAB */}
+      <button
+        onClick={() => setShowNewMessage(true)}
+        className="sm:hidden fixed bottom-20 right-4 z-30 rounded-full shadow-lg bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 flex items-center justify-center"
+        aria-label="New Message"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
+
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 items-start">
+          {/* Search */}
+          <label className="block col-span-1 sm:col-span-2">
+            <span className="sr-only">Search communications</span>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Search communications..."
+                placeholder="Search by client or subject…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-3 sm:py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                inputMode="search"
               />
             </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Filter className="w-5 h-5 text-gray-400" />
+          </label>
+
+          {/* Type filter */}
+          <label className="block">
+            <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+              <Filter className="w-4 h-4 text-gray-400" />
+              <span>Type</span>
+            </div>
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full border border-gray-300 rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
             >
               <option value="all">All Types</option>
               <option value="email">Email</option>
@@ -276,7 +306,7 @@ export default function CommunicationTools() {
               <option value="text">Text/WhatsApp</option>
               <option value="reminder">Reminders</option>
             </select>
-          </div>
+          </label>
         </div>
       </div>
 
@@ -292,37 +322,55 @@ export default function CommunicationTools() {
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {filteredCommunications.map((comm) => (
-              <div key={comm.id} className="p-6 hover:bg-gray-50">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-4">
-                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+            {filteredCommunications.map(comm => (
+              <div key={comm.id} className="p-4 sm:p-6 hover:bg-gray-50">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+                  {/* Left: avatar + main */}
+                  <div className="flex items-start gap-3 sm:gap-4">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
                       {getTypeIcon(comm.communication_type)}
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <h4 className="font-medium text-gray-900">
+
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+                        <h4 className="font-medium text-gray-900 truncate">
                           {comm.client.first_name} {comm.client.last_name}
                         </h4>
-                        <span className="text-sm text-gray-500">•</span>
-                        <span className="text-sm text-gray-500 capitalize">{comm.communication_type}</span>
+                        <span className="text-sm text-gray-400">•</span>
+                        <span className="text-xs sm:text-sm text-gray-500 capitalize">
+                          {comm.communication_type}
+                        </span>
                       </div>
+
                       {comm.subject && (
-                        <p className="text-sm font-medium text-gray-700 mb-1">{comm.subject}</p>
+                        <p className="text-sm font-medium text-gray-700 mb-0.5 line-clamp-1">
+                          {comm.subject}
+                        </p>
                       )}
                       {comm.content && (
-                        <p className="text-sm text-gray-600 line-clamp-2">{comm.content}</p>
+                        <p className="text-sm text-gray-600 line-clamp-2">
+                          {comm.content}
+                        </p>
                       )}
+
                       <p className="text-xs text-gray-500 mt-2">{formatDateTime(comm.created_at)}</p>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(comm.status)}`}>
+
+                  {/* Right: status pills */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${getStatusColor(comm.status)}`}
+                    >
                       {comm.status}
                     </span>
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                      comm.direction === 'outgoing' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
-                    }`}>
+                    <span
+                      className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${
+                        comm.direction === 'outgoing'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-green-100 text-green-800'
+                      }`}
+                    >
                       {comm.direction}
                     </span>
                   </div>
@@ -371,20 +419,22 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({ clients, onClose, onS
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
-        
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-          <form onSubmit={handleSubmit}>
-            <div className="bg-white px-6 pt-6 pb-4">
+
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle w-full sm:max-w-2xl">
+          <form onSubmit={handleSubmit} className="flex flex-col max-h-[85vh]">
+            {/* Header + body (scrollable) */}
+            <div className="bg-white px-6 pt-6 pb-4 overflow-y-auto">
               <h3 className="text-lg font-medium text-gray-900 mb-6">Send Message</h3>
-              
+
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                {/* Grid becomes two columns on sm+ */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Client</label>
                     <select
                       value={formData.clientId}
                       onChange={(e) => setFormData(prev => ({ ...prev, clientId: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full border border-gray-300 rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                       required
                     >
                       <option value="">Select a client</option>
@@ -395,12 +445,13 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({ clients, onClose, onS
                       ))}
                     </select>
                   </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
                     <select
                       value={formData.type}
                       onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full border border-gray-300 rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     >
                       <option value="email">Email</option>
                       <option value="text">WhatsApp</option>
@@ -416,7 +467,7 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({ clients, onClose, onS
                     type="text"
                     value={formData.subject}
                     onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     placeholder="Message subject"
                   />
                 </div>
@@ -426,7 +477,7 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({ clients, onClose, onS
                   <textarea
                     value={formData.content}
                     onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     rows={6}
                     placeholder="Type your message here..."
                     required
@@ -434,12 +485,13 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({ clients, onClose, onS
                 </div>
               </div>
             </div>
-            
-            <div className="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse">
+
+            {/* Footer (sticky inside modal) */}
+            <div className="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse border-t">
               <button
                 type="submit"
                 disabled={!formData.clientId || !formData.content}
-                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-3 sm:py-2 bg-blue-600 text-base sm:text-sm font-medium text-white hover:bg-blue-700 sm:ml-3 sm:w-auto disabled:opacity-50"
               >
                 <Send className="w-4 h-4 mr-2" />
                 Send Message
@@ -447,7 +499,7 @@ const NewMessageModal: React.FC<NewMessageModalProps> = ({ clients, onClose, onS
               <button
                 type="button"
                 onClick={onClose}
-                className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-3 sm:py-2 bg-white text-base sm:text-sm font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto"
               >
                 Cancel
               </button>
