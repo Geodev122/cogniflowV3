@@ -23,7 +23,9 @@ import {
   Eye,
   Phone,
   LogOut,
+  BarChart3,
 } from 'lucide-react'
+
 import { Navigate } from 'react-router-dom'
 import { TherapistOnboarding } from '../components/therapist/TherapistOnboarding'
 
@@ -39,6 +41,10 @@ const CaseManagement = React.lazy(() =>
 )
 // CommunicationTools has a default export already
 const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools'))
+// Progress Metrics: support either named or default export
+const ProgressMetrics = React.lazy(() =>
+  import('../components/therapist/ProgressMetrics').then(m => ({ default: (m as any).ProgressMetrics ?? m.default }))
+)
 
 interface DashboardStats {
   totalClients: number
@@ -83,6 +89,7 @@ type SectionId =
   | 'cases'
   | 'sessions'
   | 'leads'
+  | 'metrics'     // ⬅️ added
   | 'resources'
   | 'supervision'
   | 'admin'
@@ -129,7 +136,8 @@ export default function TherapistDashboard() {
       title: 'Practice Management',
       items: [
         { id: 'sessions', name: 'Session Management', icon: Calendar, color: 'purple' },
-        { id: 'leads', name: 'Client Leads', icon: Users, color: 'purple' }
+        { id: 'leads', name: 'Client Leads', icon: Users, color: 'purple' },
+        { id: 'metrics', name: 'Progress Metrics', icon: BarChart3, color: 'purple' } // ⬅️ added
       ]
     },
     {
@@ -671,7 +679,7 @@ export default function TherapistDashboard() {
                       return (
                         <button
                           key={tab.id}
-                          onClick={() => goto(tab.id)}
+                          onClick={() => goto(tab.id as SectionId)}
                           className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-xl transition-all duration-200 text-sm font-medium group relative overflow-hidden ${
                             isActive
                               ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg transform scale-105 border border-blue-400'
@@ -724,7 +732,7 @@ export default function TherapistDashboard() {
                           return (
                             <button
                               key={tab.id}
-                              onClick={() => goto(tab.id)}
+                              onClick={() => goto(tab.id as SectionId)}
                               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-all text-sm font-medium ${
                                 isActive ? 'text-blue-700 bg-blue-50' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                               }`}
@@ -758,6 +766,7 @@ export default function TherapistDashboard() {
               {active === 'cases'      && <CaseManagement />}
               {active === 'sessions'   && <SessionManagement />}
               {active === 'leads'      && <CommunicationTools />}
+              {active === 'metrics'    && <ProgressMetrics />} {/* ⬅️ added */}
               {active === 'resources'  && (
                 <div className="p-6">
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
