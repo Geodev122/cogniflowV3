@@ -342,7 +342,7 @@ export const ClientManagement: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 overflow-x-hidden">
       {/* Header */}
       {header}
 
