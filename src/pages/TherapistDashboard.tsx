@@ -1,5 +1,5 @@
 // src/pages/TherapistDashboard.tsx
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { isRecursionError } from '../utils/helpers'
@@ -23,10 +23,22 @@ import {
   Eye,
   Phone,
   LogOut,
-  Clock
 } from 'lucide-react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { TherapistOnboarding } from '../components/therapist/TherapistOnboarding'
+
+// Lazy load the tool pages so we can render them inline
+const ClientManagement = React.lazy(() =>
+  import('../components/therapist/ClientManagement').then(m => ({ default: m.ClientManagement }))
+)
+const SessionManagement = React.lazy(() =>
+  import('../components/therapist/SessionManagement').then(m => ({ default: m.SessionManagement }))
+)
+const CaseManagement = React.lazy(() =>
+  import('../components/therapist/CaseManagement').then(m => ({ default: m.CaseManagement }))
+)
+// CommunicationTools has a default export already
+const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools'))
 
 interface DashboardStats {
   totalClients: number
@@ -65,6 +77,16 @@ interface ActivityItem {
   icon: string
 }
 
+type SectionId =
+  | 'overview'
+  | 'clients'
+  | 'cases'
+  | 'sessions'
+  | 'leads'
+  | 'resources'
+  | 'supervision'
+  | 'admin'
+
 export default function TherapistDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -85,47 +107,39 @@ export default function TherapistDashboard() {
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState<string | null>(null)
 
-  const { profile, signOut } = useAuth()
-  const location = useLocation()
-  const navigate = useNavigate()
+  // NEW: internal active section (instead of navigating away)
+  const [active, setActive] = useState<SectionId>('overview')
 
-  // route-aware active key
-  const routeKey: 'overview' | 'clients' | 'cases' | 'resources' | 'sessions' | 'clinic' | 'leads' | 'support' | 'supervision' | 'admin' =
-    location.pathname.startsWith('/therapist/clients') ? 'clients' :
-    location.pathname.startsWith('/therapist/cases') ? 'cases' :
-    location.pathname.startsWith('/therapist/comms') ? 'leads' :
-    location.pathname.startsWith('/therapist/sessions') ? 'sessions' :
-    location.pathname.startsWith('/therapist') ? 'overview' :
-    'overview'
+  const { profile, signOut } = useAuth()
 
   const navigationSections = [
     {
       title: null,
-      items: [{ id: 'overview', name: 'Overview', icon: Target, color: 'blue', path: '/therapist' }]
+      items: [{ id: 'overview', name: 'Overview', icon: Target, color: 'blue' }]
     },
     {
       title: 'Client Care',
       items: [
-        { id: 'clients', name: 'Client Management', icon: Users, color: 'green', path: '/therapist/clients' },
-        { id: 'cases', name: 'Case Management', icon: FileText, color: 'green', path: '/therapist/cases' },
-        { id: 'resources', name: 'Resource Library', icon: Library, color: 'green', path: '/therapist/resources' } // optional route if/when you add it
+        { id: 'clients', name: 'Client Management', icon: Users, color: 'green' },
+        { id: 'cases', name: 'Case Management', icon: FileText, color: 'green' },
+        { id: 'resources', name: 'Resource Library', icon: Library, color: 'green' } // placeholder
       ]
     },
     {
       title: 'Practice Management',
       items: [
-        { id: 'sessions', name: 'Session Management', icon: Calendar, color: 'purple', path: '/therapist/sessions' },
-        { id: 'leads', name: 'Client Leads', icon: Users, color: 'purple', path: '/therapist/comms' }
+        { id: 'sessions', name: 'Session Management', icon: Calendar, color: 'purple' },
+        { id: 'leads', name: 'Client Leads', icon: Users, color: 'purple' }
       ]
     },
     {
       title: 'Support',
       items: [
-        { id: 'supervision', name: 'Supervision', icon: Headphones, color: 'amber', path: '/therapist/supervision' },
-        { id: 'admin', name: 'Contact Administrator', icon: Shield, color: 'amber', path: '/therapist/admin' }
+        { id: 'supervision', name: 'Supervision', icon: Headphones, color: 'amber' },
+        { id: 'admin', name: 'Contact Administrator', icon: Shield, color: 'amber' }
       ]
     }
-  ]
+  ] as const
 
   const fetchDashboardData = useCallback(async () => {
     if (!profile) return
@@ -193,7 +207,7 @@ export default function TherapistDashboard() {
         })) || []
       )
 
-      // placeholders for now
+      // placeholders
       setCaseInsights([
         {
           client_name: 'John Smith',
@@ -245,36 +259,9 @@ export default function TherapistDashboard() {
     fetchDashboardData()
   }
 
-  const goto = (id: string) => {
-    switch (id) {
-      case 'overview':
-        navigate('/therapist')
-        break
-      case 'clients':
-        navigate('/therapist/clients')
-        break
-      case 'cases':
-        navigate('/therapist/cases')
-        break
-      case 'resources':
-        // add route if/when you expose Resource Library as a page
-        navigate('/therapist/resources', { replace: false })
-        break
-      case 'sessions':
-        navigate('/therapist/sessions')
-        break
-      case 'leads':
-        navigate('/therapist/comms')
-        break
-      case 'supervision':
-        navigate('/therapist/supervision')
-        break
-      case 'admin':
-        navigate('/therapist/admin')
-        break
-      default:
-        navigate('/therapist')
-    }
+  // NEW: switch content inline, not via navigate()
+  const goto = (id: SectionId) => {
+    setActive(id)
     setMobileMenuOpen(false)
   }
 
@@ -680,7 +667,7 @@ export default function TherapistDashboard() {
                   <div className="space-y-1">
                     {section.items.map(tab => {
                       const Icon = tab.icon
-                      const isActive = routeKey === tab.id
+                      const isActive = active === tab.id
                       return (
                         <button
                           key={tab.id}
@@ -733,7 +720,7 @@ export default function TherapistDashboard() {
                       <div className="space-y-1">
                         {section.items.map(tab => {
                           const Icon = tab.icon
-                          const isActive = routeKey === tab.id
+                          const isActive = active === tab.id
                           return (
                             <button
                               key={tab.id}
@@ -759,8 +746,39 @@ export default function TherapistDashboard() {
         {/* Main Content */}
         <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} bg-gray-50 min-h-0`}>
           <main className="h-full overflow-hidden">
-            {/* This page now only renders the Overview; other sections live on their routes */}
-            <Overview />
+            <Suspense
+              fallback={
+                <div className="p-6">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" />
+                </div>
+              }
+            >
+              {active === 'overview'   && <Overview />}
+              {active === 'clients'    && <ClientManagement />}
+              {active === 'cases'      && <CaseManagement />}
+              {active === 'sessions'   && <SessionManagement />}
+              {active === 'leads'      && <CommunicationTools />}
+              {active === 'resources'  && (
+                <div className="p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
+                    <Library className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+                    <h3 className="text-gray-900 font-medium">Resource Library</h3>
+                    <p className="text-sm text-gray-600 mt-1">Coming soon.</p>
+                  </div>
+                </div>
+              )}
+              {(active === 'supervision' || active === 'admin') && (
+                <div className="p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
+                    {(active === 'supervision') ? <Headphones className="mx-auto h-10 w-10 text-gray-300 mb-2" /> : <Shield className="mx-auto h-10 w-10 text-gray-300 mb-2" />}
+                    <h3 className="text-gray-900 font-medium">
+                      {active === 'supervision' ? 'Supervision' : 'Contact Administrator'}
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">This section will be available soon.</p>
+                  </div>
+                </div>
+              )}
+            </Suspense>
           </main>
         </div>
       </div>
