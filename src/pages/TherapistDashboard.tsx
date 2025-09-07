@@ -24,12 +24,13 @@ import {
   Phone,
   LogOut,
   BarChart3,
+  Building2,
+  MessageCircle
 } from 'lucide-react'
-
 import { Navigate } from 'react-router-dom'
 import { TherapistOnboarding } from '../components/therapist/TherapistOnboarding'
 
-// Lazy load the tool pages so we can render them inline
+// Lazy load tool pages (with safe fallbacks where needed)
 const ClientManagement = React.lazy(() =>
   import('../components/therapist/ClientManagement').then(m => ({ default: m.ClientManagement }))
 )
@@ -39,26 +40,179 @@ const SessionManagement = React.lazy(() =>
 const CaseManagement = React.lazy(() =>
   import('../components/therapist/CaseManagement').then(m => ({ default: m.CaseManagement }))
 )
-// CommunicationTools has a default export already
 const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools'))
-// Progress Metrics: support either named or default export
-const ProgressMetrics = React.lazy(() =>
-  import('../components/therapist/ProgressMetrics').then(m => ({ default: (m as any).ProgressMetrics ?? m.default }))
-)
 
+// Defensive lazy import for ProgressMetrics (avoids Vite crash if file is missing)
+const ProgressMetrics = React.lazy(async () => {
+  try {
+    const m = await import('../components/therapist/ProgressMetrics')
+    return { default: (m as any).ProgressMetrics ?? m.default }
+  } catch {
+    return {
+      default: () => (
+        <div className="p-6">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
+            <BarChart3 className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+            <h3 className="text-gray-900 font-medium">Progress Metrics</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Metrics module not found. Add it at
+              <code className="px-1 mx-1 rounded bg-gray-100">src/components/therapist/ProgressMetrics.tsx</code>
+              to replace this placeholder.
+            </p>
+          </div>
+        </div>
+      )
+    }
+  }
+})
+
+// Defensive lazy import for ClinicRental; if missing, show a built-in functional placeholder
+const ClinicRental = React.lazy(async () => {
+  try {
+    const m = await import('../components/therapist/ClinicRental')
+    return { default: (m as any).ClinicRental ?? m.default }
+  } catch {
+    // Built-in functional placeholder: lists admin-managed spaces, allows booking request or WhatsApp enquiry
+    const Fallback: React.FC = () => {
+      // These would normally come from your DB (admin-listed)
+      const spaces = [
+        {
+          id: '1',
+          name: 'Downtown Therapy Room A',
+          location: 'Central Business District',
+          amenities: ['Soundproofing', 'Sofa + Armchair', 'Wi-Fi', 'Water'],
+          pricing: { hourly: 25, daily: 150, tailored: true },
+          externalWhatsapp: '971500000001', // E.164 without '+' for wa.me
+          managedExternally: false
+        },
+        {
+          id: '2',
+          name: 'Quiet Counselling Suite',
+          location: 'West End',
+          amenities: ['Desk', 'Waiting Area', 'Wi-Fi'],
+          pricing: { hourly: 20, daily: 120, tailored: true },
+          externalWhatsapp: '971500000002',
+          managedExternally: true // enquiry only (external)
+        },
+        {
+          id: '3',
+          name: 'Clinic Group Room',
+          location: 'Media City',
+          amenities: ['Group seating', 'Projector', 'Whiteboard', 'Wi-Fi'],
+          pricing: { hourly: 40, daily: 240, tailored: true },
+          externalWhatsapp: '971500000003',
+          managedExternally: false
+        }
+      ]
+
+      const openWhatsApp = (phone: string, text: string) => {
+        const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
+        window.open(url, '_blank', 'noopener,noreferrer')
+      }
+
+      return (
+        <div className="p-6">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Building2 className="w-6 h-6 text-blue-600" /> Clinic Rentals
+            </h2>
+            <p className="text-gray-600">Book an admin-listed clinic space by the hour, per day, or request a tailored plan. Some listings are externally managed—use WhatsApp to enquire.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {spaces.map(space => (
+              <div key={space.id} className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 flex flex-col">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{space.name}</h3>
+                    <p className="text-sm text-gray-600">{space.location}</p>
+                  </div>
+                  <Building2 className="w-5 h-5 text-gray-300" />
+                </div>
+
+                <div className="mt-3">
+                  <div className="text-xs text-gray-500 mb-1">Amenities</div>
+                  <div className="flex flex-wrap gap-2">
+                    {space.amenities.map(a => (
+                      <span key={a} className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">{a}</span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <div className="rounded-md border border-gray-200 p-3 text-center">
+                    <div className="text-xs text-gray-500">Hour</div>
+                    <div className="text-sm font-semibold text-gray-900">${space.pricing.hourly}</div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 p-3 text-center">
+                    <div className="text-xs text-gray-500">Per Day</div>
+                    <div className="text-sm font-semibold text-gray-900">${space.pricing.daily}</div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 p-3 text-center">
+                    <div className="text-xs text-gray-500">Tailored</div>
+                    <div className="text-sm font-semibold text-gray-900">{space.pricing.tailored ? 'Available' : '—'}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                  {!space.managedExternally ? (
+                    <>
+                      <button
+                        onClick={() => openWhatsApp(space.externalWhatsapp, `Hi, I'd like to book "${space.name}" for a few hours. Can you share availability and terms?`)}
+                        className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm"
+                      >
+                        Book Hour / Day
+                      </button>
+                      <button
+                        onClick={() => openWhatsApp(space.externalWhatsapp, `Hi, I'm interested in a tailored rental plan for "${space.name}".`)}
+                        className="inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm"
+                      >
+                        Tailored Plan
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => openWhatsApp(space.externalWhatsapp, `Hi, I'm enquiring about "${space.name}" (externally managed).`)}
+                      className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm"
+                    >
+                      <MessageCircle className="w-4 h-4" /> Enquire on WhatsApp
+                    </button>
+                  )}
+                </div>
+
+                {space.managedExternally && (
+                  <p className="mt-2 text-xs text-emerald-700">
+                    This listing is externally managed. Booking is handled off-platform—tap Enquire to continue on WhatsApp.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-md border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm text-amber-800">
+              <strong>Admin note:</strong> Clinic spaces are curated and managed by admins. If you need your clinic listed, contact the platform administrator.
+            </p>
+          </div>
+        </div>
+      )
+    }
+    return { default: Fallback }
+  }
+})
+
+// ---------------- Types ----------------
 interface DashboardStats {
   totalClients: number
   activeCases: number
   patientsToday: number
   profileCompletion: number
 }
-
 interface OnboardingStep {
   id: string
   title: string
   completed: boolean
 }
-
 interface TodaySession {
   id: string
   client_name: string
@@ -66,14 +220,12 @@ interface TodaySession {
   type: string
   notes?: string
 }
-
 interface CaseInsight {
   client_name: string
   insight: string
   recommendation: string
   priority: 'high' | 'medium' | 'low'
 }
-
 interface ActivityItem {
   id: string
   type: 'client' | 'supervision' | 'admin'
@@ -82,18 +234,19 @@ interface ActivityItem {
   time: string
   icon: string
 }
-
 type SectionId =
   | 'overview'
   | 'clients'
   | 'cases'
   | 'sessions'
   | 'leads'
-  | 'metrics'     // ⬅️ added
+  | 'metrics'
+  | 'clinic'
   | 'resources'
   | 'supervision'
   | 'admin'
 
+// ---------------- Component ----------------
 export default function TherapistDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -113,8 +266,6 @@ export default function TherapistDashboard() {
   const [profileLive, setProfileLive] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState<string | null>(null)
-
-  // NEW: internal active section (instead of navigating away)
   const [active, setActive] = useState<SectionId>('overview')
 
   const { profile, signOut } = useAuth()
@@ -129,7 +280,7 @@ export default function TherapistDashboard() {
       items: [
         { id: 'clients', name: 'Client Management', icon: Users, color: 'green' },
         { id: 'cases', name: 'Case Management', icon: FileText, color: 'green' },
-        { id: 'resources', name: 'Resource Library', icon: Library, color: 'green' } // placeholder
+        { id: 'resources', name: 'Resource Library', icon: Library, color: 'green' }
       ]
     },
     {
@@ -137,7 +288,8 @@ export default function TherapistDashboard() {
       items: [
         { id: 'sessions', name: 'Session Management', icon: Calendar, color: 'purple' },
         { id: 'leads', name: 'Client Leads', icon: Users, color: 'purple' },
-        { id: 'metrics', name: 'Progress Metrics', icon: BarChart3, color: 'purple' } // ⬅️ added
+        { id: 'metrics', name: 'Progress Metrics', icon: BarChart3, color: 'purple' },
+        { id: 'clinic', name: 'Clinic Rentals', icon: Building2, color: 'purple' }
       ]
     },
     {
@@ -217,18 +369,8 @@ export default function TherapistDashboard() {
 
       // placeholders
       setCaseInsights([
-        {
-          client_name: 'John Smith',
-          insight: 'Showing consistent improvement in anxiety scores',
-          recommendation: 'Consider reducing session frequency to bi-weekly',
-          priority: 'medium'
-        },
-        {
-          client_name: 'Emily Davis',
-          insight: 'Missed last two assignments',
-          recommendation: 'Schedule check-in call to assess barriers',
-          priority: 'high'
-        }
+        { client_name: 'John Smith',  insight: 'Showing consistent improvement in anxiety scores', recommendation: 'Consider reducing session frequency to bi-weekly', priority: 'medium' },
+        { client_name: 'Emily Davis', insight: 'Missed last two assignments', recommendation: 'Schedule check-in call to assess barriers', priority: 'high' }
       ])
       setRecentActivities([
         { id: '1', type: 'client',      title: 'John completed PHQ-9 assessment', description: 'Score improved from 15 to 12', time: '2 hours ago', icon: 'CheckCircle' },
@@ -267,7 +409,6 @@ export default function TherapistDashboard() {
     fetchDashboardData()
   }
 
-  // NEW: switch content inline, not via navigate()
   const goto = (id: SectionId) => {
     setActive(id)
     setMobileMenuOpen(false)
@@ -275,7 +416,6 @@ export default function TherapistDashboard() {
 
   const Overview = () => (
     <div className="h-full overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
-      {/* Onboarding Widget */}
       {!profileLive && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
@@ -285,34 +425,24 @@ export default function TherapistDashboard() {
           <div className="space-y-3 mb-4">
             {onboardingSteps.map((step, index) => (
               <div key={step.id} className="flex items-center space-x-3">
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                    step.completed ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
-                  }`}
-                >
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${step.completed ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
                   {step.completed ? <CheckCircle className="w-4 h-4" /> : <span className="text-xs">{index + 1}</span>}
                 </div>
                 <span className={`text-sm ${step.completed ? 'text-gray-700' : 'text-gray-500'}`}>{step.title}</span>
               </div>
             ))}
           </div>
-          <button
-            onClick={() => setShowOnboardingModal(true)}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
-          >
+          <button onClick={() => setShowOnboardingModal(true)} className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
             Continue Setup
           </button>
         </div>
       )}
 
-      {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-xl shadow-lg">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold mb-1">Welcome back, Dr. {profile?.first_name}!</h2>
-            <p className="text-blue-100">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            </p>
+            <p className="text-blue-100">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
           </div>
           {profileLive && (
             <div className="flex items-center space-x-2 bg-green-500 bg-opacity-20 px-3 py-1 rounded-full">
@@ -323,7 +453,6 @@ export default function TherapistDashboard() {
         </div>
       </div>
 
-      {/* Key Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
@@ -331,50 +460,36 @@ export default function TherapistDashboard() {
               <p className="text-sm font-medium text-gray-600">Total Clients</p>
               <p className="text-3xl font-bold text-blue-600">{stats.totalClients}</p>
             </div>
-            <div className="p-3 bg-blue-100 rounded-full">
-              <Users className="h-6 w-6 text-blue-600" />
-            </div>
+            <div className="p-3 bg-blue-100 rounded-full"><Users className="h-6 w-6 text-blue-600" /></div>
           </div>
         </div>
-
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Active Cases</p>
               <p className="text-3xl font-bold text-green-600">{stats.activeCases}</p>
             </div>
-            <div className="p-3 bg-green-100 rounded-full">
-              <FileText className="h-6 w-6 text-green-600" />
-            </div>
+            <div className="p-3 bg-green-100 rounded-full"><FileText className="h-6 w-6 text-green-600" /></div>
           </div>
         </div>
-
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Patients Today</p>
               <p className="text-3xl font-bold text-purple-600">{stats.patientsToday}</p>
             </div>
-            <div className="p-3 bg-purple-100 rounded-full">
-              <CalendarDays className="h-6 w-6 text-purple-600" />
-            </div>
+            <div className="p-3 bg-purple-100 rounded-full"><CalendarDays className="h-6 w-6 text-purple-600" /></div>
           </div>
         </div>
       </div>
 
-      {/* Today’s Schedule */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Today's Schedule</h3>
-          <button
-            onClick={() => goto('sessions')}
-            className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            Schedule
+          <button onClick={() => goto('sessions')} className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+            <Plus className="w-4 h-4 mr-1" /> Schedule
           </button>
         </div>
-
         {todaySessions.length === 0 ? (
           <div className="text-center py-8">
             <Calendar className="mx-auto h-12 w-12 text-gray-400 mb-4" />
@@ -386,33 +501,21 @@ export default function TherapistDashboard() {
             {todaySessions.map(session => (
               <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                    <User className="w-5 h-5 text-blue-600" />
-                  </div>
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><User className="w-5 h-5 text-blue-600" /></div>
                   <div>
                     <h4 className="font-medium text-gray-900">{session.client_name}</h4>
-                    <p className="text-sm text-gray-600">
-                      {session.time} • {session.type}
-                    </p>
+                    <p className="text-sm text-gray-600">{session.time} • {session.type}</p>
                   </div>
                 </div>
-                <button className="text-blue-600 hover:text-blue-800">
-                  <Eye className="w-4 h-4" />
-                </button>
+                <button className="text-blue-600 hover:text-blue-800"><Eye className="w-4 h-4" /></button>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Case Insights */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg">
-            <Brain className="w-5 h-5 text-white" />
-          </div>
-        </div>
-
+        <div className="flex items-center space-x-3 mb-6"><div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg"><Brain className="w-5 h-5 text-white" /></div></div>
         <div className="space-y-4">
           {caseInsights.map((insight, index) => (
             <div key={index} className="border border-gray-200 rounded-lg p-4">
@@ -422,88 +525,58 @@ export default function TherapistDashboard() {
                   <p className="text-sm text-gray-600 mt-1">{insight.insight}</p>
                   <p className="text-sm text-blue-600 mt-2">💡 {insight.recommendation}</p>
                 </div>
-                <span
-                  className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                    insight.priority === 'high'
-                      ? 'bg-red-100 text-red-800'
-                      : insight.priority === 'medium'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-green-100 text-green-800'
-                  }`}
-                >
-                  {insight.priority}
-                </span>
+                <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                  insight.priority === 'high' ? 'bg-red-100 text-red-800'
+                : insight.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+                }`}>{insight.priority}</span>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Recent Activities */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-6">Recent Activities</h3>
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Client */}
           <div>
-            <h4 className="font-medium text-green-900 mb-3 flex items-center">
-              <Users className="w-4 h-4 mr-2 text-green-600" />
-              Client Activities
-            </h4>
+            <h4 className="font-medium text-green-900 mb-3 flex items-center"><Users className="w-4 h-4 mr-2 text-green-600" />Client Activities</h4>
             <div className="space-y-3">
-              {recentActivities
-                .filter(a => a.type === 'client')
-                .map(activity => (
-                  <div key={activity.id} className="p-3 bg-green-50 rounded-lg">
-                    <p className="text-sm font-medium text-green-900">{activity.title}</p>
-                    <p className="text-xs text-green-700">{activity.description}</p>
-                    <p className="text-xs text-green-600 mt-1">{activity.time}</p>
-                  </div>
-                ))}
+              {recentActivities.filter(a => a.type === 'client').map(a => (
+                <div key={a.id} className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-sm font-medium text-green-900">{a.title}</p>
+                  <p className="text-xs text-green-700">{a.description}</p>
+                  <p className="text-xs text-green-600 mt-1">{a.time}</p>
+                </div>
+              ))}
             </div>
           </div>
-
-          {/* Supervision */}
           <div>
-            <h4 className="font-medium text-amber-900 mb-3 flex items-center">
-              <Headphones className="w-4 h-4 mr-2 text-amber-600" />
-              Supervision Updates
-            </h4>
+            <h4 className="font-medium text-amber-900 mb-3 flex items-center"><Headphones className="w-4 h-4 mr-2 text-amber-600" />Supervision Updates</h4>
             <div className="space-y-3">
-              {recentActivities
-                .filter(a => a.type === 'supervision')
-                .map(activity => (
-                  <div key={activity.id} className="p-3 bg-amber-50 rounded-lg">
-                    <p className="text-sm font-medium text-amber-900">{activity.title}</p>
-                    <p className="text-xs text-amber-700">{activity.description}</p>
-                    <p className="text-xs text-amber-600 mt-1">{activity.time}</p>
-                  </div>
-                ))}
+              {recentActivities.filter(a => a.type === 'supervision').map(a => (
+                <div key={a.id} className="p-3 bg-amber-50 rounded-lg">
+                  <p className="text-sm font-medium text-amber-900">{a.title}</p>
+                  <p className="text-xs text-amber-700">{a.description}</p>
+                  <p className="text-xs text-amber-600 mt-1">{a.time}</p>
+                </div>
+              ))}
             </div>
           </div>
-
-          {/* Admin */}
           <div>
-            <h4 className="font-medium text-blue-900 mb-3 flex items-center">
-              <Shield className="w-4 h-4 mr-2 text-blue-600" />
-              Admin Updates
-            </h4>
+            <h4 className="font-medium text-blue-900 mb-3 flex items-center"><Shield className="w-4 h-4 mr-2 text-blue-600" />Admin Updates</h4>
             <div className="space-y-3">
-              {recentActivities
-                .filter(a => a.type === 'admin')
-                .map(activity => (
-                  <div key={activity.id} className="p-3 bg-blue-50 rounded-lg">
-                    <p className="text-sm font-medium text-blue-900">{activity.title}</p>
-                    <p className="text-xs text-blue-700">{activity.description}</p>
-                    <p className="text-xs text-blue-600 mt-1">{activity.time}</p>
-                  </div>
-                ))}
+              {recentActivities.filter(a => a.type === 'admin').map(a => (
+                <div key={a.id} className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-sm font-medium text-blue-900">{a.title}</p>
+                  <p className="text-xs text-blue-700">{a.description}</p>
+                  <p className="text-xs text-blue-600 mt-1">{a.time}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Quick Actions */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-6">Quick Actions</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -511,17 +584,14 @@ export default function TherapistDashboard() {
             <Users className="w-8 h-8 text-green-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-green-900">Add Client</p>
           </button>
-
           <button onClick={() => goto('sessions')} className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors group">
             <Calendar className="w-8 h-8 text-purple-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-purple-900">Schedule Session</p>
           </button>
-
           <button onClick={() => goto('leads')} className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group">
             <Library className="w-8 h-8 text-blue-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-blue-900">Assign Assessment</p>
           </button>
-
           <button onClick={() => goto('cases')} className="p-4 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors group">
             <FileText className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-indigo-900">View Cases</p>
@@ -541,7 +611,7 @@ export default function TherapistDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Fixed Header */}
+      {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-white shadow-sm border-b border-gray-200">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
@@ -552,25 +622,17 @@ export default function TherapistDashboard() {
                     src="/thera-py-icon.png"
                     alt="Thera-PY Logo"
                     className="w-8 h-8"
-                    onError={e => {
-                      console.error('Logo icon failed to load')
-                      e.currentTarget.style.display = 'none'
-                    }}
+                    onError={e => { e.currentTarget.style.display = 'none' }}
                   />
                   <img
                     src="/thera-py-image.png"
                     alt="Thera-PY"
                     className="h-6"
-                    onError={e => {
-                      console.error('Logo text failed to load')
-                      e.currentTarget.outerHTML = '<span class="text-xl font-bold text-gray-900">Thera-PY</span>'
-                    }}
+                    onError={e => { e.currentTarget.outerHTML = '<span class="text-xl font-bold text-gray-900">Thera-PY</span>' }}
                   />
                 </div>
               </div>
-              <div className="hidden sm:block">
-                <p className="text-sm text-gray-500">Therapist Portal</p>
-              </div>
+              <div className="hidden sm:block"><p className="text-sm text-gray-500">Therapist Portal</p></div>
             </div>
 
             <div className="flex items-center space-x-4">
@@ -587,14 +649,11 @@ export default function TherapistDashboard() {
               >
                 <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                   <span className="text-xs font-medium text-blue-600">
-                    {profile?.first_name?.[0]}
-                    {profile?.last_name?.[0]}
+                    {profile?.first_name?.[0]}{profile?.last_name?.[0]}
                   </span>
                 </div>
                 <div className="hidden sm:block text-left">
-                  <div className="font-medium">
-                    {profile?.first_name} {profile?.last_name}
-                  </div>
+                  <div className="font-medium">{profile?.first_name} {profile?.last_name}</div>
                   <div className="text-xs text-gray-500">View Profile</div>
                 </div>
               </button>
@@ -613,22 +672,18 @@ export default function TherapistDashboard() {
                 <span className="hidden sm:inline">{isSigningOut ? 'Signing out...' : 'Sign out'}</span>
               </button>
 
-              {/* Mobile Menu Button */}
               <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors">
                 {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
             </div>
           </div>
 
-          {/* Sign out error notification */}
           {signOutError && (
             <div className="bg-red-50 border-l-4 border-red-400 p-3">
               <div className="flex items-center">
                 <AlertTriangle className="w-4 h-4 text-red-400 mr-2" />
                 <span className="text-sm text-red-700">{signOutError}</span>
-                <button onClick={() => setSignOutError(null)} className="ml-auto text-red-400 hover:text-red-600">
-                  <span className="sr-only">Dismiss</span>×
-                </button>
+                <button onClick={() => setSignOutError(null)} className="ml-auto text-red-400 hover:text-red-600">×</button>
               </div>
             </div>
           )}
@@ -636,23 +691,18 @@ export default function TherapistDashboard() {
       </header>
 
       <div className="flex pt-16">
-        {/* Sidebar (desktop) */}
-        <div
-          className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 fixed left-0 top-16 bottom-0 transition-all duration-300 shadow-lg z-30`}
-        >
+        {/* Sidebar */}
+        <div className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 fixed left-0 top-16 bottom-0 transition-all duration-300 shadow-lg z-30`}>
           <div className="flex-shrink-0 border-b border-gray-100">
             <div className="p-4 flex items-center justify-between">
               {!sidebarCollapsed && (
                 <h3 className="text-sm font-semibold text-gray-800 flex items-center">
-                  <Target className="w-4 h-4 mr-2 text-blue-600" />
-                  Navigation
+                  <Target className="w-4 h-4 mr-2 text-blue-600" /> Navigation
                 </h3>
               )}
               <button
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className={`w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center hover:from-blue-600 hover:to-indigo-700 group transform hover:scale-110 ${
-                  sidebarCollapsed ? 'mx-auto' : ''
-                } relative overflow-hidden`}
+                className={`w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center hover:from-blue-600 hover:to-indigo-700 group transform hover:scale-110 ${sidebarCollapsed ? 'mx-auto' : ''} relative overflow-hidden`}
                 title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
@@ -675,7 +725,7 @@ export default function TherapistDashboard() {
                   <div className="space-y-1">
                     {section.items.map(tab => {
                       const Icon = tab.icon
-                      const isActive = active === tab.id
+                      const isActive = active === (tab.id as SectionId)
                       return (
                         <button
                           key={tab.id}
@@ -687,11 +737,7 @@ export default function TherapistDashboard() {
                           }`}
                           title={sidebarCollapsed ? tab.name : undefined}
                         >
-                          <Icon
-                            className={`w-5 h-5 flex-shrink-0 transition-all duration-200 group-hover:scale-125 ${
-                              isActive ? 'text-white drop-shadow-sm' : 'text-gray-400 group-hover:text-blue-600'
-                            }`}
-                          />
+                          <Icon className={`w-5 h-5 flex-shrink-0 transition-all duration-200 group-hover:scale-125 ${isActive ? 'text-white drop-shadow-sm' : 'text-gray-400 group-hover:text-blue-600'}`} />
                           {!sidebarCollapsed && <span className="transition-all duration-200 font-medium group-hover:font-semibold">{tab.name}</span>}
                           {isActive && !sidebarCollapsed && <div className="absolute right-3 w-2 h-2 bg-white rounded-full opacity-90 animate-pulse shadow-sm"></div>}
                           {isActive && <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent pointer-events-none"></div>}
@@ -715,7 +761,7 @@ export default function TherapistDashboard() {
           )}
         </div>
 
-        {/* Mobile Navigation Overlay */}
+        {/* Mobile Nav */}
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-0 z-50 pt-16">
             <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setMobileMenuOpen(false)} />
@@ -728,14 +774,12 @@ export default function TherapistDashboard() {
                       <div className="space-y-1">
                         {section.items.map(tab => {
                           const Icon = tab.icon
-                          const isActive = active === tab.id
+                          const isActive = active === (tab.id as SectionId)
                           return (
                             <button
                               key={tab.id}
                               onClick={() => goto(tab.id as SectionId)}
-                              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-all text-sm font-medium ${
-                                isActive ? 'text-blue-700 bg-blue-50' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                              }`}
+                              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-all text-sm font-medium ${isActive ? 'text-blue-700 bg-blue-50' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
                             >
                               <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />
                               <span>{tab.name}</span>
@@ -754,19 +798,14 @@ export default function TherapistDashboard() {
         {/* Main Content */}
         <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} bg-gray-50 min-h-0`}>
           <main className="min-h-[calc(100vh-4rem)] overflow-y-auto">
-            <Suspense
-              fallback={
-                <div className="p-6">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" />
-                </div>
-              }
-            >
+            <Suspense fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>}>
               {active === 'overview'   && <Overview />}
               {active === 'clients'    && <ClientManagement />}
               {active === 'cases'      && <CaseManagement />}
               {active === 'sessions'   && <SessionManagement />}
               {active === 'leads'      && <CommunicationTools />}
-              {active === 'metrics'    && <ProgressMetrics />} {/* ⬅️ added */}
+              {active === 'metrics'    && <ProgressMetrics />}
+              {active === 'clinic'     && <ClinicRental />}
               {active === 'resources'  && (
                 <div className="p-6">
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
@@ -780,9 +819,7 @@ export default function TherapistDashboard() {
                 <div className="p-6">
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
                     {(active === 'supervision') ? <Headphones className="mx-auto h-10 w-10 text-gray-300 mb-2" /> : <Shield className="mx-auto h-10 w-10 text-gray-300 mb-2" />}
-                    <h3 className="text-gray-900 font-medium">
-                      {active === 'supervision' ? 'Supervision' : 'Contact Administrator'}
-                    </h3>
+                    <h3 className="text-gray-900 font-medium">{active === 'supervision' ? 'Supervision' : 'Contact Administrator'}</h3>
                     <p className="text-sm text-gray-600 mt-1">This section will be available soon.</p>
                   </div>
                 </div>
@@ -796,7 +833,6 @@ export default function TherapistDashboard() {
       {showOnboardingModal && (
         <TherapistOnboarding onComplete={handleOnboardingComplete} onClose={() => setShowOnboardingModal(false)} />
       )}
-
       {showProfileModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -827,12 +863,11 @@ export default function TherapistDashboard() {
   )
 }
 
-// Simple Modern Profile Component
+// Simple Profile
 const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = ({ profile, onEdit }) => {
   const professionalDetails = profile?.professional_details || {}
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Header */}
       <div className="text-center">
         <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <User className="w-12 h-12 text-blue-600" />
@@ -852,7 +887,6 @@ const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = (
         </div>
       </div>
 
-      {/* Contact Info */}
       <div className="bg-gray-50 rounded-lg p-4">
         <h3 className="font-medium text-gray-900 mb-3">Contact Information</h3>
         <div className="space-y-2">
@@ -863,7 +897,6 @@ const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = (
         </div>
       </div>
 
-      {/* Specializations */}
       {professionalDetails.specializations && (
         <div className="bg-gray-50 rounded-lg p-4">
           <h3 className="font-medium text-gray-900 mb-3">Specializations</h3>
@@ -877,7 +910,6 @@ const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = (
         </div>
       )}
 
-      {/* Languages */}
       {professionalDetails.languages && (
         <div className="bg-gray-50 rounded-lg p-4">
           <h3 className="font-medium text-gray-900 mb-3">Languages</h3>
@@ -891,7 +923,6 @@ const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = (
         </div>
       )}
 
-      {/* Bio */}
       {professionalDetails.bio && (
         <div className="bg-gray-50 rounded-lg p-4">
           <h3 className="font-medium text-gray-900 mb-3">About</h3>
@@ -899,7 +930,6 @@ const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = (
         </div>
       )}
 
-      {/* Qualifications */}
       {professionalDetails.qualifications && (
         <div className="bg-gray-50 rounded-lg p-4">
           <h3 className="font-medium text-gray-900 mb-3">Qualifications</h3>
@@ -917,11 +947,12 @@ const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = (
         </div>
       )}
 
-      {/* Edit */}
       <div className="text-center">
-        <button onClick={onEdit} className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-          <User className="w-4 h-4 mr-2" />
-          Edit Profile
+        <button
+          onClick={onEdit}
+          className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <User className="w-4 h-4 mr-2" /> Edit Profile
         </button>
       </div>
     </div>
