@@ -1,6 +1,5 @@
 // src/components/therapist/ClientManagement.tsx
-
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import {
@@ -17,6 +16,7 @@ import {
   Edit,
   Phone,
   Mail,
+  AlertTriangle,
 } from 'lucide-react'
 
 interface ClientProfileExtras {
@@ -50,31 +50,22 @@ interface Client {
 
 export const ClientManagement: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([])
-  const [filteredClients, setFilteredClients] = useState<Client[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [riskFilter, setRiskFilter] = useState<string>('all')
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [showAddClient, setShowAddClient] = useState(false)
   const [showClientDetails, setShowClientDetails] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const { profile } = useAuth()
 
-  useEffect(() => {
-    if (profile) fetchClients()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile])
-
-  useEffect(() => {
-    filterClients()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clients, searchTerm, riskFilter])
-
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     if (!profile) return
-    try {
-      setLoading(true)
+    setLoading(true)
+    setErrorMsg(null)
 
-      // 1) relations
+    try {
+      // 1) map therapist relations
       const { data: relations, error: relationsError } = await supabase
         .from('therapist_client_relations')
         .select('client_id')
@@ -90,17 +81,45 @@ export const ClientManagement: React.FC = () => {
         return
       }
 
-      const clientIds = relations?.map(r => r.client_id) || []
-      if (clientIds.length === 0) {
+      const clientIds = relations?.map((r) => r.client_id) || []
+      if (!clientIds.length) {
         setClients([])
         return
       }
 
-      // 2) basic client profiles
-      const { data: clientProfiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name, email, created_at')
-        .in('id', clientIds)
+      // 2) pull base profiles for these clients
+      const [{ data: clientProfiles, error: profilesError }, clientExtras, assignments, apptsCompleted, apptsUpcoming] =
+        await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, first_name, last_name, email, created_at')
+            .in('id', clientIds),
+          supabase
+            .from('client_profiles')
+            .select('client_id, therapist_id, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship, medical_history, current_medications, presenting_concerns, therapy_history, risk_level, notes, updated_at')
+            .eq('therapist_id', profile.id)
+            .in('client_id', clientIds),
+          supabase
+            .from('form_assignments')
+            .select('client_id, status')
+            .eq('therapist_id', profile.id)
+            .in('client_id', clientIds),
+          supabase
+            .from('appointments')
+            .select('client_id, appointment_date')
+            .eq('therapist_id', profile.id)
+            .in('client_id', clientIds)
+            .eq('status', 'completed')
+            .order('appointment_date', { ascending: false }),
+          supabase
+            .from('appointments')
+            .select('client_id, appointment_date')
+            .eq('therapist_id', profile.id)
+            .in('client_id', clientIds)
+            .eq('status', 'scheduled')
+            .gte('appointment_date', new Date().toISOString())
+            .order('appointment_date', { ascending: true }),
+        ])
 
       if (profilesError) {
         if (isRecursionError(profilesError)) {
@@ -112,111 +131,88 @@ export const ClientManagement: React.FC = () => {
         return
       }
 
-      // 3) hydrate each client with extras/stats
-      const enriched = await Promise.all(
-        (clientProfiles || []).map(async (client: any) => {
-          try {
-            const [{ data: clientProfile, error: extendedError }, { data: assessments, error: assessmentsError }, { data: lastSession, error: lastSessionError }, { data: nextAppointment, error: nextAppointmentError }] =
-              await Promise.all([
-                supabase
-                  .from('client_profiles')
-                  .select('*')
-                  .eq('client_id', client.id)
-                  .eq('therapist_id', profile.id)
-                  .maybeSingle(),
-                supabase
-                  .from('form_assignments')
-                  .select('status')
-                  .eq('client_id', client.id)
-                  .eq('therapist_id', profile.id),
-                supabase
-                  .from('appointments')
-                  .select('appointment_date')
-                  .eq('client_id', client.id)
-                  .eq('therapist_id', profile.id)
-                  .eq('status', 'completed')
-                  .order('appointment_date', { ascending: false })
-                  .limit(1),
-                supabase
-                  .from('appointments')
-                  .select('appointment_date')
-                  .eq('client_id', client.id)
-                  .eq('therapist_id', profile.id)
-                  .eq('status', 'scheduled')
-                  .gte('appointment_date', new Date().toISOString())
-                  .order('appointment_date', { ascending: true })
-                  .limit(1),
-              ])
+      const base = clientProfiles || []
 
-            if (extendedError && !isRecursionError(extendedError)) {
-              console.warn('Error fetching extended profile for client:', client.id, extendedError)
-            }
-            if (assessmentsError && !isRecursionError(assessmentsError)) {
-              console.warn('Error fetching assessments for client:', client.id, assessmentsError)
-            }
-            if (lastSessionError && !isRecursionError(lastSessionError)) {
-              console.warn('Error fetching last session for client:', client.id, lastSessionError)
-            }
-            if (nextAppointmentError && !isRecursionError(nextAppointmentError)) {
-              console.warn('Error fetching next appointment for client:', client.id, nextAppointmentError)
-            }
+      // Build helper maps for O(1) lookup
+      const extrasByClient = new Map<string, ClientProfileExtras>()
+      for (const e of clientExtras || []) extrasByClient.set(e.client_id, e)
 
-            const stats: ClientStats = {
-              totalAssessments: assessments?.length || 0,
-              completedAssessments: assessments?.filter(a => a.status === 'completed').length || 0,
-              lastSession: lastSession?.[0]?.appointment_date,
-              nextAppointment: nextAppointment?.[0]?.appointment_date,
-            }
+      const assignByClient = new Map<string, { total: number; completed: number }>()
+      for (const a of assignments || []) {
+        const agg = assignByClient.get(a.client_id) || { total: 0, completed: 0 }
+        agg.total += 1
+        if (a.status === 'completed') agg.completed += 1
+        assignByClient.set(a.client_id, agg)
+      }
 
-            return {
-              ...client,
-              profile: clientProfile || null,
-              stats,
-            } as Client
-          } catch (e) {
-            console.error('Error processing client data:', client.id, e)
-            return {
-              ...client,
-              profile: null,
-              stats: {
-                totalAssessments: 0,
-                completedAssessments: 0,
-                lastSession: undefined,
-                nextAppointment: undefined,
-              },
-            } as Client
-          }
-        })
-      )
+      const lastCompletedByClient = new Map<string, string>()
+      for (const a of apptsCompleted || []) {
+        // because sorted desc, first occurrence per client is the last session
+        if (!lastCompletedByClient.has(a.client_id)) lastCompletedByClient.set(a.client_id, a.appointment_date)
+      }
+
+      const nextUpcomingByClient = new Map<string, string>()
+      for (const a of apptsUpcoming || []) {
+        // sorted asc; first per client is the next appointment
+        if (!nextUpcomingByClient.has(a.client_id)) nextUpcomingByClient.set(a.client_id, a.appointment_date)
+      }
+
+      const enriched: Client[] = base.map((c: any) => {
+        const extra = extrasByClient.get(c.id) || null
+        const agg = assignByClient.get(c.id) || { total: 0, completed: 0 }
+        const stats: ClientStats = {
+          totalAssessments: agg.total,
+          completedAssessments: agg.completed,
+          lastSession: lastCompletedByClient.get(c.id),
+          nextAppointment: nextUpcomingByClient.get(c.id),
+        }
+        return {
+          id: c.id,
+          first_name: c.first_name,
+          last_name: c.last_name,
+          email: c.email,
+          created_at: c.created_at,
+          profile: extra,
+          stats,
+        }
+      })
 
       setClients(enriched)
     } catch (error) {
-      console.error('Error fetching clients:', error)
-      if (isRecursionError(error)) console.error('RLS recursion detected in client management')
+      console.error('Error fetching clients (batched):', error)
+      if (isRecursionError(error)) {
+        console.error('RLS recursion detected in client management')
+      } else {
+        setErrorMsg('Failed to load clients. Please try again.')
+      }
       setClients([])
     } finally {
       setLoading(false)
     }
-  }
+  }, [profile])
 
-  const filterClients = () => {
+  useEffect(() => {
+    if (profile) fetchClients()
+  }, [profile, fetchClients])
+
+  const filteredClients = useMemo(() => {
     let next = [...clients]
+    const q = searchTerm.trim().toLowerCase()
 
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase()
+    if (q) {
       next = next.filter(
-        c =>
+        (c) =>
           `${c.first_name} ${c.last_name}`.toLowerCase().includes(q) ||
           c.email.toLowerCase().includes(q)
       )
     }
 
     if (riskFilter !== 'all') {
-      next = next.filter(c => (c.profile?.risk_level || 'low') === riskFilter)
+      next = next.filter((c) => (c.profile?.risk_level || 'low') === riskFilter)
     }
 
-    setFilteredClients(next)
-  }
+    return next
+  }, [clients, searchTerm, riskFilter])
 
   const addClientToRoster = async (clientData: {
     firstName: string
@@ -225,10 +221,8 @@ export const ClientManagement: React.FC = () => {
     whatsappNumber: string
   }) => {
     try {
-      // generate a unique patient code (server also validates uniqueness via constraint ideally)
       const patientCode = generatePatientCode()
 
-      // create profile (let DB generate UUID if your schema supports; keeping explicit for your current flow)
       const { error: profileError } = await supabase
         .from('profiles')
         .insert({
@@ -250,7 +244,6 @@ export const ClientManagement: React.FC = () => {
         throw new Error(`Failed to create client profile: ${profileError.message}`)
       }
 
-      // fetch the created client id
       const { data: newClient, error: clientError } = await supabase
         .from('profiles')
         .select('id')
@@ -262,7 +255,6 @@ export const ClientManagement: React.FC = () => {
         throw new Error('Failed to retrieve created client')
       }
 
-      // create relation (idempotent-ish)
       const { error: relationError } = await supabase
         .from('therapist_client_relations')
         .insert({
@@ -303,6 +295,7 @@ export const ClientManagement: React.FC = () => {
       setShowClientDetails(false)
     } catch (error) {
       console.error('Error updating client profile:', error)
+      alert('Error updating profile. Please try again.')
     }
   }
 
@@ -333,6 +326,17 @@ export const ClientManagement: React.FC = () => {
     )
   }
 
+  if (errorMsg) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-5 h-5 text-red-600" />
+          <span className="text-red-800">{errorMsg}</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -347,34 +351,36 @@ export const ClientManagement: React.FC = () => {
         Add Client
       </button>
 
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search clients by name or email…"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
+      {/* Sticky Filters */}
+      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-gray-200">
+        <div className="p-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search clients by name or email…"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Filter className="w-5 h-5 text-gray-400" />
-            <select
-              value={riskFilter}
-              onChange={(e) => setRiskFilter(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">All Risk Levels</option>
-              <option value="low">Low Risk</option>
-              <option value="moderate">Moderate Risk</option>
-              <option value="high">High Risk</option>
-              <option value="crisis">Crisis</option>
-            </select>
+            <div className="flex items-center gap-2">
+              <Filter className="w-5 h-5 text-gray-400" />
+              <select
+                value={riskFilter}
+                onChange={(e) => setRiskFilter(e.target.value)}
+                className="rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Risk Levels</option>
+                <option value="low">Low Risk</option>
+                <option value="moderate">Moderate Risk</option>
+                <option value="high">High Risk</option>
+                <option value="crisis">Crisis</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -599,7 +605,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ onClose, onAdd }) => {
   }
 
   const handleChange = (field: string, value: string) =>
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData((prev) => ({ ...prev, [field]: value }))
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -746,7 +752,7 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ client, onClose
   }
 
   const handleChange = (field: keyof ClientProfileExtras, value: string) =>
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData((prev) => ({ ...prev, [field]: value }))
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -884,3 +890,5 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({ client, onClose
     </div>
   )
 }
+
+export default ClientManagement
