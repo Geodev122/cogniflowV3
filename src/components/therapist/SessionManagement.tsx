@@ -1,19 +1,14 @@
+// src/components/therapist/SessionManagement.tsx
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { formatDate, formatDateTime, isRecursionError } from '../../utils/helpers'
-import { 
-  Calendar, 
-  Plus, 
-  Search, 
-  Filter, 
-  Clock, 
-  User, 
-  Video, 
-  Phone,
-  MapPin,
+import { formatDateTime, isRecursionError } from '../../utils/helpers'
+import {
+  Calendar,
+  Plus,
+  Filter,
+  User,
   Edit,
-  Trash2,
   CheckCircle,
   AlertTriangle
 } from 'lucide-react'
@@ -48,6 +43,7 @@ export const SessionManagement: React.FC = () => {
       fetchAppointments()
       fetchClients()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile])
 
   const fetchAppointments = async () => {
@@ -90,14 +86,16 @@ export const SessionManagement: React.FC = () => {
           console.warn('Error fetching client data for appointments:', clientError)
         }
 
-        const appointmentsWithClients = data?.map(appointment => ({
-          ...appointment,
-          client: clientData?.find(c => c.id === appointment.client_id) || {
-            first_name: 'Unknown',
-            last_name: 'Client',
-            email: 'unknown@example.com'
-          }
-        })) || []
+        const appointmentsWithClients =
+          data?.map(appointment => ({
+            ...appointment,
+            client:
+              clientData?.find(c => c.id === appointment.client_id) || {
+                first_name: 'Unknown',
+                last_name: 'Client',
+                email: 'unknown@example.com'
+              }
+          })) || []
 
         setAppointments(appointmentsWithClients)
       } else {
@@ -213,11 +211,16 @@ export const SessionManagement: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'scheduled': return 'text-blue-600 bg-blue-100'
-      case 'completed': return 'text-green-600 bg-green-100'
-      case 'cancelled': return 'text-red-600 bg-red-100'
-      case 'no_show': return 'text-orange-600 bg-orange-100'
-      default: return 'text-gray-600 bg-gray-100'
+      case 'scheduled':
+        return 'text-blue-600 bg-blue-100'
+      case 'completed':
+        return 'text-green-600 bg-green-100'
+      case 'cancelled':
+        return 'text-red-600 bg-red-100'
+      case 'no_show':
+        return 'text-orange-600 bg-orange-100'
+      default:
+        return 'text-gray-600 bg-gray-100'
     }
   }
 
@@ -250,27 +253,44 @@ export const SessionManagement: React.FC = () => {
         </div>
         <button
           onClick={() => setShowNewAppointment(true)}
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="hidden sm:inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           <Plus className="w-4 h-4 mr-2" />
           Schedule Session
         </button>
       </div>
 
+      {/* Mobile FAB */}
+      <button
+        onClick={() => setShowNewAppointment(true)}
+        className="sm:hidden fixed bottom-20 right-4 z-30 rounded-full shadow-lg bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 flex items-center justify-center"
+        aria-label="Schedule Session"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
+
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <div className="flex items-center space-x-4">
-          <Filter className="w-5 h-5 text-gray-400" />
-          <select
-            value={viewFilter}
-            onChange={(e) => setViewFilter(e.target.value as any)}
-            className="border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="all">All Appointments</option>
-            <option value="today">Today</option>
-            <option value="week">This Week</option>
-            <option value="upcoming">Upcoming</option>
-          </select>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 items-start">
+          <label className="block sm:col-span-2">
+            <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+              <Filter className="w-4 h-4 text-gray-400" />
+              <span>View</span>
+            </div>
+            <select
+              value={viewFilter}
+              onChange={(e) => setViewFilter(e.target.value as any)}
+              className="w-full border border-gray-300 rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+            >
+              <option value="all">All appointments</option>
+              <option value="today">Today</option>
+              <option value="week">This week</option>
+              <option value="upcoming">Upcoming</option>
+            </select>
+          </label>
+
+          {/* Placeholder for future search / date range */}
+          <div className="hidden sm:block h-0" />
         </div>
       </div>
 
@@ -286,40 +306,53 @@ export const SessionManagement: React.FC = () => {
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {getFilteredAppointments().map((appointment) => (
-              <div key={appointment.id} className="p-6 hover:bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <User className="w-6 h-6 text-blue-600" />
+            {getFilteredAppointments().map(appointment => (
+              <div key={appointment.id} className="p-4 sm:p-6 hover:bg-gray-50">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+                  {/* Left: avatar + main */}
+                  <div className="flex items-start gap-3 sm:gap-4">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                      <User className="w-6 h-6 sm:w-7 sm:h-7 text-blue-600" />
                     </div>
-                    <div>
-                      <h4 className="font-medium text-gray-900">
+                    <div className="min-w-0">
+                      <h4 className="font-medium text-gray-900 truncate">
                         {appointment.client.first_name} {appointment.client.last_name}
                       </h4>
-                      <p className="text-sm text-gray-600">{appointment.client.email}</p>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500 mt-1">
+                      <p className="text-sm text-gray-600 truncate">{appointment.client.email}</p>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 mt-1">
                         <span>{formatDateTime(appointment.appointment_date)}</span>
                         <span>{appointment.duration_minutes} minutes</span>
                         <span className="capitalize">{appointment.appointment_type}</span>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(appointment.status)}`}>
+
+                  {/* Right: status + actions */}
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <span
+                      className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${getStatusColor(
+                        appointment.status
+                      )}`}
+                    >
                       {appointment.status.replace('_', ' ')}
                     </span>
-                    <div className="flex space-x-1">
+
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => setSelectedAppointment(appointment)}
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-blue-600 hover:text-blue-800 px-2 py-1 rounded"
+                        aria-label="Edit appointment"
+                        title="Edit appointment"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
                       {appointment.status === 'scheduled' && (
                         <button
                           onClick={() => updateAppointmentStatus(appointment.id, 'completed')}
-                          className="text-green-600 hover:text-green-800"
+                          className="text-green-600 hover:text-green-800 px-2 py-1 rounded"
+                          aria-label="Mark completed"
+                          title="Mark completed"
                         >
                           <CheckCircle className="w-4 h-4" />
                         </button>
@@ -372,19 +405,21 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ clients, onCl
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
-        
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <form onSubmit={handleSubmit}>
-            <div className="bg-white px-6 pt-6 pb-4">
+
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle w-full sm:max-w-lg">
+          <form onSubmit={handleSubmit} className="flex flex-col max-h-[85vh]">
+            {/* Body (scrollable) */}
+            <div className="bg-white px-6 pt-6 pb-4 overflow-y-auto">
               <h3 className="text-lg font-medium text-gray-900 mb-6">Schedule New Session</h3>
-              
+
               <div className="space-y-4">
+                {/* Client */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Client</label>
                   <select
                     value={formData.clientId}
                     onChange={(e) => setFormData(prev => ({ ...prev, clientId: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     required
                   >
                     <option value="">Select a client</option>
@@ -396,35 +431,25 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ clients, onCl
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Date & Time</label>
-                  <input
-                    type="datetime-local"
-                    value={formData.dateTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, dateTime: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
+                {/* Date & Type */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Date & Time</label>
                     <input
-                      type="number"
-                      value={formData.duration}
-                      onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      min="15"
-                      max="180"
+                      type="datetime-local"
+                      value={formData.dateTime}
+                      onChange={(e) => setFormData(prev => ({ ...prev, dateTime: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      required
                     />
                   </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
                     <select
                       value={formData.type}
                       onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full border border-gray-300 rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     >
                       <option value="individual">Individual</option>
                       <option value="group">Group</option>
@@ -434,31 +459,48 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ clients, onCl
                   </div>
                 </div>
 
+                {/* Duration */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
+                  <input
+                    type="number"
+                    value={formData.duration}
+                    onChange={(e) =>
+                      setFormData(prev => ({ ...prev, duration: parseInt(e.target.value || '0', 10) }))
+                    }
+                    className="w-full border border-gray-300 rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    min={15}
+                    max={180}
+                  />
+                </div>
+
+                {/* Notes */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
                   <textarea
                     value={formData.notes}
                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-3 sm:py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     rows={3}
                     placeholder="Session notes or special instructions..."
                   />
                 </div>
               </div>
             </div>
-            
-            <div className="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse">
+
+            {/* Footer (sticky inside modal) */}
+            <div className="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse border-top border-t">
               <button
                 type="submit"
                 disabled={!formData.clientId || !formData.dateTime}
-                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-3 sm:py-2 bg-blue-600 text-base sm:text-sm font-medium text-white hover:bg-blue-700 sm:ml-3 sm:w-auto disabled:opacity-50"
               >
                 Schedule Session
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-3 sm:py-2 bg-white text-base sm:text-sm font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto"
               >
                 Cancel
               </button>
