@@ -1,5 +1,5 @@
 // src/components/therapist/ClientManagement.tsx
-import React, { useEffect, useMemo, useState, useCallback } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import {
@@ -59,130 +59,145 @@ export const ClientManagement: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const { profile } = useAuth()
 
- const fetchClients = async () => {
-  if (!profile) return
-  try {
-    setLoading(true)
-
-    // 1) get clients joined with their basic profile in ONE query (avoids RLS issues on .in)
-    const { data: rows, error: joinError } = await supabase
-      .from('therapist_client_relations')
-      .select(`
-        client_id,
-        profiles:profiles!therapist_client_relations_client_id_fkey (
-          id, first_name, last_name, email, created_at
-        )
-      `)
-      .eq('therapist_id', profile.id)
-
-    if (joinError) {
-      console.error('Error joining relations->profiles:', joinError)
-      setClients([])
+  const fetchClients = async () => {
+    if (!profile) {
+      // prevent infinite spinner while profile is not yet available
+      setLoading(false)
       return
     }
 
-    const baseClients =
-      (rows || [])
-        .map(r => r.profiles)
-        .filter(Boolean) as Array<{
-          id: string; first_name: string; last_name: string; email: string; created_at: string
-        }>
+    try {
+      setLoading(true)
+      setErrorMsg(null)
 
-    if (baseClients.length === 0) {
+      // 1) Join relations -> profiles in one query (avoids some RLS pitfalls with .in)
+      const { data: rows, error: joinError } = await supabase
+        .from('therapist_client_relations')
+        .select(`
+          client_id,
+          profiles:profiles!therapist_client_relations_client_id_fkey (
+            id, first_name, last_name, email, created_at
+          )
+        `)
+        .eq('therapist_id', profile.id)
+
+      if (joinError) {
+        console.error('Error joining relations->profiles:', joinError)
+        setErrorMsg('Failed to load clients. Please try again.')
+        setClients([])
+        setLoading(false)
+        return
+      }
+
+      const baseClients =
+        (rows || [])
+          .map((r: any) => r.profiles)
+          .filter(Boolean) as Array<{
+            id: string; first_name: string; last_name: string; email: string; created_at: string
+          }>
+
+      if (baseClients.length === 0) {
+        setClients([])
+        return
+      }
+
+      // 2) Hydrate each client with extras/stats
+      const enriched = await Promise.all(
+        baseClients.map(async (client) => {
+          try {
+            const [
+              { data: clientProfile, error: extendedError },
+              { data: assessments, error: assessmentsError },
+              { data: lastSession, error: lastSessionError },
+              { data: nextAppointment, error: nextAppointmentError },
+            ] = await Promise.all([
+              supabase
+                .from('client_profiles')
+                .select('*')
+                .eq('client_id', client.id)
+                .eq('therapist_id', profile.id)
+                .maybeSingle(),
+              supabase
+                .from('form_assignments')
+                .select('status')
+                .eq('client_id', client.id)
+                .eq('therapist_id', profile.id),
+              supabase
+                .from('appointments')
+                .select('appointment_date')
+                .eq('client_id', client.id)
+                .eq('therapist_id', profile.id)
+                .eq('status', 'completed')
+                .order('appointment_date', { ascending: false })
+                .limit(1),
+              supabase
+                .from('appointments')
+                .select('appointment_date')
+                .eq('client_id', client.id)
+                .eq('therapist_id', profile.id)
+                .eq('status', 'scheduled')
+                .gte('appointment_date', new Date().toISOString())
+                .order('appointment_date', { ascending: true })
+                .limit(1),
+            ])
+
+            if (extendedError && !isRecursionError(extendedError)) {
+              console.warn('Error fetching extended profile for client:', client.id, extendedError)
+            }
+            if (assessmentsError && !isRecursionError(assessmentsError)) {
+              console.warn('Error fetching assessments for client:', client.id, assessmentsError)
+            }
+            if (lastSessionError && !isRecursionError(lastSessionError)) {
+              console.warn('Error fetching last session for client:', client.id, lastSessionError)
+            }
+            if (nextAppointmentError && !isRecursionError(nextAppointmentError)) {
+              console.warn('Error fetching next appointment for client:', client.id, nextAppointmentError)
+            }
+
+            const stats: ClientStats = {
+              totalAssessments: assessments?.length || 0,
+              completedAssessments: assessments?.filter((a: any) => a.status === 'completed').length || 0,
+              lastSession: lastSession?.[0]?.appointment_date,
+              nextAppointment: nextAppointment?.[0]?.appointment_date,
+            }
+
+            return {
+              ...client,
+              profile: clientProfile || null,
+              stats,
+            } as Client
+          } catch (e) {
+            console.error('Error processing client data:', client.id, e)
+            return {
+              ...client,
+              profile: null,
+              stats: {
+                totalAssessments: 0,
+                completedAssessments: 0,
+                lastSession: undefined,
+                nextAppointment: undefined,
+              },
+            } as Client
+          }
+        })
+      )
+
+      setClients(enriched)
+    } catch (error) {
+      console.error('Error fetching clients:', error)
+      if (isRecursionError(error)) console.error('RLS recursion detected in client management')
+      setErrorMsg('Failed to load clients. Please try again.')
       setClients([])
-      return
+    } finally {
+      setLoading(false)
     }
-
-    // 2) hydrate each client with extras/stats (same as before)
-    const enriched = await Promise.all(
-      baseClients.map(async (client) => {
-        try {
-          const [
-            { data: clientProfile, error: extendedError },
-            { data: assessments, error: assessmentsError },
-            { data: lastSession, error: lastSessionError },
-            { data: nextAppointment, error: nextAppointmentError },
-          ] = await Promise.all([
-            supabase
-              .from('client_profiles')
-              .select('*')
-              .eq('client_id', client.id)
-              .eq('therapist_id', profile.id)
-              .maybeSingle(),
-            supabase
-              .from('form_assignments')
-              .select('status')
-              .eq('client_id', client.id)
-              .eq('therapist_id', profile.id),
-            supabase
-              .from('appointments')
-              .select('appointment_date')
-              .eq('client_id', client.id)
-              .eq('therapist_id', profile.id)
-              .eq('status', 'completed')
-              .order('appointment_date', { ascending: false })
-              .limit(1),
-            supabase
-              .from('appointments')
-              .select('appointment_date')
-              .eq('client_id', client.id)
-              .eq('therapist_id', profile.id)
-              .eq('status', 'scheduled')
-              .gte('appointment_date', new Date().toISOString())
-              .order('appointment_date', { ascending: true })
-              .limit(1),
-          ])
-
-          if (extendedError && !isRecursionError(extendedError)) {
-            console.warn('Error fetching extended profile for client:', client.id, extendedError)
-          }
-          if (assessmentsError && !isRecursionError(assessmentsError)) {
-            console.warn('Error fetching assessments for client:', client.id, assessmentsError)
-          }
-          if (lastSessionError && !isRecursionError(lastSessionError)) {
-            console.warn('Error fetching last session for client:', client.id, lastSessionError)
-          }
-          if (nextAppointmentError && !isRecursionError(nextAppointmentError)) {
-            console.warn('Error fetching next appointment for client:', client.id, nextAppointmentError)
-          }
-
-          const stats: ClientStats = {
-            totalAssessments: assessments?.length || 0,
-            completedAssessments: assessments?.filter(a => a.status === 'completed').length || 0,
-            lastSession: lastSession?.[0]?.appointment_date,
-            nextAppointment: nextAppointment?.[0]?.appointment_date,
-          }
-
-          return {
-            ...client,
-            profile: clientProfile || null,
-            stats,
-          } as Client
-        } catch (e) {
-          console.error('Error processing client data:', client.id, e)
-          return {
-            ...client,
-            profile: null,
-            stats: {
-              totalAssessments: 0,
-              completedAssessments: 0,
-              lastSession: undefined,
-              nextAppointment: undefined,
-            },
-          } as Client
-        }
-      })
-    )
-
-    setClients(enriched)
-  } catch (error) {
-    console.error('Error fetching clients:', error)
-    if (isRecursionError(error)) console.error('RLS recursion detected in client management')
-    setClients([])
-  } finally {
-    setLoading(false)
   }
-}
+
+  // Run fetch when profile is ready / changes
+  useEffect(() => {
+    fetchClients()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile])
 
   const filteredClients = useMemo(() => {
     let next = [...clients]
