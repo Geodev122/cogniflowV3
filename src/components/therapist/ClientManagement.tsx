@@ -356,7 +356,7 @@ export const ClientManagement: React.FC = () => {
       </button>
 
       {/* Sticky Filters */}
-      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-gray-200">
+      <div className="bg-white/80 rounded-lg shadow-sm border border-gray-200">
         <div className="p-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
