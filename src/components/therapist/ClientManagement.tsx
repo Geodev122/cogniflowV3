@@ -505,12 +505,12 @@ export const ClientManagement: React.FC = () => {
                               {client.last_name?.[0]}
                             </span>
                           </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">
-                              {client.first_name} {client.last_name}
-                            </div>
-                            <div className="text-sm text-gray-600">{client.email}</div>
-                          </div>
+                          <div className="ml-4 max-w-[14rem]">
+  <div className="text-sm font-medium text-gray-900 truncate">
+    {client.first_name} {client.last_name}
+  </div>
+  <div className="text-sm text-gray-600 truncate">{client.email}</div>
+</div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
