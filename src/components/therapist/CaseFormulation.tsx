@@ -1,16 +1,11 @@
+// src/components/therapist/CaseFormulation.tsx
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { 
-  Stethoscope, 
-  Brain, 
-  FileText, 
-  Save, 
+import {
+  Stethoscope,
+  Save,
   Search,
-  Plus,
-  Target,
-  CheckCircle,
-  AlertTriangle,
   Book,
   Globe
 } from 'lucide-react'
@@ -116,6 +111,7 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
 
   useEffect(() => {
     fetchFormulation()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseFile])
 
   const fetchFormulation = async () => {
@@ -128,14 +124,13 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
         .single()
 
       if (data?.notes) {
-        // Parse existing formulation data if available
         try {
           const parsed = JSON.parse(data.notes)
           if (parsed.formulation) {
             setFormulation(parsed.formulation)
           }
         } catch {
-          // If not JSON, treat as regular notes
+          // Not JSON; ignore and keep defaults
         }
       }
     } catch (error) {
@@ -164,20 +159,18 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
       if (error) throw error
 
       // Log milestone
-      await supabase
-        .from('audit_logs')
-        .insert({
-          user_id: profile!.id,
-          action: 'case_formulation_updated',
-          resource_type: 'case',
-          resource_id: null,
-          client_id: caseFile.client.id,
-          details: {
-            milestone: 'Goals Defined',
-            dsm_code: formulation.dsmCode,
-            icd_code: formulation.icdCode
-          }
-        })
+      await supabase.from('audit_logs').insert({
+        user_id: profile!.id,
+        action: 'case_formulation_updated',
+        resource_type: 'case',
+        resource_id: null,
+        client_id: caseFile.client.id,
+        details: {
+          milestone: 'Goals Defined',
+          dsm_code: formulation.dsmCode,
+          icd_code: formulation.icdCode
+        }
+      })
 
       onUpdate()
       alert('Case formulation saved successfully!')
@@ -189,15 +182,20 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
     }
   }
 
-  const filteredDsmCodes = dsmCodes.filter(code =>
-    code.name.toLowerCase().includes(searchDsm.toLowerCase()) ||
-    code.code.includes(searchDsm)
-  )
+  // ---- Mobile-friendly, memoized filters (bugfix: use DSM5_CODES / ICD11_CODES) ----
+  const filteredDsmCodes = React.useMemo(() => {
+    return DSM5_CODES.filter(code =>
+      code.name.toLowerCase().includes(searchDsm.toLowerCase()) ||
+      code.code.toLowerCase().includes(searchDsm.toLowerCase())
+    )
+  }, [searchDsm])
 
-  const filteredIcdCodes = icdCodes.filter(code =>
-    code.name.toLowerCase().includes(searchIcd.toLowerCase()) ||
-    code.code.includes(searchIcd)
-  )
+  const filteredIcdCodes = React.useMemo(() => {
+    return ICD11_CODES.filter(code =>
+      code.name.toLowerCase().includes(searchIcd.toLowerCase()) ||
+      code.code.toLowerCase().includes(searchIcd.toLowerCase())
+    )
+  }, [searchIcd])
 
   return (
     <div className="space-y-6">
@@ -215,7 +213,7 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
               <Book className="w-5 h-5 text-purple-600" />
               <h4 className="font-semibold text-gray-900">DSM-5-TR Diagnosis</h4>
             </div>
-            
+
             <div className="mb-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -229,18 +227,20 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
               </div>
             </div>
 
-            <div className="max-h-48 overflow-y-auto space-y-2">
+            <div className="max-h-60 sm:max-h-72 overflow-y-auto space-y-2 pr-1">
               {filteredDsmCodes.map((code) => (
                 <button
                   key={code.code}
+                  type="button"
+                  aria-pressed={selectedDsmCode?.code === code.code}
                   onClick={() => {
                     setSelectedDsmCode(code)
                     setFormulation(prev => ({ ...prev, dsmCode: `${code.code} - ${code.name}` }))
                   }}
-                  className={`w-full text-left p-3 rounded-lg border transition-all ${
+                  className={`w-full text-left px-4 py-3 rounded-lg border transition-all focus:outline-none focus:ring-2 ${
                     selectedDsmCode?.code === code.code
-                      ? 'border-purple-500 bg-purple-50'
-                      : 'border-gray-200 hover:border-purple-300'
+                      ? 'border-purple-500 bg-purple-50 focus:ring-purple-300'
+                      : 'border-gray-200 hover:border-purple-300 focus:ring-purple-200'
                   }`}
                 >
                   <div className="font-medium text-sm text-gray-900">{code.code}</div>
@@ -270,7 +270,7 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
               <Globe className="w-5 h-5 text-teal-600" />
               <h4 className="font-semibold text-gray-900">ICD-11 Diagnosis</h4>
             </div>
-            
+
             <div className="mb-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -284,18 +284,20 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
               </div>
             </div>
 
-            <div className="max-h-48 overflow-y-auto space-y-2">
+            <div className="max-h-60 sm:max-h-72 overflow-y-auto space-y-2 pr-1">
               {filteredIcdCodes.map((code) => (
                 <button
                   key={code.code}
+                  type="button"
+                  aria-pressed={selectedIcdCode?.code === code.code}
                   onClick={() => {
                     setSelectedIcdCode(code)
                     setFormulation(prev => ({ ...prev, icdCode: `${code.code} - ${code.name}` }))
                   }}
-                  className={`w-full text-left p-3 rounded-lg border transition-all ${
+                  className={`w-full text-left px-4 py-3 rounded-lg border transition-all focus:outline-none focus:ring-2 ${
                     selectedIcdCode?.code === code.code
-                      ? 'border-teal-500 bg-teal-50'
-                      : 'border-gray-200 hover:border-teal-300'
+                      ? 'border-teal-500 bg-teal-50 focus:ring-teal-300'
+                      : 'border-gray-200 hover:border-teal-300 focus:ring-teal-200'
                   }`}
                 >
                   <div className="font-medium text-sm text-gray-900">{code.code}</div>
@@ -320,11 +322,35 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
           </div>
         </div>
 
-        {/* Criteria Comparison Table */}
+        {/* Diagnostic Criteria Comparison */}
         {selectedDsmCode && selectedIcdCode && (
           <div className="mb-8">
             <h4 className="font-semibold text-gray-900 mb-4">Diagnostic Criteria Comparison</h4>
-            <div className="overflow-x-auto">
+
+            {/* Mobile stacked cards */}
+            <div className="grid grid-cols-1 gap-4 sm:hidden">
+              <div className="border border-purple-200 rounded-lg p-4 bg-purple-50/40">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-purple-900">DSM-5-TR</span>
+                  <span className="text-sm text-gray-700">{selectedDsmCode.code}</span>
+                </div>
+                <div className="text-sm text-gray-800">
+                  {selectedDsmCode.criteria.join('; ')}
+                </div>
+              </div>
+              <div className="border border-teal-200 rounded-lg p-4 bg-teal-50/40">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-teal-900">ICD-11</span>
+                  <span className="text-sm text-gray-700">{selectedIcdCode.code}</span>
+                </div>
+                <div className="text-sm text-gray-800">
+                  {selectedIcdCode.criteria.join('; ')}
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full border border-gray-200 rounded-lg">
                 <thead className="bg-gray-50">
                   <tr>
@@ -363,7 +389,7 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
             <textarea
               value={formulation.diagnosticImpression}
               onChange={(e) => setFormulation(prev => ({ ...prev, diagnosticImpression: e.target.value }))}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 sm:px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               rows={3}
               placeholder="Summarize your diagnostic impression based on the selected criteria..."
             />
@@ -376,7 +402,7 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
             <textarea
               value={formulation.caseFormulation}
               onChange={(e) => setFormulation(prev => ({ ...prev, caseFormulation: e.target.value }))}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 sm:px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               rows={4}
               placeholder="Link thoughts, emotions, behaviors, and maintaining factors. Describe the client's presentation in the context of their history and current circumstances..."
             />
@@ -389,7 +415,7 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
             <textarea
               value={formulation.maintainingFactors}
               onChange={(e) => setFormulation(prev => ({ ...prev, maintainingFactors: e.target.value }))}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 sm:px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               rows={3}
               placeholder="What factors are maintaining the client's difficulties? (cognitive patterns, behaviors, environmental factors, etc.)"
             />
@@ -402,31 +428,54 @@ export const CaseFormulation: React.FC<CaseFormulationProps> = ({ caseFile, onUp
             <textarea
               value={formulation.treatmentRecommendations}
               onChange={(e) => setFormulation(prev => ({ ...prev, treatmentRecommendations: e.target.value }))}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 sm:px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               rows={3}
               placeholder="Recommended treatment approach, interventions, and therapeutic modalities..."
             />
           </div>
         </div>
 
-        <div className="flex justify-end mt-6">
-          <button
-            onClick={saveFormulation}
-            disabled={loading}
-            className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4 mr-2" />
-                Save Formulation
-              </>
-            )}
-          </button>
+        {/* Sticky Save on mobile, inline on desktop */}
+        <div className="mt-6">
+          <div className="sm:hidden fixed bottom-16 left-0 right-0 px-4 z-30">
+            <button
+              onClick={saveFormulation}
+              disabled={loading}
+              className="w-full inline-flex items-center justify-center px-6 py-3 border border-transparent text-sm font-medium rounded-full text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 shadow-lg"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Formulation
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="hidden sm:flex justify-end">
+            <button
+              onClick={saveFormulation}
+              disabled={loading}
+              className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Formulation
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
