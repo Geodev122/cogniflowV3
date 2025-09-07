@@ -745,7 +745,7 @@ export default function TherapistDashboard() {
 
         {/* Main Content */}
         <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} bg-gray-50 min-h-0`}>
-          <main className="h-full overflow-hidden">
+          <main className="min-h-[calc(100vh-4rem)] overflow-y-auto">
             <Suspense
               fallback={
                 <div className="p-6">
