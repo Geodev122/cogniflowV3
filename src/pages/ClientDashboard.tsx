@@ -1,3 +1,4 @@
+// src/pages/ClientDashboard.tsx
 import React, { useState, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
@@ -6,34 +7,29 @@ import { PsychometricForm } from '../components/PsychometricForm'
 import { ProgressChart } from '../components/ProgressChart'
 import { GameExercise } from '../components/GameExercise'
 import { useClientData } from '../hooks/useClientData'
-import { 
-  FileText, 
-  Clock, 
-  CheckCircle, 
-  ChevronRight, 
-  ClipboardList, 
-  TrendingUp, 
+import {
+  FileText,
+  Clock,
+  CheckCircle,
+  ChevronRight,
+  ClipboardList,
+  TrendingUp,
   Gamepad2,
   Play,
   Trophy,
   Target,
-  Menu,
-  X,
-  User,
-  MessageSquare,
-  Calendar,
   Bell,
   AlertTriangle
 } from 'lucide-react'
 
 export default function ClientDashboard() {
   const { profile } = useAuth()
-  
+
   // Redirect if not a client
   if (profile && profile.role !== 'client') {
     return <Navigate to="/therapist" replace />
   }
-  
+
   const {
     worksheets,
     psychometricForms,
@@ -45,19 +41,26 @@ export default function ClientDashboard() {
     completePsychometricForm,
     updateExerciseProgress
   } = useClientData()
-  
-  const [activeTab, setActiveTab] = useState('overview')
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const [activeTab, setActiveTab] = useState<'overview' | 'worksheets' | 'assessments' | 'exercises' | 'progress'>('overview')
   const [selectedWorksheet, setSelectedWorksheet] = useState<any>(null)
   const [selectedForm, setSelectedForm] = useState<any>(null)
   const [selectedExercise, setSelectedExercise] = useState<any>(null)
 
+  // Shared tab config for desktop & mobile
+  const tabs = [
+    { id: 'overview',   name: 'Overview',    short: 'Home',  icon: Target },
+    { id: 'worksheets', name: 'Worksheets',  short: 'Sheets', icon: FileText },
+    { id: 'assessments',name: 'Assessments', short: 'Assess', icon: ClipboardList },
+    { id: 'exercises',  name: 'Exercises',   short: 'Play',   icon: Gamepad2 },
+    { id: 'progress',   name: 'Progress',    short: 'Track',  icon: TrendingUp },
+  ] as const
+
   // Memoized calculations for better performance
   const stats = useMemo(() => {
-    const totalItems = worksheets.length + psychometricForms.length + exercises.length
     const completedItems = [...worksheets, ...psychometricForms, ...exercises]
       .filter(item => item.status === 'completed').length
-    
+
     return {
       worksheets: worksheets.length,
       assessments: psychometricForms.length,
@@ -121,119 +124,119 @@ export default function ClientDashboard() {
 
   const renderOverview = () => {
     return (
-    <div className="space-y-6">
-      {/* Welcome Message */}
-      <div className="bg-gradient-to-r from-blue-500 to-teal-500 text-white p-4 sm:p-6 rounded-lg">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold mb-2">Welcome back!</h2>
-            <p className="text-blue-100 text-sm sm:text-base">Continue your therapeutic journey with your assigned activities.</p>
+      <div className="space-y-6">
+        {/* Welcome Message */}
+        <div className="bg-gradient-to-r from-blue-500 to-teal-500 text-white p-4 sm:p-6 rounded-lg">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold mb-2">Welcome back!</h2>
+              <p className="text-blue-100 text-sm sm:text-base">Continue your therapeutic journey with your assigned activities.</p>
+            </div>
+            <div className="flex items-center space-x-2 text-blue-100">
+              <Bell className="w-5 h-5" />
+              <span className="text-sm">3 new</span>
+            </div>
           </div>
-          <div className="flex items-center space-x-2 text-blue-100">
-            <Bell className="w-5 h-5" />
-            <span className="text-sm">3 new</span>
-          </div>
-        </div>
-        
-        {/* Quick Actions for Mobile */}
-        <div className="mt-4 flex flex-wrap gap-2 sm:hidden">
-          <button
-            onClick={() => setActiveTab('worksheets')}
-            className="px-3 py-1 bg-white bg-opacity-20 rounded-full text-xs font-medium"
-          >
-            Worksheets
-          </button>
-          <button
-            onClick={() => setActiveTab('assessments')}
-            className="px-3 py-1 bg-white bg-opacity-20 rounded-full text-xs font-medium"
-          >
-            Assessments
-          </button>
-          <button
-            onClick={() => setActiveTab('exercises')}
-            className="px-3 py-1 bg-white bg-opacity-20 rounded-full text-xs font-medium"
-          >
-            Exercises
-          </button>
-        </div>
-      </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6">
-        <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-          <div className="p-3 sm:p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <FileText className="h-4 w-4 sm:h-6 sm:w-6 text-blue-600" />
+          {/* Quick Actions for Mobile */}
+          <div className="mt-4 flex flex-wrap gap-2 sm:hidden">
+            <button
+              onClick={() => setActiveTab('worksheets')}
+              className="px-3 py-1 bg-white bg-opacity-20 rounded-full text-xs font-medium"
+            >
+              Worksheets
+            </button>
+            <button
+              onClick={() => setActiveTab('assessments')}
+              className="px-3 py-1 bg-white bg-opacity-20 rounded-full text-xs font-medium"
+            >
+              Assessments
+            </button>
+            <button
+              onClick={() => setActiveTab('exercises')}
+              className="px-3 py-1 bg-white bg-opacity-20 rounded-full text-xs font-medium"
+            >
+              Exercises
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6">
+          <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div className="p-3 sm:p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <FileText className="h-4 w-4 sm:h-6 sm:w-6 text-blue-600" />
+                </div>
+                <div className="ml-2 sm:ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">Worksheets</dt>
+                    <dd className="text-lg sm:text-2xl font-semibold text-gray-900">{stats.worksheets}</dd>
+                  </dl>
+                </div>
               </div>
-              <div className="ml-2 sm:ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">Worksheets</dt>
-                  <dd className="text-lg sm:text-2xl font-semibold text-gray-900">{stats.worksheets}</dd>
-                </dl>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div className="p-3 sm:p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <ClipboardList className="h-4 w-4 sm:h-6 sm:w-6 text-purple-600" />
+                </div>
+                <div className="ml-2 sm:ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">Assessments</dt>
+                    <dd className="text-lg sm:text-2xl font-semibold text-gray-900">{stats.assessments}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div className="p-3 sm:p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <Gamepad2 className="h-4 w-4 sm:h-6 sm:w-6 text-green-600" />
+                </div>
+                <div className="ml-2 sm:ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">Exercises</dt>
+                    <dd className="text-lg sm:text-2xl font-semibold text-gray-900">{stats.exercises}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div className="p-3 sm:p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <Trophy className="h-4 w-4 sm:h-6 sm:w-6 text-yellow-600" />
+                </div>
+                <div className="ml-2 sm:ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">Completed</dt>
+                    <dd className="text-lg sm:text-2xl font-semibold text-gray-900">{stats.completed}</dd>
+                  </dl>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-          <div className="p-3 sm:p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ClipboardList className="h-4 w-4 sm:h-6 sm:w-6 text-purple-600" />
-              </div>
-              <div className="ml-2 sm:ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">Assessments</dt>
-                  <dd className="text-lg sm:text-2xl font-semibold text-gray-900">{stats.assessments}</dd>
-                </dl>
-              </div>
+        {/* Recent Activities */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-white shadow-sm rounded-lg border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">Recent Assignments</h3>
             </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-          <div className="p-3 sm:p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Gamepad2 className="h-4 w-4 sm:h-6 sm:w-6 text-green-600" />
-              </div>
-              <div className="ml-2 sm:ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">Exercises</dt>
-                  <dd className="text-lg sm:text-2xl font-semibold text-gray-900">{stats.exercises}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-          <div className="p-3 sm:p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Trophy className="h-4 w-4 sm:h-6 sm:w-6 text-yellow-600" />
-              </div>
-              <div className="ml-2 sm:ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">Completed</dt>
-                  <dd className="text-lg sm:text-2xl font-semibold text-gray-900">{stats.completed}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Activities */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        <div className="bg-white shadow-sm rounded-lg border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Recent Assignments</h3>
-          </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              {recentActivities.length > 0 ? recentActivities.map((item, index) => (
+            <div className="p-6">
+              <div className="space-y-4">
+                {recentActivities.length > 0 ? recentActivities.map((item, index) => (
                   <div key={index} className="flex items-center space-x-3">
                     <div className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(item.status)}`}>
                       {getStatusIcon(item.status)}
@@ -244,77 +247,78 @@ export default function ClientDashboard() {
                     </div>
                   </div>
                 )) : (
-                <div className="text-center py-8">
-                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No assignments yet</p>
-                  <p className="text-sm text-gray-500">Your therapist will assign activities for you</p>
-                </div>
-              )}
+                  <div className="text-center py-8">
+                    <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No assignments yet</p>
+                    <p className="text-sm text-gray-500">Your therapist will assign activities for you</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="bg-white shadow-sm rounded-lg border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Quick Actions</h3>
-          </div>
-          <div className="p-6">
-            <div className="space-y-3 hidden sm:block">
-              <button
-                onClick={() => setActiveTab('worksheets')}
-                className="w-full flex items-center justify-between p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-              >
-                <div className="flex items-center space-x-3">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                  <span className="font-medium text-blue-900">Send Worksheets</span>
-                </div>
-                <ChevronRight className="w-5 h-5 text-blue-600" />
-              </button>
-              
-              <button
-                onClick={() => setActiveTab('assessments')}
-                className="w-full flex items-center justify-between p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
-              >
-                <div className="flex items-center space-x-3">
-                  <ClipboardList className="w-5 h-5 text-purple-600" />
-                  <span className="font-medium text-purple-900">Send Assessments</span>
-                </div>
-                <ChevronRight className="w-5 h-5 text-purple-600" />
-              </button>
-              
-              <button
-                onClick={() => setActiveTab('exercises')}
-                className="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
-              >
-                <div className="flex items-center space-x-3">
-                  <Gamepad2 className="w-5 h-5 text-green-600" />
-                  <span className="font-medium text-green-900">Play Exercises</span>
-                </div>
-                <ChevronRight className="w-5 h-5 text-green-600" />
-              </button>
+          <div className="bg-white shadow-sm rounded-lg border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">Quick Actions</h3>
             </div>
-            
-            {/* Mobile Quick Actions */}
-            <div className="grid grid-cols-2 gap-2 sm:hidden">
-              <button
-                onClick={() => setActiveTab('worksheets')}
-                className="p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors text-center"
-              >
-                <FileText className="w-6 h-6 text-blue-600 mx-auto mb-1" />
-                <span className="text-xs font-medium text-blue-900">Worksheets</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('assessments')}
-                className="p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors text-center"
-              >
-                <ClipboardList className="w-6 h-6 text-purple-600 mx-auto mb-1" />
-                <span className="text-xs font-medium text-purple-900">Assessments</span>
-              </button>
+            <div className="p-6">
+              {/* Desktop Quick Actions */}
+              <div className="space-y-3 hidden sm:block">
+                <button
+                  onClick={() => setActiveTab('worksheets')}
+                  className="w-full flex items-center justify-between p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                    <span className="font-medium text-blue-900">Send Worksheets</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-blue-600" />
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('assessments')}
+                  className="w-full flex items-center justify-between p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <ClipboardList className="w-5 h-5 text-purple-600" />
+                    <span className="font-medium text-purple-900">Send Assessments</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-purple-600" />
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('exercises')}
+                  className="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <Gamepad2 className="w-5 h-5 text-green-600" />
+                    <span className="font-medium text-green-900">Play Exercises</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-green-600" />
+                </button>
+              </div>
+
+              {/* Mobile Quick Actions (kept for convenience; bottom bar is primary) */}
+              <div className="grid grid-cols-2 gap-2 sm:hidden">
+                <button
+                  onClick={() => setActiveTab('worksheets')}
+                  className="p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors text-center"
+                >
+                  <FileText className="w-6 h-6 text-blue-600 mx-auto mb-1" />
+                  <span className="text-xs font-medium text-blue-900">Worksheets</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('assessments')}
+                  className="p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors text-center"
+                >
+                  <ClipboardList className="w-6 h-6 text-purple-600 mx-auto mb-1" />
+                  <span className="text-xs font-medium text-purple-900">Assessments</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
     )
   }
 
@@ -354,7 +358,7 @@ export default function ClientDashboard() {
                       </p>
                     </div>
                   </div>
-                  
+
                   <button
                     onClick={() => setSelectedWorksheet(worksheet)}
                     className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
@@ -414,7 +418,7 @@ export default function ClientDashboard() {
                       )}
                     </div>
                   </div>
-                  
+
                   <button
                     onClick={() => setSelectedForm(form)}
                     className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-purple-700 bg-purple-100 hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors"
@@ -458,10 +462,10 @@ export default function ClientDashboard() {
                     </div>
                   </div>
                 </div>
-                
+
                 <h4 className="text-lg font-semibold text-gray-900 mb-2">{exercise.title}</h4>
                 <p className="text-sm text-gray-600 mb-4">{exercise.description}</p>
-                
+
                 <div className="text-xs text-gray-500 mb-4">
                   <p>Assigned by your therapist</p>
                   <p>{formatDate(exercise.created_at)}</p>
@@ -486,18 +490,18 @@ export default function ClientDashboard() {
   )
 
   const renderProgress = () => {
-    const moodData = progressData.filter(d => 
-      d.metric_type.includes('mood') || 
+    const moodData = progressData.filter(d =>
+      d.metric_type.includes('mood') ||
       d.metric_type.includes('phq') ||
       d.metric_type === 'phq9_total'
     )
-    const anxietyData = progressData.filter(d => 
-      d.metric_type.includes('anxiety') || 
+    const anxietyData = progressData.filter(d =>
+      d.metric_type.includes('anxiety') ||
       d.metric_type.includes('gad') ||
       d.metric_type === 'gad7_total'
     )
-    const wellbeingData = progressData.filter(d => 
-      d.metric_type.includes('wellbeing') || 
+    const wellbeingData = progressData.filter(d =>
+      d.metric_type.includes('wellbeing') ||
       d.metric_type.includes('quality') ||
       d.metric_type === 'mood_rating'
     )
@@ -553,7 +557,8 @@ export default function ClientDashboard() {
 
   return (
     <Layout title="Client Dashboard">
-      <div className="space-y-6">
+      {/* Reserve space at the bottom for the sticky tab bar on mobile */}
+      <div className="space-y-6 pb-24 sm:pb-0">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">Client Portal - Welcome, {profile?.first_name}!</h1>
@@ -570,37 +575,22 @@ export default function ClientDashboard() {
           </div>
         </div>
 
-        {/* Mobile Menu Button */}
-        <div className="sm:hidden flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">My Dashboard</h2>
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
-          >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-        </div>
-
         {/* Navigation Tabs - Desktop */}
         <div className="hidden sm:block border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8 overflow-x-auto">
-            {[
-              { id: 'overview', name: 'Overview', icon: Target },
-              { id: 'worksheets', name: 'Worksheets', icon: FileText },
-              { id: 'assessments', name: 'Assessments', icon: ClipboardList },
-              { id: 'exercises', name: 'Exercises', icon: Gamepad2 },
-              { id: 'progress', name: 'Progress', icon: TrendingUp }
-            ].map((tab) => {
+          <nav className="-mb-px flex space-x-8 overflow-x-auto" role="tablist" aria-label="Primary">
+            {tabs.map((tab) => {
               const Icon = tab.icon
+              const active = activeTab === tab.id
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
+                  onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    active ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
+                  role="tab"
+                  aria-selected={active}
+                  aria-current={active ? 'page' : undefined}
                 >
                   <Icon className="w-5 h-5" />
                   <span>{tab.name}</span>
@@ -609,47 +599,6 @@ export default function ClientDashboard() {
             })}
           </nav>
         </div>
-
-        {/* Mobile Navigation Menu */}
-        {mobileMenuOpen && (
-          <div className="sm:hidden bg-white border border-gray-200 rounded-lg shadow-lg">
-            <div className="p-4">
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { id: 'overview', name: 'Overview', icon: Target, color: 'blue' },
-                  { id: 'worksheets', name: 'Worksheets', icon: FileText, color: 'green' },
-                  { id: 'assessments', name: 'Assessments', icon: ClipboardList, color: 'purple' },
-                  { id: 'exercises', name: 'Exercises', icon: Gamepad2, color: 'orange' },
-                  { id: 'progress', name: 'Progress', icon: TrendingUp, color: 'teal' }
-                ].map((tab) => {
-                  const Icon = tab.icon
-                  const isActive = activeTab === tab.id
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => {
-                        setActiveTab(tab.id as any)
-                        setMobileMenuOpen(false)
-                      }}
-                      className={`p-4 rounded-lg border-2 transition-all ${
-                        isActive
-                          ? `border-${tab.color}-500 bg-${tab.color}-50`
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <Icon className={`w-6 h-6 mx-auto mb-2 ${
-                        isActive ? `text-${tab.color}-600` : 'text-gray-400'
-                      }`} />
-                      <span className={`text-sm font-medium ${
-                        isActive ? `text-${tab.color}-900` : 'text-gray-700'
-                      }`}>{tab.name}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Tab Content */}
         {activeTab === 'overview' && renderOverview()}
@@ -686,6 +635,35 @@ export default function ClientDashboard() {
           onClose={() => setSelectedExercise(null)}
         />
       )}
+
+      {/* Bottom Tab Bar (mobile only) */}
+      <nav
+        className="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-gray-200"
+        role="tablist"
+        aria-label="Primary"
+      >
+        <div className="flex justify-around items-stretch h-14 pb-[env(safe-area-inset-bottom)]">
+          {tabs.map((t) => {
+            const Icon = t.icon
+            const active = activeTab === t.id
+            return (
+              <button
+                key={t.id}
+                role="tab"
+                aria-selected={active}
+                aria-label={t.name}
+                onClick={() => setActiveTab(t.id)}
+                className="flex-1 flex flex-col items-center justify-center text-[11px] leading-tight"
+              >
+                <Icon className={`w-5 h-5 ${active ? 'text-blue-600' : 'text-gray-400'}`} />
+                <span className={`mt-0.5 ${active ? 'text-blue-700 font-medium' : 'text-gray-600'}`}>
+                  {t.short ?? t.name}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </nav>
     </Layout>
   )
 }
@@ -701,7 +679,7 @@ const ThoughtRecordModal: React.FC<{
   const handleChange = (field: string, value: any) => {
     const newContent = { ...content, [field]: value }
     setContent(newContent)
-    
+
     const newStatus = worksheet.status === 'assigned' ? 'in_progress' : worksheet.status
     onUpdate(worksheet.id, newContent, newStatus)
   }
@@ -735,7 +713,7 @@ const ThoughtRecordModal: React.FC<{
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={onClose} />
-        
+
         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
           <div className="bg-white px-6 pt-6 pb-4">
             <div className="flex items-center justify-between mb-6">
@@ -747,7 +725,7 @@ const ThoughtRecordModal: React.FC<{
                 </div>
               </div>
             </div>
-            
+
             <div className="space-y-6 max-h-96 overflow-y-auto">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -886,7 +864,7 @@ const ThoughtRecordModal: React.FC<{
               </div>
             </div>
           </div>
-          
+
           <div className="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse">
             {!isCompleted && (
               <button
