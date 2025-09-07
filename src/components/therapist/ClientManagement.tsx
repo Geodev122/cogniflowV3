@@ -470,8 +470,8 @@ export const ClientManagement: React.FC = () => {
 
           {/* Desktop table */}
           <div className="hidden sm:block bg-white shadow-sm rounded-lg border border-gray-200">
-            <div className="overflow-x-hidden">
-              <table className="min-w-full table-fixed divide-y divide-gray-200">
+  <div className="overflow-x-clip">
+    <table className="w-full table-fixed divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="w-1/3 px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
