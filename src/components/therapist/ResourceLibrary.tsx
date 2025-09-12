@@ -6,7 +6,6 @@ import { useAssessments } from '../../hooks/useAssessments'
 import {
   Library,
   Search,
-  Filter,
   Grid3X3,
   List,
   Plus,
@@ -24,11 +23,16 @@ import {
   Download,
   AlertTriangle,
   Clock,
+  ChevronDown,
+  Link as LinkIcon,
+  Trash2
 } from 'lucide-react'
 
 /* =========================
    Types & Constants
 ========================= */
+
+type ContentType = 'pdf' | 'video' | 'audio' | 'interactive' | 'course' | string
 
 interface Resource {
   id: string
@@ -36,12 +40,19 @@ interface Resource {
   category: 'worksheet' | 'educational' | 'intervention' | 'protocol' | string
   subcategory?: string
   description?: string
-  content_type?: 'pdf' | 'video' | 'audio' | 'interactive' | string
+  content_type?: ContentType
   tags?: string[]
   difficulty_level?: 'beginner' | 'intermediate' | 'advanced' | string
   evidence_level?: string
   is_public?: boolean
   created_at: string
+
+  // New fields to support uploads & complex content
+  media_url?: string | null          // final public URL (storage or external)
+  storage_path?: string | null       // storage path if uploaded
+  external_url?: string | null       // external link (YouTube/Vimeo/etc)
+  interactive_schema?: any | null    // JSON for interactive content
+  course_manifest?: any | null       // JSON for course with modules/lessons
 }
 
 const CATEGORIES = [
@@ -49,7 +60,7 @@ const CATEGORIES = [
   { id: 'worksheet', name: 'Worksheets', icon: FileText },
   { id: 'educational', name: 'Educational', icon: BookOpen },
   { id: 'intervention', name: 'Interventions', icon: Zap },
-  { id: 'protocol', name: 'Protocols', icon: Headphones }, // icon just for variety; swap if you prefer
+  { id: 'protocol', name: 'Protocols', icon: Headphones },
 ] as const
 
 const SAMPLE_RESOURCES: Resource[] = [
@@ -112,12 +123,18 @@ const SAMPLE_RESOURCES: Resource[] = [
     category: 'protocol',
     subcategory: 'trauma',
     description: 'Best practices for providing trauma-informed care in therapeutic settings.',
-    content_type: 'text',
+    content_type: 'course',
     tags: ['trauma', 'PTSD', 'safety'],
     difficulty_level: 'advanced',
     evidence_level: 'research_based',
     is_public: true,
     created_at: '2024-01-11T11:20:00Z',
+    course_manifest: {
+      title: 'Trauma-Informed Care',
+      modules: [
+        { title: 'Foundations', lessons: [{ title: 'Principles', type: 'video', url: 'https://example.com/video' }] }
+      ]
+    }
   },
   {
     id: '6',
@@ -148,6 +165,8 @@ const getContentType = (type?: string) => {
       return { cls: 'text-green-600 bg-green-50', Icon: Headphones as any, label: 'audio' }
     case 'interactive':
       return { cls: 'text-blue-600 bg-blue-50', Icon: Zap as any, label: 'interactive' }
+    case 'course':
+      return { cls: 'text-indigo-600 bg-indigo-50', Icon: BookOpen as any, label: 'course' }
     default:
       return { cls: 'text-gray-600 bg-gray-50', Icon: FileText as any, label: type || 'file' }
   }
@@ -167,7 +186,7 @@ const getDifficultyColor = (level?: string) => {
 }
 
 /* =========================
-   Assessments Library (left tab)
+   Assessments Library (left tab) — unchanged behavior
 ========================= */
 
 interface AssessmentLibraryProps {
@@ -561,6 +580,547 @@ const AssignResourceModal: React.FC<{
 }
 
 /* =========================
+   Create Resource Modal (PDF/Video/Audio/Interactive)
+========================= */
+
+const CreateResourceModal: React.FC<{
+  onClose: () => void
+  onCreated: (resource: Resource) => void
+}> = ({ onClose, onCreated }) => {
+  const [title, setTitle] = useState('')
+  const [category, setCategory] = useState('worksheet')
+  const [description, setDescription] = useState('')
+  const [contentType, setContentType] = useState<ContentType>('pdf')
+  const [difficulty, setDifficulty] = useState('beginner')
+  const [tags, setTags] = useState<string>('')
+  const [file, setFile] = useState<File | null>(null)
+  const [externalUrl, setExternalUrl] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  // Minimal interactive builder
+  type InteractiveItem = { id: string; prompt: string; type: 'rating'; scale: number }
+  const [interactiveItems, setInteractiveItems] = useState<InteractiveItem[]>([
+    { id: crypto.randomUUID(), prompt: 'How are you feeling today?', type: 'rating', scale: 5 }
+  ])
+
+  const addInteractiveItem = () =>
+    setInteractiveItems(prev => [...prev, { id: crypto.randomUUID(), prompt: '', type: 'rating', scale: 5 }])
+
+  const removeInteractiveItem = (id: string) =>
+    setInteractiveItems(prev => prev.filter(i => i.id !== id))
+
+  const updateInteractiveItem = (id: string, updates: Partial<InteractiveItem>) =>
+    setInteractiveItems(prev => prev.map(i => (i.id === id ? { ...i, ...updates } : i)))
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim()) return
+    try {
+      setLoading(true)
+
+      let storage_path: string | null = null
+      let media_url: string | null = null
+      let ext_url: string | null = externalUrl?.trim() || null
+      let interactive_schema: any | null = null
+
+      if (contentType === 'interactive') {
+        interactive_schema = {
+          version: 1,
+          items: interactiveItems.map(({ id, prompt, type, scale }) => ({ id, prompt, type, scale })),
+        }
+      }
+
+      // If we have a file, upload to storage
+      if (file) {
+        const key = `uploads/${Date.now()}_${file.name}`
+        const { error: upErr } = await supabase.storage.from('resource_files').upload(key, file, {
+          cacheControl: '3600',
+          upsert: false,
+        })
+        if (upErr) throw upErr
+        storage_path = key
+        const { data: pub } = supabase.storage.from('resource_files').getPublicUrl(key)
+        media_url = pub?.publicUrl || null
+      }
+
+      // pick best final url
+      const finalUrl = media_url || ext_url || null
+
+      const { data, error } = await supabase
+        .from('resource_library')
+        .insert({
+          title,
+          category,
+          description,
+          content_type: contentType,
+          difficulty_level: difficulty,
+          tags: tags
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+          is_public: true,
+          media_url: finalUrl,
+          storage_path,
+          external_url: ext_url,
+          interactive_schema,
+        })
+        .select(
+          'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
+        )
+        .single()
+
+      if (error) throw error
+      onCreated(data as Resource)
+      onClose()
+    } catch (err) {
+      console.error('CreateResource error:', err)
+      alert('Could not create resource. Check storage bucket "resource_files" and RLS.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <div className="fixed inset-0 bg-gray-900/50" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full">
+          <form onSubmit={submit}>
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Create Resource</h3>
+              <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-700 mb-2">Title</span>
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-700 mb-2">Category</span>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {CATEGORIES.filter(c=>c.id!=='all').map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="block text-sm font-medium text-gray-700 mb-2">Description</span>
+                <textarea
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-700 mb-2">Content Type</span>
+                  <select
+                    value={contentType}
+                    onChange={(e) => setContentType(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="pdf">PDF</option>
+                    <option value="video">Video</option>
+                    <option value="audio">Audio</option>
+                    <option value="interactive">Interactive (rating)</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-700 mb-2">Difficulty</span>
+                  <select
+                    value={difficulty}
+                    onChange={(e) => setDifficulty(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="beginner">Beginner</option>
+                    <option value="intermediate">Intermediate</option>
+                    <option value="advanced">Advanced</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-700 mb-2">Tags (comma separated)</span>
+                  <input
+                    value={tags}
+                    onChange={(e) => setTags(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </label>
+              </div>
+
+              {(contentType === 'pdf' || contentType === 'audio' || contentType === 'video') && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="block text-sm font-medium text-gray-700 mb-2">
+                      Upload file (stored)
+                    </span>
+                    <input
+                      type="file"
+                      accept={contentType === 'pdf' ? 'application/pdf' : contentType === 'audio' ? 'audio/*' : 'video/*'}
+                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                      className="w-full text-sm"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="block text-sm font-medium text-gray-700 mb-2">
+                      or External URL (YouTube/Vimeo/hosted)
+                    </span>
+                    <div className="relative">
+                      <LinkIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={externalUrl}
+                        onChange={(e) => setExternalUrl(e.target.value)}
+                        placeholder="https://…"
+                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              {contentType === 'interactive' && (
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium text-gray-900">Interactive Builder</h4>
+                    <button
+                      type="button"
+                      onClick={addInteractiveItem}
+                      className="text-sm px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    >
+                      + Add question
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {interactiveItems.map((it) => (
+                      <div key={it.id} className="grid grid-cols-1 sm:grid-cols-6 gap-2 items-center">
+                        <input
+                          value={it.prompt}
+                          onChange={(e) => updateInteractiveItem(it.id, { prompt: e.target.value })}
+                          placeholder="Prompt"
+                          className="sm:col-span-4 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <select
+                          value={it.scale}
+                          onChange={(e) => updateInteractiveItem(it.id, { scale: Number(e.target.value) })}
+                          className="sm:col-span-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          {[3,4,5,7,10].map(n => <option key={n} value={n}>{n}-point</option>)}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => removeInteractiveItem(it.id)}
+                          className="sm:col-span-1 px-2 py-2 rounded border text-gray-600 hover:bg-gray-50 flex items-center justify-center"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    {!interactiveItems.length && (
+                      <div className="text-sm text-gray-500">No questions yet.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-5 border-t border-gray-200 flex justify-end gap-2">
+              <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !title.trim()}
+                className="px-6 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? 'Saving…' : 'Create'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* =========================
+   Create Course Modal (eLearning)
+========================= */
+
+type CourseLesson = { id: string; title: string; type: 'text' | 'video' | 'audio' | 'pdf' | 'interactive' | 'link'; url?: string; content?: string }
+type CourseModule = { id: string; title: string; lessons: CourseLesson[] }
+
+const CreateCourseModal: React.FC<{
+  onClose: () => void
+  onCreated: (resource: Resource) => void
+}> = ({ onClose, onCreated }) => {
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [difficulty, setDifficulty] = useState('beginner')
+  const [category, setCategory] = useState('educational')
+  const [modules, setModules] = useState<CourseModule[]>([
+    { id: crypto.randomUUID(), title: 'Module 1', lessons: [] }
+  ])
+  const [saving, setSaving] = useState(false)
+
+  const addModule = () => setModules(prev => [...prev, { id: crypto.randomUUID(), title: `Module ${prev.length+1}`, lessons: [] }])
+  const removeModule = (id: string) => setModules(prev => prev.filter(m => m.id !== id))
+  const updateModuleTitle = (id: string, title: string) => setModules(prev => prev.map(m => m.id === id ? { ...m, title } : m))
+
+  const addLesson = (moduleId: string) => setModules(prev => prev.map(m => m.id === moduleId ? {
+    ...m, lessons: [...m.lessons, { id: crypto.randomUUID(), title: 'New lesson', type: 'text', content: '' }]
+  } : m))
+
+  const updateLesson = (moduleId: string, lessonId: string, updates: Partial<CourseLesson>) =>
+    setModules(prev => prev.map(m => {
+      if (m.id !== moduleId) return m
+      return { ...m, lessons: m.lessons.map(l => l.id === lessonId ? { ...l, ...updates } : l) }
+    }))
+
+  const removeLesson = (moduleId: string, lessonId: string) =>
+    setModules(prev => prev.map(m => m.id === moduleId ? { ...m, lessons: m.lessons.filter(l => l.id !== lessonId) } : m))
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim()) return
+    try {
+      setSaving(true)
+      const manifest = {
+        version: 1,
+        title,
+        description,
+        difficulty_level: difficulty,
+        modules: modules.map(m => ({
+          title: m.title,
+          lessons: m.lessons.map(l => ({
+            title: l.title,
+            type: l.type,
+            url: l.url || null,
+            content: l.content || null
+          }))
+        }))
+      }
+
+      const { data, error } = await supabase
+        .from('resource_library')
+        .insert({
+          title,
+          description,
+          category,
+          content_type: 'course',
+          difficulty_level: difficulty,
+          is_public: true,
+          tags: [],
+          course_manifest: manifest
+        })
+        .select(
+          'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
+        )
+        .single()
+
+      if (error) throw error
+      onCreated(data as Resource)
+      onClose()
+    } catch (err) {
+      console.error('CreateCourse error:', err)
+      alert('Could not create course. Ensure table "resource_library" allows JSONB in course_manifest.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <div className="fixed inset-0 bg-gray-900/50" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl max-w-3xl w-full">
+          <form onSubmit={submit}>
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Create Course</h3>
+              <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-700 mb-2">Course Title</span>
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    required
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-700 mb-2">Category</span>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    {CATEGORIES.filter(c=>c.id!=='all').map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="block text-sm font-medium text-gray-700 mb-2">Description</span>
+                <textarea
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm font-medium text-gray-700 mb-2">Difficulty</span>
+                <select
+                  value={difficulty}
+                  onChange={(e) => setDifficulty(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 max-w-xs"
+                >
+                  <option value="beginner">Beginner</option>
+                  <option value="intermediate">Intermediate</option>
+                  <option value="advanced">Advanced</option>
+                </select>
+              </label>
+
+              <div className="border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between p-3 border-b">
+                  <h4 className="font-medium text-gray-900">Modules & Lessons</h4>
+                  <button type="button" onClick={addModule} className="text-sm px-2 py-1 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100">
+                    + Add Module
+                  </button>
+                </div>
+
+                <div className="p-3 space-y-4 max-h-80 overflow-y-auto">
+                  {modules.map((m, mi) => (
+                    <div key={m.id} className="border rounded-lg">
+                      <div className="flex items-center justify-between p-3 border-b bg-gray-50">
+                        <input
+                          value={m.title}
+                          onChange={(e) => updateModuleTitle(m.id, e.target.value)}
+                          className="font-medium text-gray-900 bg-transparent outline-none flex-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeModule(m.id)}
+                          className="ml-2 text-gray-500 hover:text-red-600"
+                          title="Remove module"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="p-3 space-y-3">
+                        {m.lessons.map((l) => (
+                          <div key={l.id} className="grid grid-cols-1 md:grid-cols-6 gap-2 items-start">
+                            <input
+                              value={l.title}
+                              onChange={(e) => updateLesson(m.id, l.id, { title: e.target.value })}
+                              placeholder="Lesson title"
+                              className="md:col-span-2 px-3 py-2 border rounded"
+                            />
+                            <select
+                              value={l.type}
+                              onChange={(e) => updateLesson(m.id, l.id, { type: e.target.value as CourseLesson['type'] })}
+                              className="md:col-span-1 px-3 py-2 border rounded"
+                            >
+                              <option value="text">Text</option>
+                              <option value="video">Video</option>
+                              <option value="audio">Audio</option>
+                              <option value="pdf">PDF</option>
+                              <option value="interactive">Interactive</option>
+                              <option value="link">Link</option>
+                            </select>
+                            <input
+                              value={l.url || ''}
+                              onChange={(e) => updateLesson(m.id, l.id, { url: e.target.value })}
+                              placeholder="URL (for video/audio/pdf/link)"
+                              className="md:col-span-2 px-3 py-2 border rounded"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeLesson(m.id, l.id)}
+                              className="md:col-span-1 px-2 py-2 rounded border text-gray-600 hover:bg-gray-50 flex items-center justify-center"
+                              title="Remove lesson"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                            {l.type === 'text' && (
+                              <textarea
+                                value={l.content || ''}
+                                onChange={(e) => updateLesson(m.id, l.id, { content: e.target.value })}
+                                placeholder="Lesson text content…"
+                                className="md:col-span-6 px-3 py-2 border rounded"
+                                rows={3}
+                              />
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => addLesson(m.id)}
+                          className="text-sm px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        >
+                          + Add lesson
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {!modules.length && (
+                    <div className="text-sm text-gray-500">No modules yet.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-gray-200 flex justify-end gap-2">
+              <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving || !title.trim()}
+                className="px-6 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Create Course'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* =========================
    Main Component
 ========================= */
 
@@ -579,6 +1139,9 @@ export default function ResourceLibrary() {
   const [bookmarkedResources, setBookmarkedResources] = useState<string[]>([])
   const [resourcesLoading, setResourcesLoading] = useState(false)
   const [resourcesError, setResourcesError] = useState<string | null>(null)
+  const [showCreateResource, setShowCreateResource] = useState(false)
+  const [showCreateCourse, setShowCreateCourse] = useState(false)
+  const [createMenuOpen, setCreateMenuOpen] = useState(false)
 
   const { profile } = useAuth()
   const { templates, assignAssessment } = useAssessments()
@@ -638,13 +1201,12 @@ export default function ResourceLibrary() {
       const { data, error } = await supabase
         .from('resource_library')
         .select(
-          'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at'
+          'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
         )
         .eq('is_public', true)
         .order('created_at', { ascending: false })
 
       if (error || !data || !data.length) {
-        // fall back to sample if empty / RLS blocked
         console.warn('[ResourceLibrary] using sample resources; DB empty or RLS blocked', { error })
         setResources(SAMPLE_RESOURCES)
       } else {
@@ -694,6 +1256,8 @@ export default function ResourceLibrary() {
         title: resource.title,
         instructions: resource.description || 'Please review this resource.',
         status: 'assigned',
+        // optionally include a pointer to resource_id
+        resource_id: resourceId
       }))
 
       const { error } = await supabase.from('form_assignments').insert(payload)
@@ -719,7 +1283,7 @@ export default function ResourceLibrary() {
     }
   }
 
-  /* ---------- Resources Tab UI ---------- */
+  /* ---------- Resource tab UI ---------- */
 
   const renderResourcesTab = () => {
     if (resourcesLoading) {
@@ -739,21 +1303,34 @@ export default function ResourceLibrary() {
               <Library className="w-5 h-5 text-blue-600" />
               <h2 className="text-lg font-semibold text-gray-900">Resource Library</h2>
             </div>
-            <div className="flex items-center gap-1">
+
+            {/* Create (therapist & admin) */}
+            <div className="relative">
               <button
-                onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-                aria-label="Grid view"
+                onClick={() => setCreateMenuOpen(v => !v)}
+                className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
               >
-                <Grid3X3 className="w-4 h-4" />
+                <Plus className="w-4 h-4" />
+                Create
+                <ChevronDown className="w-4 h-4 opacity-90" />
               </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-                aria-label="List view"
-              >
-                <List className="w-4 h-4" />
-              </button>
+
+              {createMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                    onClick={() => { setShowCreateResource(true); setCreateMenuOpen(false) }}
+                  >
+                    New Resource (PDF/Video/Audio/Interactive)
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                    onClick={() => { setShowCreateCourse(true); setCreateMenuOpen(false) }}
+                  >
+                    New Course (eLearning)
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -789,8 +1366,25 @@ export default function ResourceLibrary() {
                   </button>
                 )
               })}
+
+              {/* view mode toggle */}
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                  aria-label="Grid view"
+                >
+                  <Grid3X3 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                  aria-label="List view"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </div>
 
           {resourcesError && (
             <div className="mt-2 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-2">
@@ -845,272 +1439,7 @@ export default function ResourceLibrary() {
                       <span className="text-[11px] text-gray-500">{new Date(r.created_at).toLocaleDateString()}</span>
                     </div>
 
-                    {r.tags?.length ? (
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {r.tags.slice(0, 2).map((tag, i) => (
-                          <span key={i} className="px-1.5 py-0.5 text-[11px] bg-gray-100 text-gray-600 rounded">
-                            #{tag}
-                          </span>
-                        ))}
-                        {r.tags.length > 2 && (
-                          <span className="px-1.5 py-0.5 text-[11px] bg-gray-100 text-gray-500 rounded">
-                            +{r.tags.length - 2}
-                          </span>
-                        )}
-                      </div>
-                    ) : null}
-
                     <div className="flex gap-1">
                       <button
                         onClick={() => setSelectedResource(r)}
-                        className="flex-1 flex items-center justify-center px-2 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100"
-                      >
-                        <Eye className="w-3.5 h-3.5 mr-1" />
-                        View
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedResource(r)
-                          setShowAssignModal(true)
-                        }}
-                        className="flex-1 flex items-center justify-center px-2 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
-                      >
-                        <Send className="w-3.5 h-3.5 mr-1" />
-                        Assign
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {filteredResources.map((r) => {
-                const { cls, Icon, label } = getContentType(r.content_type)
-                const isBookmarked = bookmarkedResources.includes(r.id)
-                return (
-                  <div
-                    key={r.id}
-                    className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-sm hover:border-blue-200 transition-all"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <Icon className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between mb-1">
-                            <h3 className="font-medium text-gray-900 text-sm truncate pr-2">{r.title}</h3>
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              <span className={`px-1.5 py-0.5 rounded text-[11px] capitalize ${cls}`}>{label}</span>
-                              <button
-                                onClick={() => toggleBookmark(r.id)}
-                                className={`p-1 rounded ${isBookmarked ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`}
-                                aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark'}
-                              >
-                                {isBookmarked ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
-                              </button>
-                            </div>
-                          </div>
-                          <p className="text-xs text-gray-600 mb-2 line-clamp-1">{r.description}</p>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {r.difficulty_level && (
-                                <span
-                                  className={`px-2 py-0.5 text-[11px] rounded-full ${getDifficultyColor(r.difficulty_level)}`}
-                                >
-                                  {r.difficulty_level}
-                                </span>
-                              )}
-                              <span className="text-[11px] text-gray-500">{new Date(r.created_at).toLocaleDateString()}</span>
-                            </div>
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => setSelectedResource(r)}
-                                className="flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100"
-                              >
-                                <Eye className="w-3.5 h-3.5 mr-1" />
-                                View
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setSelectedResource(r)
-                                  setShowAssignModal(true)
-                                }}
-                                className="flex items-center px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
-                              >
-                                <Send className="w-3.5 h-3.5 mr-1" />
-                                Assign
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Preview modal */}
-        {selectedResource && !showAssignModal && (
-          <div className="fixed inset-0 z-50 overflow-y-auto">
-            <div className="flex min-h-screen items-center justify-center p-4">
-              <div className="fixed inset-0 bg-gray-900/50" onClick={() => setSelectedResource(null)} />
-              <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
-                <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                  <h3 className="text-lg font-semibold text-gray-900">{selectedResource.title}</h3>
-                  <button
-                    onClick={() => setSelectedResource(null)}
-                    className="p-1 text-gray-400 hover:text-gray-600 rounded"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className="p-4 overflow-y-auto max-h-96 space-y-4">
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Description</h4>
-                    <p className="text-sm text-gray-700">{selectedResource.description}</p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Category</h4>
-                      <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full capitalize">
-                        {selectedResource.category}
-                      </span>
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Difficulty</h4>
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs rounded-full ${getDifficultyColor(
-                          selectedResource.difficulty_level
-                        )}`}
-                      >
-                        {selectedResource.difficulty_level || '—'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {selectedResource.tags?.length ? (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Tags</h4>
-                      <div className="flex flex-wrap gap-1">
-                        {selectedResource.tags.map((tag, i) => (
-                          <span key={i} className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="p-4 border-t border-gray-200 flex gap-2">
-                  <button
-                    onClick={() => setShowAssignModal(true)}
-                    className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    <Send className="w-4 h-4 mr-2" />
-                    Assign to Clients
-                  </button>
-                  <button
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                    title="Download (placeholder)"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Assign Resource Modal */}
-        {showAssignModal && selectedResource && (
-          <AssignResourceModal
-            resource={selectedResource}
-            clients={clients}
-            onClose={() => setShowAssignModal(false)}
-            onAssign={assignResource}
-          />
-        )}
-      </div>
-    )
-  }
-
-  /* ---------- Render ---------- */
-
-  return (
-    <div className="h-full flex flex-col bg-gray-50">
-      {/* Tabs */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-200">
-        <div className="flex space-x-8 px-4">
-          <button
-            onClick={() => setActiveTab('assessments')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'assessments'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5" />
-              <span>Psychometric Assessments</span>
-            </div>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('resources')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'resources'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <Library className="w-5 h-5" />
-              <span>Resource Library</span>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-h-0">
-        {activeTab === 'assessments' ? (
-          <div className="h-full">
-            <AssessmentLibrary
-              onAssign={(templateId) => {
-                const t = templates.find((x: any) => x.id === templateId)
-                if (!t) return
-                setSelectedAssessmentId(templateId)
-                setSelectedAssessmentName(t.name)
-                setShowAssessmentAssignModal(true)
-              }}
-              onPreview={(t) => {
-                // Plug in a real preview when you have a detail page
-                console.log('Preview assessment:', t)
-                alert(`Preview “${t.name}” (stub)`)
-              }}
-            />
-          </div>
-        ) : (
-          renderResourcesTab()
-        )}
-      </div>
-
-      {/* Assign Assessment Modal */}
-      {showAssessmentAssignModal && (
-        <AssignAssessmentModal
-          templateId={selectedAssessmentId}
-          templateName={selectedAssessmentName}
-          clients={clients}
-          onClose={() => setShowAssessmentAssignModal(false)}
-          onAssign={handleAssessmentAssign}
-        />
-      )}
-    </div>
-  )
-}
+                        className="flex-1 flex items-center just
