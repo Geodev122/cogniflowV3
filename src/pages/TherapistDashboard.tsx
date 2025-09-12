@@ -30,7 +30,7 @@ import {
 import { Navigate } from 'react-router-dom'
 import { TherapistOnboarding } from '../components/therapist/TherapistOnboarding'
 
-// Lazy load tool pages (with safe fallbacks where needed)
+// Lazy load the tool pages that DO exist
 const ClientManagement = React.lazy(() =>
   import('../components/therapist/ClientManagement').then(m => ({ default: m.ClientManagement }))
 )
@@ -40,168 +40,211 @@ const SessionManagement = React.lazy(() =>
 const CaseManagement = React.lazy(() =>
   import('../components/therapist/CaseManagement').then(m => ({ default: m.CaseManagement }))
 )
+// CommunicationTools has default export already
 const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools'))
 
-// Defensive lazy import for ProgressMetrics (avoids Vite crash if file is missing)
-const ProgressMetrics = React.lazy(async () => {
-  try {
-    const m = await import('../components/therapist/ProgressMetrics')
-    return { default: (m as any).ProgressMetrics ?? m.default }
-  } catch {
-    return {
-      default: () => (
-        <div className="p-6">
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
-            <BarChart3 className="mx-auto h-10 w-10 text-gray-300 mb-2" />
-            <h3 className="text-gray-900 font-medium">Progress Metrics</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Metrics module not found. Add it at
-              <code className="px-1 mx-1 rounded bg-gray-100">src/components/therapist/ProgressMetrics.tsx</code>
-              to replace this placeholder.
-            </p>
+/* -----------------------------------------------------------------------------
+   INLINE FALLBACK PAGES (no imports -> no Vite resolve errors)
+----------------------------------------------------------------------------- */
+
+// Simple inline Progress Metrics page (replace later with a real file if you want)
+const ProgressMetrics: React.FC = () => {
+  // You can later feed these from Supabase
+  const cards = [
+    { title: 'Completed Assessments', value: 128, sub: '+12 this week' },
+    { title: 'Avg. PHQ-9 Change', value: '-2.1', sub: 'last 4 weeks' },
+    { title: 'Attendance Rate', value: '92%', sub: 'rolling 30 days' },
+  ]
+  const rows = [
+    { name: 'John Smith', metric: 'PHQ-9 Δ', value: '-3', note: 'Improving' },
+    { name: 'Emily Davis', metric: 'GAD-7 Δ', value: '-1', note: 'Stable' },
+    { name: 'Michael Lee', metric: 'PHQ-9 Δ', value: '-4', note: 'Improving' },
+  ]
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center gap-2 mb-6">
+        <BarChart3 className="w-6 h-6 text-blue-600" />
+        <h2 className="text-2xl font-bold text-gray-900">Progress Metrics</h2>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        {cards.map((c) => (
+          <div key={c.title} className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+            <div className="text-sm text-gray-600">{c.title}</div>
+            <div className="text-3xl font-bold text-gray-900 mt-1">{c.value}</div>
+            <div className="text-xs text-gray-500 mt-1">{c.sub}</div>
           </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+        <div className="px-4 py-3 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-900">Recent Changes</h3>
         </div>
-      )
+        <div className="overflow-x-auto">
+          <table className="min-w-full table-fixed">
+            <colgroup>
+              <col className="w-1/2" />
+              <col className="w-1/4" />
+              <col className="w-1/6" />
+              <col className="w-1/6" />
+            </colgroup>
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <tr>
+                <th className="text-left px-4 py-3">Client</th>
+                <th className="text-left px-4 py-3">Metric</th>
+                <th className="text-left px-4 py-3">Value</th>
+                <th className="text-left px-4 py-3">Note</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 text-sm">
+              {rows.map((r, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">{r.name}</td>
+                  <td className="px-4 py-3">{r.metric}</td>
+                  <td className="px-4 py-3">{r.value}</td>
+                  <td className="px-4 py-3">{r.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Inline Clinic Rentals (admin-listed). Some can be externally managed -> WhatsApp enquire.
+const ClinicRental: React.FC = () => {
+  const spaces = [
+    {
+      id: '1',
+      name: 'Downtown Therapy Room A',
+      location: 'Central Business District',
+      amenities: ['Soundproofing', 'Sofa + Armchair', 'Wi-Fi', 'Water'],
+      pricing: { hourly: 25, daily: 150, tailored: true },
+      whatsapp: '971500000001', // E.164 without '+'
+      external: false
+    },
+    {
+      id: '2',
+      name: 'Quiet Counselling Suite',
+      location: 'West End',
+      amenities: ['Desk', 'Waiting Area', 'Wi-Fi'],
+      pricing: { hourly: 20, daily: 120, tailored: true },
+      whatsapp: '971500000002',
+      external: true // enquiry only
+    },
+    {
+      id: '3',
+      name: 'Clinic Group Room',
+      location: 'Media City',
+      amenities: ['Group Seating', 'Projector', 'Whiteboard', 'Wi-Fi'],
+      pricing: { hourly: 40, daily: 240, tailored: true },
+      whatsapp: '971500000003',
+      external: false
     }
+  ]
+
+  const openWA = (phone: string, text: string) => {
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
   }
-})
 
-// Defensive lazy import for ClinicRental; if missing, show a built-in functional placeholder
-const ClinicRental = React.lazy(async () => {
-  try {
-    const m = await import('../components/therapist/ClinicRental')
-    return { default: (m as any).ClinicRental ?? m.default }
-  } catch {
-    // Built-in functional placeholder: lists admin-managed spaces, allows booking request or WhatsApp enquiry
-    const Fallback: React.FC = () => {
-      // These would normally come from your DB (admin-listed)
-      const spaces = [
-        {
-          id: '1',
-          name: 'Downtown Therapy Room A',
-          location: 'Central Business District',
-          amenities: ['Soundproofing', 'Sofa + Armchair', 'Wi-Fi', 'Water'],
-          pricing: { hourly: 25, daily: 150, tailored: true },
-          externalWhatsapp: '971500000001', // E.164 without '+' for wa.me
-          managedExternally: false
-        },
-        {
-          id: '2',
-          name: 'Quiet Counselling Suite',
-          location: 'West End',
-          amenities: ['Desk', 'Waiting Area', 'Wi-Fi'],
-          pricing: { hourly: 20, daily: 120, tailored: true },
-          externalWhatsapp: '971500000002',
-          managedExternally: true // enquiry only (external)
-        },
-        {
-          id: '3',
-          name: 'Clinic Group Room',
-          location: 'Media City',
-          amenities: ['Group seating', 'Projector', 'Whiteboard', 'Wi-Fi'],
-          pricing: { hourly: 40, daily: 240, tailored: true },
-          externalWhatsapp: '971500000003',
-          managedExternally: false
-        }
-      ]
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Building2 className="w-6 h-6 text-blue-600" />
+          Clinic Rentals
+        </h2>
+        <p className="text-gray-600 mt-1">
+          Book admin-listed clinic spaces by the hour, per day, or request a tailored plan. Some listings are externally managed—use WhatsApp to enquire.
+        </p>
+      </div>
 
-      const openWhatsApp = (phone: string, text: string) => {
-        const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
-        window.open(url, '_blank', 'noopener,noreferrer')
-      }
-
-      return (
-        <div className="p-6">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Building2 className="w-6 h-6 text-blue-600" /> Clinic Rentals
-            </h2>
-            <p className="text-gray-600">Book an admin-listed clinic space by the hour, per day, or request a tailored plan. Some listings are externally managed—use WhatsApp to enquire.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {spaces.map(space => (
-              <div key={space.id} className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 flex flex-col">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{space.name}</h3>
-                    <p className="text-sm text-gray-600">{space.location}</p>
-                  </div>
-                  <Building2 className="w-5 h-5 text-gray-300" />
-                </div>
-
-                <div className="mt-3">
-                  <div className="text-xs text-gray-500 mb-1">Amenities</div>
-                  <div className="flex flex-wrap gap-2">
-                    {space.amenities.map(a => (
-                      <span key={a} className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">{a}</span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <div className="rounded-md border border-gray-200 p-3 text-center">
-                    <div className="text-xs text-gray-500">Hour</div>
-                    <div className="text-sm font-semibold text-gray-900">${space.pricing.hourly}</div>
-                  </div>
-                  <div className="rounded-md border border-gray-200 p-3 text-center">
-                    <div className="text-xs text-gray-500">Per Day</div>
-                    <div className="text-sm font-semibold text-gray-900">${space.pricing.daily}</div>
-                  </div>
-                  <div className="rounded-md border border-gray-200 p-3 text-center">
-                    <div className="text-xs text-gray-500">Tailored</div>
-                    <div className="text-sm font-semibold text-gray-900">{space.pricing.tailored ? 'Available' : '—'}</div>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                  {!space.managedExternally ? (
-                    <>
-                      <button
-                        onClick={() => openWhatsApp(space.externalWhatsapp, `Hi, I'd like to book "${space.name}" for a few hours. Can you share availability and terms?`)}
-                        className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm"
-                      >
-                        Book Hour / Day
-                      </button>
-                      <button
-                        onClick={() => openWhatsApp(space.externalWhatsapp, `Hi, I'm interested in a tailored rental plan for "${space.name}".`)}
-                        className="inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm"
-                      >
-                        Tailored Plan
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => openWhatsApp(space.externalWhatsapp, `Hi, I'm enquiring about "${space.name}" (externally managed).`)}
-                      className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm"
-                    >
-                      <MessageCircle className="w-4 h-4" /> Enquire on WhatsApp
-                    </button>
-                  )}
-                </div>
-
-                {space.managedExternally && (
-                  <p className="mt-2 text-xs text-emerald-700">
-                    This listing is externally managed. Booking is handled off-platform—tap Enquire to continue on WhatsApp.
-                  </p>
-                )}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {spaces.map((s) => (
+          <div key={s.id} className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 flex flex-col">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{s.name}</h3>
+                <p className="text-sm text-gray-600">{s.location}</p>
               </div>
-            ))}
-          </div>
+              <Building2 className="w-5 h-5 text-gray-300" />
+            </div>
 
-          <div className="mt-6 rounded-md border border-amber-200 bg-amber-50 p-4">
-            <p className="text-sm text-amber-800">
-              <strong>Admin note:</strong> Clinic spaces are curated and managed by admins. If you need your clinic listed, contact the platform administrator.
-            </p>
-          </div>
-        </div>
-      )
-    }
-    return { default: Fallback }
-  }
-})
+            <div className="mt-3">
+              <div className="text-xs text-gray-500 mb-1">Amenities</div>
+              <div className="flex flex-wrap gap-2">
+                {s.amenities.map((a) => (
+                  <span key={a} className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">{a}</span>
+                ))}
+              </div>
+            </div>
 
-// ---------------- Types ----------------
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="rounded-md border border-gray-200 p-3 text-center">
+                <div className="text-xs text-gray-500">Hour</div>
+                <div className="text-sm font-semibold text-gray-900">${s.pricing.hourly}</div>
+              </div>
+              <div className="rounded-md border border-gray-200 p-3 text-center">
+                <div className="text-xs text-gray-500">Per Day</div>
+                <div className="text-sm font-semibold text-gray-900">${s.pricing.daily}</div>
+              </div>
+              <div className="rounded-md border border-gray-200 p-3 text-center">
+                <div className="text-xs text-gray-500">Tailored</div>
+                <div className="text-sm font-semibold text-gray-900">{s.pricing.tailored ? 'Available' : '—'}</div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+              {!s.external ? (
+                <>
+                  <button
+                    onClick={() => openWA(s.whatsapp, `Hi, I'd like to book "${s.name}" for a few hours/day. Could you share availability and terms?`)}
+                    className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm"
+                  >
+                    Book Hour / Day
+                  </button>
+                  <button
+                    onClick={() => openWA(s.whatsapp, `Hi, I'm interested in a tailored rental plan for "${s.name}".`)}
+                    className="inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm"
+                  >
+                    Tailored Plan
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => openWA(s.whatsapp, `Hi, I'm enquiring about "${s.name}" (externally managed).`)}
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Enquire on WhatsApp
+                </button>
+              )}
+            </div>
+
+            {s.external && (
+              <p className="mt-2 text-xs text-emerald-700">
+                This listing is externally managed. Booking is handled off-platform—tap Enquire to continue on WhatsApp.
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6 rounded-md border border-amber-200 bg-amber-50 p-4">
+        <p className="text-sm text-amber-800">
+          <strong>Admin note:</strong> Clinic spaces are curated and managed by admins. To have your clinic listed, contact the platform administrator.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/* -----------------------------------------------------------------------------
+   TYPES
+----------------------------------------------------------------------------- */
 interface DashboardStats {
   totalClients: number
   activeCases: number
@@ -246,7 +289,9 @@ type SectionId =
   | 'supervision'
   | 'admin'
 
-// ---------------- Component ----------------
+/* -----------------------------------------------------------------------------
+   MAIN COMPONENT
+----------------------------------------------------------------------------- */
 export default function TherapistDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -310,7 +355,6 @@ export default function TherapistDashboard() {
         .from('therapist_client_relations')
         .select('client_id')
         .eq('therapist_id', profile.id)
-
       if (relationsError) console.warn('dashboard: client relations error:', relationsError)
 
       const { data: activeCases, error: casesError } = await supabase
@@ -318,7 +362,6 @@ export default function TherapistDashboard() {
         .select('id')
         .eq('therapist_id', profile.id)
         .eq('status', 'active')
-
       if (casesError) console.warn('dashboard: active cases error:', casesError)
 
       const today = new Date().toISOString().split('T')[0]
@@ -334,7 +377,6 @@ export default function TherapistDashboard() {
         .eq('therapist_id', profile.id)
         .gte('appointment_date', today)
         .lt('appointment_date', `${today}T23:59:59`)
-
       if (appointmentsError) console.warn('dashboard: today appts error:', appointmentsError)
 
       const steps: OnboardingStep[] = [
@@ -563,7 +605,7 @@ export default function TherapistDashboard() {
             </div>
           </div>
           <div>
-            <h4 className="font-medium text-blue-900 mb-3 flex items-center"><Shield className="w-4 h-4 mr-2 text-blue-600" />Admin Updates</h4>
+            <h4 className="font-medium text-blue-900 mb-3 flex items-centered"><Shield className="w-4 h-4 mr-2 text-blue-600" />Admin Updates</h4>
             <div className="space-y-3">
               {recentActivities.filter(a => a.type === 'admin').map(a => (
                 <div key={a.id} className="p-3 bg-blue-50 rounded-lg">
@@ -611,7 +653,7 @@ export default function TherapistDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* Fixed Header */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-white shadow-sm border-b border-gray-200">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
@@ -672,12 +714,14 @@ export default function TherapistDashboard() {
                 <span className="hidden sm:inline">{isSigningOut ? 'Signing out...' : 'Sign out'}</span>
               </button>
 
+              {/* Mobile Menu Button */}
               <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors">
                 {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
             </div>
           </div>
 
+          {/* Sign out error notification */}
           {signOutError && (
             <div className="bg-red-50 border-l-4 border-red-400 p-3">
               <div className="flex items-center">
@@ -691,7 +735,7 @@ export default function TherapistDashboard() {
       </header>
 
       <div className="flex pt-16">
-        {/* Sidebar */}
+        {/* Sidebar (desktop) */}
         <div className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 fixed left-0 top-16 bottom-0 transition-all duration-300 shadow-lg z-30`}>
           <div className="flex-shrink-0 border-b border-gray-100">
             <div className="p-4 flex items-center justify-between">
@@ -729,7 +773,7 @@ export default function TherapistDashboard() {
                       return (
                         <button
                           key={tab.id}
-                          onClick={() => goto(tab.id as SectionId)}
+                          onClick={() => { setActive(tab.id as SectionId) }}
                           className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-xl transition-all duration-200 text-sm font-medium group relative overflow-hidden ${
                             isActive
                               ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg transform scale-105 border border-blue-400'
@@ -761,7 +805,7 @@ export default function TherapistDashboard() {
           )}
         </div>
 
-        {/* Mobile Nav */}
+        {/* Mobile Navigation Overlay */}
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-0 z-50 pt-16">
             <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setMobileMenuOpen(false)} />
@@ -778,7 +822,7 @@ export default function TherapistDashboard() {
                           return (
                             <button
                               key={tab.id}
-                              onClick={() => goto(tab.id as SectionId)}
+                              onClick={() => { goto(tab.id as SectionId) }}
                               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-all text-sm font-medium ${isActive ? 'text-blue-700 bg-blue-50' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
                             >
                               <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />
@@ -798,7 +842,9 @@ export default function TherapistDashboard() {
         {/* Main Content */}
         <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} bg-gray-50 min-h-0`}>
           <main className="min-h-[calc(100vh-4rem)] overflow-y-auto">
-            <Suspense fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>}>
+            <Suspense
+              fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>}
+            >
               {active === 'overview'   && <Overview />}
               {active === 'clients'    && <ClientManagement />}
               {active === 'cases'      && <CaseManagement />}
@@ -819,7 +865,9 @@ export default function TherapistDashboard() {
                 <div className="p-6">
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
                     {(active === 'supervision') ? <Headphones className="mx-auto h-10 w-10 text-gray-300 mb-2" /> : <Shield className="mx-auto h-10 w-10 text-gray-300 mb-2" />}
-                    <h3 className="text-gray-900 font-medium">{active === 'supervision' ? 'Supervision' : 'Contact Administrator'}</h3>
+                    <h3 className="text-gray-900 font-medium">
+                      {active === 'supervision' ? 'Supervision' : 'Contact Administrator'}
+                    </h3>
                     <p className="text-sm text-gray-600 mt-1">This section will be available soon.</p>
                   </div>
                 </div>
@@ -833,6 +881,7 @@ export default function TherapistDashboard() {
       {showOnboardingModal && (
         <TherapistOnboarding onComplete={handleOnboardingComplete} onClose={() => setShowOnboardingModal(false)} />
       )}
+
       {showProfileModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -863,7 +912,7 @@ export default function TherapistDashboard() {
   )
 }
 
-// Simple Profile
+// Simple Modern Profile Component
 const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = ({ profile, onEdit }) => {
   const professionalDetails = profile?.professional_details || {}
   return (
@@ -948,11 +997,9 @@ const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = (
       )}
 
       <div className="text-center">
-        <button
-          onClick={onEdit}
-          className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <User className="w-4 h-4 mr-2" /> Edit Profile
+        <button onClick={onEdit} className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <User className="w-4 h-4 mr-2" />
+          Edit Profile
         </button>
       </div>
     </div>
