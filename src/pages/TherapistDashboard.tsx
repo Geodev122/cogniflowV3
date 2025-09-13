@@ -1,3 +1,4 @@
+// src/pages/TherapistDashboard.tsx
 import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -22,33 +23,229 @@ import {
   Eye,
   Phone,
   LogOut,
+  BarChart3,
   Building2,
+  MessageCircle
 } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { TherapistOnboarding } from '../components/therapist/TherapistOnboarding'
 
-/* =========================
-   Lazy-loaded therapist pages (from your repo)
-   (Assumes default exports; if not, switch to named like: .then(m => ({ default: m.CaseManagement })))
-========================= */
-const ClientManagement        = React.lazy(() => import('../components/therapist/ClientManagement'))
-const CaseManagement          = React.lazy(() => import('../components/therapist/CaseManagement'))
-const SessionManagement       = React.lazy(() => import('../components/therapist/SessionManagement'))
-const CommunicationTools      = React.lazy(() => import('../components/therapist/CommunicationTools'))
-const ResourceLibrary         = React.lazy(() => import('../components/therapist/ResourceLibrary'))
-const ClinicRental            = React.lazy(() => import('../components/therapist/ClinicRental'))
-const AssessmentTools         = React.lazy(() => import('../components/therapist/AssessmentTools'))
-const CaseFiles               = React.lazy(() => import('../components/therapist/CaseFiles'))
-const CaseFormulation         = React.lazy(() => import('../components/therapist/CaseFormulation'))
-const DocumentationCompliance = React.lazy(() => import('../components/therapist/DocumentationCompliance'))
-const InBetweenSessions       = React.lazy(() => import('../components/therapist/InBetweenSessions'))
-const IntakeForm              = React.lazy(() => import('../components/therapist/IntakeForm'))
-const PracticeManagement      = React.lazy(() => import('../components/therapist/PracticeManagement'))
-const ProgressMonitoring      = React.lazy(() => import('../components/therapist/ProgressMonitoring'))
-const TherapistProfile        = React.lazy(() => import('../components/therapist/TherapistProfile'))
-const TreatmentPlanning       = React.lazy(() => import('../components/therapist/TreatmentPlanning'))
-const WorksheetManagement     = React.lazy(() => import('../components/therapist/WorksheetManagement'))
-const GameExercise            = React.lazy(() => import('../components/therapist/GameExercise'))
+// Lazy load the tool pages that DO exist
+const ClientManagement = React.lazy(() =>
+  import('../components/therapist/ClientManagement').then(m => ({ default: m.ClientManagement }))
+)
+const SessionManagement = React.lazy(() =>
+  import('../components/therapist/SessionManagement').then(m => ({ default: m.SessionManagement }))
+)
+const CaseManagement = React.lazy(() =>
+  import('../components/therapist/CaseManagement').then(m => ({ default: m.CaseManagement }))
+)
+// CommunicationTools has a default export already
+const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools'))
+
+// If you already created the ResourceLibrary page, this will render it inline.
+// If you don't have it yet, you can comment this import and the render line below.
+const ResourceLibrary = React.lazy(() =>
+  import('../components/therapist/ResourceLibrary').then(m => ({ default: m.default || m }))
+)
+
+/* -----------------------------------------------------------------------------
+   INLINE FALLBACK PAGES (no imports -> no Vite resolve errors)
+----------------------------------------------------------------------------- */
+
+// Simple inline Progress Metrics page (replace later with a real file if you want)
+const ProgressMetrics: React.FC = () => {
+  const cards = [
+    { title: 'Completed Assessments', value: 128, sub: '+12 this week' },
+    { title: 'Avg. PHQ-9 Change', value: '-2.1', sub: 'last 4 weeks' },
+    { title: 'Attendance Rate', value: '92%', sub: 'rolling 30 days' },
+  ]
+  const rows = [
+    { name: 'John Smith', metric: 'PHQ-9 Δ', value: '-3', note: 'Improving' },
+    { name: 'Emily Davis', metric: 'GAD-7 Δ', value: '-1', note: 'Stable' },
+    { name: 'Michael Lee', metric: 'PHQ-9 Δ', value: '-4', note: 'Improving' },
+  ]
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center gap-2 mb-6">
+        <BarChart3 className="w-6 h-6 text-blue-600" />
+        <h2 className="text-2xl font-bold text-gray-900">Progress Metrics</h2>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        {cards.map((c) => (
+          <div key={c.title} className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+            <div className="text-sm text-gray-600">{c.title}</div>
+            <div className="text-3xl font-bold text-gray-900 mt-1">{c.value}</div>
+            <div className="text-xs text-gray-500 mt-1">{c.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+        <div className="px-4 py-3 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-900">Recent Changes</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full table-fixed">
+            <colgroup>
+              <col className="w-1/2" />
+              <col className="w-1/4" />
+              <col className="w-1/6" />
+              <col className="w-1/6" />
+            </colgroup>
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <tr>
+                <th className="text-left px-4 py-3">Client</th>
+                <th className="text-left px-4 py-3">Metric</th>
+                <th className="text-left px-4 py-3">Value</th>
+                <th className="text-left px-4 py-3">Note</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 text-sm">
+              {rows.map((r, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">{r.name}</td>
+                  <td className="px-4 py-3">{r.metric}</td>
+                  <td className="px-4 py-3">{r.value}</td>
+                  <td className="px-4 py-3">{r.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Inline Clinic Rentals (admin-listed). Some can be externally managed -> WhatsApp enquire.
+const ClinicRental: React.FC = () => {
+  const spaces = [
+    {
+      id: '1',
+      name: 'Downtown Therapy Room A',
+      location: 'Central Business District',
+      amenities: ['Soundproofing', 'Sofa + Armchair', 'Wi-Fi', 'Water'],
+      pricing: { hourly: 25, daily: 150, tailored: true },
+      whatsapp: '971500000001', // E.164 without '+'
+      external: false
+    },
+    {
+      id: '2',
+      name: 'Quiet Counselling Suite',
+      location: 'West End',
+      amenities: ['Desk', 'Waiting Area', 'Wi-Fi'],
+      pricing: { hourly: 20, daily: 120, tailored: true },
+      whatsapp: '971500000002',
+      external: true // enquiry only
+    },
+    {
+      id: '3',
+      name: 'Clinic Group Room',
+      location: 'Media City',
+      amenities: ['Group Seating', 'Projector', 'Whiteboard', 'Wi-Fi'],
+      pricing: { hourly: 40, daily: 240, tailored: true },
+      whatsapp: '971500000003',
+      external: false
+    }
+  ]
+
+  const openWA = (phone: string, text: string) => {
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+  }
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Building2 className="w-6 h-6 text-blue-600" />
+          Clinic Rentals
+        </h2>
+        <p className="text-gray-600 mt-1">
+          Book admin-listed clinic spaces by the hour, per day, or request a tailored plan. Some listings are externally managed—use WhatsApp to enquire.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {spaces.map((s) => (
+          <div key={s.id} className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 flex flex-col">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{s.name}</h3>
+                <p className="text-sm text-gray-600">{s.location}</p>
+              </div>
+              <Building2 className="w-5 h-5 text-gray-300" />
+            </div>
+
+            <div className="mt-3">
+              <div className="text-xs text-gray-500 mb-1">Amenities</div>
+              <div className="flex flex-wrap gap-2">
+                {s.amenities.map((a) => (
+                  <span key={a} className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">{a}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="rounded-md border border-gray-200 p-3 text-center">
+                <div className="text-xs text-gray-500">Hour</div>
+                <div className="text-sm font-semibold text-gray-900">${s.pricing.hourly}</div>
+              </div>
+              <div className="rounded-md border border-gray-200 p-3 text-center">
+                <div className="text-xs text-gray-500">Per Day</div>
+                <div className="text-sm font-semibold text-gray-900">${s.pricing.daily}</div>
+              </div>
+              <div className="rounded-md border border-gray-200 p-3 text-center">
+                <div className="text-xs text-gray-500">Tailored</div>
+                <div className="text-sm font-semibold text-gray-900">{s.pricing.tailored ? 'Available' : '—'}</div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+              {!s.external ? (
+                <>
+                  <button
+                    onClick={() => openWA(s.whatsapp, `Hi, I'd like to book "${s.name}" for a few hours/day. Could you share availability and terms?`)}
+                    className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm"
+                  >
+                    Book Hour / Day
+                  </button>
+                  <button
+                    onClick={() => openWA(s.whatsapp, `Hi, I'm interested in a tailored rental plan for "${s.name}".`)}
+                    className="inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm"
+                  >
+                    Tailored Plan
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => openWA(s.whatsapp, `Hi, I'm enquiring about "${s.name}" (externally managed).`)}
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Enquire on WhatsApp
+                </button>
+              )}
+            </div>
+
+            {s.external && (
+              <p className="mt-2 text-xs text-emerald-700">
+                This listing is externally managed. Booking is handled off-platform—tap Enquire to continue on WhatsApp.
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6 rounded-md border border-amber-200 bg-amber-50 p-4">
+        <p className="text-sm text-amber-800">
+          <strong>Admin note:</strong> Clinic spaces are curated and managed by admins. To have your clinic listed, contact the platform administrator.
+        </p>
+      </div>
+    </div>
+  )
+}
 
 /* -----------------------------------------------------------------------------
    TYPES
@@ -91,20 +288,9 @@ type SectionId =
   | 'cases'
   | 'sessions'
   | 'leads'
-  | 'resources'
+  | 'metrics'
   | 'clinic'
-  | 'assessment_tools'
-  | 'case_files'
-  | 'case_formulation'
-  | 'documentation'
-  | 'in_between'
-  | 'intake_form'
-  | 'practice_mgmt'
-  | 'progress'
-  | 'therapist_profile'
-  | 'treatment_planning'
-  | 'worksheets'
-  | 'game_exercise'
+  | 'resources'
   | 'supervision'
   | 'admin'
 
@@ -137,41 +323,30 @@ export default function TherapistDashboard() {
   const navigationSections = [
     {
       title: null,
-      items: [{ id: 'overview', name: 'Overview', icon: Target }]
+      items: [{ id: 'overview', name: 'Overview', icon: Target, color: 'blue' }]
     },
     {
       title: 'Client Care',
       items: [
-        { id: 'clients',            name: 'Client Management',   icon: Users },
-        { id: 'cases',              name: 'Case Management',     icon: FileText },
-        { id: 'case_files',         name: 'Case Files',          icon: FileText },
-        { id: 'case_formulation',   name: 'Case Formulation',    icon: FileText },
-        { id: 'treatment_planning', name: 'Treatment Planning',  icon: FileText },
-        { id: 'worksheets',         name: 'Worksheet Management',icon: FileText },
-        { id: 'in_between',         name: 'In-Between Sessions', icon: Calendar },
-        { id: 'resources',          name: 'Resource Library',    icon: Library },
-        { id: 'assessment_tools',   name: 'Assessments',         icon: Brain },
+        { id: 'clients', name: 'Client Management', icon: Users, color: 'green' },
+        { id: 'cases', name: 'Case Management', icon: FileText, color: 'green' },
+        { id: 'resources', name: 'Resource Library', icon: Library, color: 'green' }
       ]
     },
     {
       title: 'Practice Management',
       items: [
-        { id: 'sessions',        name: 'Session Management',     icon: Calendar },
-        { id: 'practice_mgmt',   name: 'Practice Management',    icon: Building2 },
-        { id: 'clinic',          name: 'Clinic Rentals',         icon: Building2 },
-        { id: 'progress',        name: 'Progress Monitoring',    icon: CalendarDays },
-        { id: 'game_exercise',   name: 'Game / Exercise',        icon: Users },
-        { id: 'documentation',   name: 'Documentation & Compliance', icon: Shield },
+        { id: 'sessions', name: 'Session Management', icon: Calendar, color: 'purple' },
+        { id: 'leads', name: 'Client Leads', icon: Users, color: 'purple' },
+        { id: 'metrics', name: 'Progress Metrics', icon: BarChart3, color: 'purple' },
+        { id: 'clinic', name: 'Clinic Rentals', icon: Building2, color: 'purple' }
       ]
     },
     {
-      title: 'Profile & Support',
+      title: 'Support',
       items: [
-        { id: 'therapist_profile', name: 'Therapist Profile', icon: User },
-        { id: 'intake_form',       name: 'Intake Form',       icon: FileText },
-        { id: 'leads',             name: 'Client Leads',      icon: Users },
-        { id: 'supervision',       name: 'Supervision',       icon: Headphones },
-        { id: 'admin',             name: 'Contact Administrator', icon: Shield },
+        { id: 'supervision', name: 'Supervision', icon: Headphones, color: 'amber' },
+        { id: 'admin', name: 'Contact Administrator', icon: Shield, color: 'amber' }
       ]
     }
   ] as const
@@ -210,11 +385,11 @@ export default function TherapistDashboard() {
       if (appointmentsError) console.warn('dashboard: today appts error:', appointmentsError)
 
       const steps: OnboardingStep[] = [
-        { id: 'basic',        title: 'Basic Information',     completed: !!profile.whatsapp_number },
-        { id: 'professional', title: 'Professional Details',  completed: !!profile.professional_details },
-        { id: 'verification', title: 'Verification',          completed: profile.verification_status === 'verified' },
-        { id: 'bio',          title: 'Bio & Story',           completed: !!(profile.professional_details?.bio && profile.professional_details.bio.length > 150) },
-        { id: 'locations',    title: 'Practice Locations',    completed: !!(profile.professional_details?.practice_locations?.length > 0) }
+        { id: 'basic', title: 'Basic Information', completed: !!profile.whatsapp_number },
+        { id: 'professional', title: 'Professional Details', completed: !!profile.professional_details },
+        { id: 'verification', title: 'Verification', completed: profile.verification_status === 'verified' },
+        { id: 'bio', title: 'Bio & Story', completed: !!(profile.professional_details?.bio && profile.professional_details.bio.length > 150) },
+        { id: 'locations', title: 'Practice Locations', completed: !!(profile.professional_details?.practice_locations?.length > 0) }
       ]
       const completedSteps = steps.filter(s => s.completed).length
       const profileCompletion = Math.round((completedSteps / steps.length) * 100)
@@ -239,15 +414,15 @@ export default function TherapistDashboard() {
         })) || []
       )
 
-      // lightweight sample insights/activity stream (replace later if you wire analytics)
+      // placeholders
       setCaseInsights([
-        { client_name: 'John Smith',  insight: 'Improvement in anxiety scores', recommendation: 'Consider bi-weekly sessions', priority: 'medium' },
-        { client_name: 'Emily Davis', insight: 'Missed two assignments',         recommendation: 'Schedule check-in call',     priority: 'high' }
+        { client_name: 'John Smith',  insight: 'Showing consistent improvement in anxiety scores', recommendation: 'Consider reducing session frequency to bi-weekly', priority: 'medium' },
+        { client_name: 'Emily Davis', insight: 'Missed last two assignments', recommendation: 'Schedule check-in call to assess barriers', priority: 'high' }
       ])
       setRecentActivities([
-        { id: '1', type: 'client',      title: 'PHQ-9 completed',        description: 'Score 15 → 12', time: '2h ago', icon: 'CheckCircle' },
-        { id: '2', type: 'supervision', title: 'Group supervision open', description: 'Dr. Wilson added slots', time: '1d ago', icon: 'Headphones' },
-        { id: '3', type: 'admin',       title: 'Platform update',        description: 'New assessment tools', time: '2d ago', icon: 'Bell' }
+        { id: '1', type: 'client',      title: 'John completed PHQ-9 assessment', description: 'Score improved from 15 to 12', time: '2 hours ago', icon: 'CheckCircle' },
+        { id: '2', type: 'supervision', title: 'New supervision session available', description: 'Dr. Wilson scheduled group supervision', time: '1 day ago', icon: 'Headphones' },
+        { id: '3', type: 'admin',       title: 'Platform update',                   description: 'New features added to assessment tools', time: '2 days ago', icon: 'Bell' }
       ])
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
@@ -387,11 +562,7 @@ export default function TherapistDashboard() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg">
-            <Brain className="w-5 h-5 text-white" />
-          </div>
-        </div>
+        <div className="flex items-center space-x-3 mb-6"><div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg"><Brain className="w-5 h-5 text-white" /></div></div>
         <div className="space-y-4">
           {caseInsights.map((insight, index) => (
             <div key={index} className="border border-gray-200 rounded-lg p-4">
@@ -464,9 +635,9 @@ export default function TherapistDashboard() {
             <Calendar className="w-8 h-8 text-purple-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-purple-900">Schedule Session</p>
           </button>
-          <button onClick={() => goto('assessment_tools')} className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group">
-            <Brain className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-blue-900">Assessments</p>
+          <button onClick={() => goto('leads')} className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group">
+            <Library className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+            <p className="text-sm font-medium text-blue-900">Assign Assessment</p>
           </button>
           <button onClick={() => goto('cases')} className="p-4 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors group">
             <FileText className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
@@ -679,26 +850,17 @@ export default function TherapistDashboard() {
             <Suspense
               fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>}
             >
-              {active === 'overview'            && <Overview />}
-              {active === 'clients'             && <ClientManagement />}
-              {active === 'cases'               && <CaseManagement />}
-              {active === 'sessions'            && <SessionManagement />}
-              {active === 'leads'               && <CommunicationTools />}
-              {active === 'resources'           && <ResourceLibrary />}
-              {active === 'clinic'              && <ClinicRental />}
-              {active === 'assessment_tools'    && <AssessmentTools />}
-              {active === 'case_files'          && <CaseFiles />}
-              {active === 'case_formulation'    && <CaseFormulation />}
-              {active === 'documentation'       && <DocumentationCompliance />}
-              {active === 'in_between'          && <InBetweenSessions />}
-              {active === 'intake_form'         && <IntakeForm />}
-              {active === 'practice_mgmt'       && <PracticeManagement />}
-              {active === 'progress'            && <ProgressMonitoring />}
-              {active === 'therapist_profile'   && <TherapistProfile />}
-              {active === 'treatment_planning'  && <TreatmentPlanning />}
-              {active === 'worksheets'          && <WorksheetManagement />}
-              {active === 'game_exercise'       && <GameExercise />}
-
+              {active === 'overview'   && <Overview />}
+              {active === 'clients'    && <ClientManagement />}
+              {active === 'cases'      && <CaseManagement />}
+              {active === 'sessions'   && <SessionManagement />}
+              {active === 'leads'      && <CommunicationTools />}
+              {active === 'metrics'    && <ProgressMetrics />}
+              {active === 'clinic'     && <ClinicRental />}
+              {active === 'resources'  && (
+                // If you don't have the ResourceLibrary file yet, replace this with the placeholder card.
+                <ResourceLibrary />
+              )}
               {(active === 'supervision' || active === 'admin') && (
                 <div className="p-6">
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
@@ -750,9 +912,7 @@ export default function TherapistDashboard() {
   )
 }
 
-/* -----------------------------------------------------------------------------
-   Simple Modern Profile (inline view-only)
------------------------------------------------------------------------------ */
+// Simple Modern Profile Component
 const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = ({ profile, onEdit }) => {
   const professionalDetails = profile?.professional_details || {}
   return (
@@ -845,3 +1005,4 @@ const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = (
     </div>
   )
 }
+
