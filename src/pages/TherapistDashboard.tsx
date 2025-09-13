@@ -46,7 +46,7 @@ const CommunicationTools = React.lazy(() => import('../components/therapist/Comm
 // If you already created the ResourceLibrary page, this will render it inline.
 // If you don't have it yet, you can comment this import and the render line below.
 const ResourceLibrary = React.lazy(() =>
-  import('../components/therapist/ResourceLibrary').then(m => ({ default: m.default || m }))
+  import('../components/therapist/ResourceLibrary.tsx').then(m => ({ default: m.default || m }))
 )
 
 /* -----------------------------------------------------------------------------
