@@ -40,8 +40,14 @@ const SessionManagement = React.lazy(() =>
 const CaseManagement = React.lazy(() =>
   import('../components/therapist/CaseManagement').then(m => ({ default: m.CaseManagement }))
 )
-// CommunicationTools has default export already
+// CommunicationTools has a default export already
 const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools'))
+
+// If you already created the ResourceLibrary page, this will render it inline.
+// If you don't have it yet, you can comment this import and the render line below.
+const ResourceLibrary = React.lazy(() =>
+  import('../components/therapist/ResourceLibrary').then(m => ({ default: m.default || m }))
+)
 
 /* -----------------------------------------------------------------------------
    INLINE FALLBACK PAGES (no imports -> no Vite resolve errors)
@@ -49,7 +55,6 @@ const CommunicationTools = React.lazy(() => import('../components/therapist/Comm
 
 // Simple inline Progress Metrics page (replace later with a real file if you want)
 const ProgressMetrics: React.FC = () => {
-  // You can later feed these from Supabase
   const cards = [
     { title: 'Completed Assessments', value: 128, sub: '+12 this week' },
     { title: 'Avg. PHQ-9 Change', value: '-2.1', sub: 'last 4 weeks' },
@@ -605,7 +610,7 @@ export default function TherapistDashboard() {
             </div>
           </div>
           <div>
-            <h4 className="font-medium text-blue-900 mb-3 flex items-centered"><Shield className="w-4 h-4 mr-2 text-blue-600" />Admin Updates</h4>
+            <h4 className="font-medium text-blue-900 mb-3 flex items-center"><Shield className="w-4 h-4 mr-2 text-blue-600" />Admin Updates</h4>
             <div className="space-y-3">
               {recentActivities.filter(a => a.type === 'admin').map(a => (
                 <div key={a.id} className="p-3 bg-blue-50 rounded-lg">
@@ -664,13 +669,13 @@ export default function TherapistDashboard() {
                     src="/thera-py-icon.png"
                     alt="Thera-PY Logo"
                     className="w-8 h-8"
-                    onError={e => { e.currentTarget.style.display = 'none' }}
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                   />
                   <img
                     src="/thera-py-image.png"
                     alt="Thera-PY"
                     className="h-6"
-                    onError={e => { e.currentTarget.outerHTML = '<span class="text-xl font-bold text-gray-900">Thera-PY</span>' }}
+                    onError={e => { (e.currentTarget as HTMLImageElement).outerHTML = '<span class="text-xl font-bold text-gray-900">Thera-PY</span>' }}
                   />
                 </div>
               </div>
@@ -853,13 +858,8 @@ export default function TherapistDashboard() {
               {active === 'metrics'    && <ProgressMetrics />}
               {active === 'clinic'     && <ClinicRental />}
               {active === 'resources'  && (
-                <div className="p-6">
-                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
-                    <Library className="mx-auto h-10 w-10 text-gray-300 mb-2" />
-                    <h3 className="text-gray-900 font-medium">Resource Library</h3>
-                    <p className="text-sm text-gray-600 mt-1">Coming soon.</p>
-                  </div>
-                </div>
+                // If you don't have the ResourceLibrary file yet, replace this with the placeholder card.
+                <ResourceLibrary />
               )}
               {(active === 'supervision' || active === 'admin') && (
                 <div className="p-6">
