@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
-import { Brain, Eye, EyeOff } from 'lucide-react'
+import { useAuth } from '../../hooks/useAuth'
+import { Eye, EyeOff } from 'lucide-react'
 
 export const Register: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -10,7 +10,7 @@ export const Register: React.FC = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'therapist' as 'therapist' // Only therapists can register
+    role: 'therapist' as const // therapist-only self-serve
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -21,10 +21,7 @@ export const Register: React.FC = () => {
   const navigate = useNavigate()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }))
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,7 +34,6 @@ export const Register: React.FC = () => {
       setLoading(false)
       return
     }
-
     if (formData.password.length < 6) {
       setError('Password must be at least 6 characters long')
       setLoading(false)
@@ -53,8 +49,8 @@ export const Register: React.FC = () => {
         formData.role
       )
       navigate('/login')
-    } catch (error: any) {
-      setError(error.message)
+    } catch (err: any) {
+      setError(err?.message || 'Could not create account')
     } finally {
       setLoading(false)
     }
@@ -66,39 +62,36 @@ export const Register: React.FC = () => {
         <div className="text-center">
           <div className="flex justify-center">
             <div className="flex items-center space-x-4 mb-6">
-              <img 
+              <img
                 src="/thera-py-icon.png"
-                alt="Thera-PY Logo" 
+                alt="Thera-PY Logo"
                 className="w-16 h-16"
                 onError={(e) => {
                   console.error('Logo icon failed to load')
-                  e.currentTarget.style.display = 'none'
+                  ;(e.currentTarget as HTMLImageElement).style.display = 'none'
                 }}
               />
-              <img 
+              <img
                 src="/thera-py-image.png"
-                alt="Thera-PY" 
+                alt="Thera-PY"
                 className="h-12"
                 onError={(e) => {
                   console.error('Logo text failed to load')
-                  e.currentTarget.outerHTML = '<span class="logo-text-large text-3xl font-bold text-gray-900">Thera-PY</span>'
+                  ;(e.currentTarget as HTMLImageElement).outerHTML =
+                    '<span class="logo-text-large text-3xl font-bold text-gray-900">Thera-PY</span>'
                 }}
               />
             </div>
           </div>
           <h2 className="mt-6 text-2xl font-bold text-gray-900">Create your account</h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Join Thera-PY as a licensed therapist
-          </p>
+          <p className="mt-2 text-sm text-gray-600">Join Thera-PY as a licensed therapist</p>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
-                  First Name
-                </label>
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name</label>
                 <input
                   id="firstName"
                   name="firstName"
@@ -111,9 +104,7 @@ export const Register: React.FC = () => {
                 />
               </div>
               <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
-                  Last Name
-                </label>
+                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name</label>
                 <input
                   id="lastName"
                   name="lastName"
@@ -129,12 +120,12 @@ export const Register: React.FC = () => {
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-center space-x-2">
-                <img 
-                  src="/thera-py-icon.png" 
-                  alt="Thera-PY" 
+                <img
+                  src="/thera-py-icon.png"
+                  alt="Thera-PY"
                   className="w-6 h-6"
                   onError={(e) => {
-                    e.currentTarget.style.display = 'none'
+                    ;(e.currentTarget as HTMLImageElement).style.display = 'none'
                   }}
                 />
                 <span className="font-medium text-blue-900">Therapist Registration</span>
@@ -145,9 +136,7 @@ export const Register: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
               <input
                 id="email"
                 name="email"
@@ -161,9 +150,7 @@ export const Register: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
               <div className="mt-1 relative">
                 <input
                   id="password"
@@ -186,9 +173,7 @@ export const Register: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                Confirm Password
-              </label>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">Confirm Password</label>
               <div className="mt-1 relative">
                 <input
                   id="confirmPassword"
