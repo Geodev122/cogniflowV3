@@ -1015,103 +1015,92 @@ const CreateCourseModal: React.FC<{
 /* =========================
    Main Component
 ========================= */
-
+// Main Component
 export default function ResourceLibrary() {
   const [activeTab, setActiveTab] = useState<'assessments' | 'resources'>('assessments')
-  const [resources, setResources] = useState<Resource[]>([])
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [selectedResource, setSelectedResource] = useState<Resource | null>(null)
-  const [showAssignModal, setShowAssignModal] = useState(false)
+
+  // Shared state
+  const [clients, setClients] = useState<any[]>([])
+  const { profile } = useAuth()
+
+  // Assessments state
+  const { templates, assignAssessment } = useAssessments()
   const [showAssessmentAssignModal, setShowAssessmentAssignModal] = useState(false)
   const [selectedAssessmentId, setSelectedAssessmentId] = useState('')
   const [selectedAssessmentName, setSelectedAssessmentName] = useState('')
-  const [clients, setClients] = useState<any[]>([])
-  const [bookmarkedResources, setBookmarkedResources] = useState<string[]>([])
+
+  // Resources state
+  const [resources, setResources] = useState<Resource[]>([])
   const [resourcesLoading, setResourcesLoading] = useState(false)
   const [resourcesError, setResourcesError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [bookmarkedResources, setBookmarkedResources] = useState<string[]>([])
+  const [selectedResource, setSelectedResource] = useState<Resource | null>(null)
+  const [showAssignModal, setShowAssignModal] = useState(false)
   const [showCreateResource, setShowCreateResource] = useState(false)
   const [showCreateCourse, setShowCreateCourse] = useState(false)
-  const [createMenuOpen, setCreateMenuOpen] = useState(false)
 
-  const { profile } = useAuth()
-  const { assignAssessment } = useAssessments()
-
+  // Load therapist's clients once we have a profile
   useEffect(() => {
     if (!profile) return
-    fetchClients()
+    ;(async () => {
+      try {
+        const { data: relations, error: relErr } = await supabase
+          .from('therapist_client_relations')
+          .select('client_id')
+          .eq('therapist_id', profile.id)
+
+        if (relErr) throw relErr
+        const clientIds = relations?.map(r => r.client_id) || []
+        if (!clientIds.length) return setClients([])
+
+        const { data: clientRows, error: cErr } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email')
+          .in('id', clientIds)
+
+        if (cErr) throw cErr
+        setClients(clientRows || [])
+      } catch (e) {
+        console.warn('[ResourceLibrary] fetchClients error:', e)
+        setClients([])
+      }
+    })()
   }, [profile])
 
+  // Load resources only on the Resources tab
   useEffect(() => {
     if (!profile || activeTab !== 'resources') return
-    fetchResources()
+    ;(async () => {
+      try {
+        setResourcesLoading(true)
+        setResourcesError(null)
+        const { data, error } = await supabase
+          .from('resource_library')
+          .select(
+            'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
+          )
+          .eq('is_public', true)
+          .order('created_at', { ascending: false })
+
+        if (error) throw error
+        setResources(data as Resource[] || [])
+      } catch (e: any) {
+        console.error('[ResourceLibrary] fetchResources error:', e)
+        setResources([])
+        setResourcesError('Could not load resources.')
+      } finally {
+        setResourcesLoading(false)
+      }
+    })()
   }, [profile, activeTab])
 
-  const fetchClients = async () => {
-    try {
-      const { data: relations, error: relationsError } = await supabase
-        .from('therapist_client_relations')
-        .select('client_id')
-        .eq('therapist_id', profile!.id)
-
-      if (relationsError) {
-        console.warn('[ResourceLibrary] client relations error:', relationsError)
-        setClients([])
-        return
-      }
-
-      const clientIds = relations?.map((r) => r.client_id) || []
-      if (!clientIds.length) {
-        setClients([])
-        return
-      }
-
-      const { data: clientData, error: clientError } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name, email')
-        .in('id', clientIds)
-
-      if (clientError) {
-        console.warn('[ResourceLibrary] profiles error:', clientError)
-        setClients([])
-        return
-      }
-
-      setClients(clientData || [])
-    } catch (e) {
-      console.error('[ResourceLibrary] fetchClients failed', e)
-      setClients([])
-    }
-  }
-
-  const fetchResources = async () => {
-    try {
-      setResourcesLoading(true)
-      setResourcesError(null)
-
-      const { data, error } = await supabase
-        .from('resource_library')
-        .select(
-          'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
-        )
-        .eq('is_public', true)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setResources((data || []) as Resource[])
-    } catch (e: any) {
-      console.error('[ResourceLibrary] fetchResources crash', e)
-      setResources([])
-      setResourcesError('Could not load resources.')
-    } finally {
-      setResourcesLoading(false)
-    }
-  }
-
+  // Derived
   const filteredResources = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
-    return resources.filter((r) => {
+    return resources.filter(r => {
       const catOk = selectedCategory === 'all' || r.category === selectedCategory
       const text = `${r.title} ${r.description || ''} ${(r.tags || []).join(' ')}`.toLowerCase()
       const searchOk = !term || text.includes(term)
@@ -1121,29 +1110,30 @@ export default function ResourceLibrary() {
 
   const categoriesWithCounts = useMemo(
     () =>
-      CATEGORIES.map((c) => ({
+      CATEGORIES.map(c => ({
         ...c,
-        count: c.id === 'all' ? resources.length : resources.filter((r) => r.category === c.id).length,
+        count: c.id === 'all' ? resources.length : resources.filter(r => r.category === c.id).length,
       })),
     [resources]
   )
 
+  // Actions
   const toggleBookmark = (id: string) =>
-    setBookmarkedResources((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
+    setBookmarkedResources(prev => (prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]))
 
   const assignResource = async (resourceId: string, clientIds: string[]) => {
     try {
-      const resource = resources.find((r) => r.id === resourceId)
-      if (!resource) return
+      const res = resources.find(r => r.id === resourceId)
+      if (!res || !profile) return
 
-      const payload = clientIds.map((clientId) => ({
-        therapist_id: profile!.id,
+      const payload = clientIds.map(clientId => ({
+        therapist_id: profile.id,
         client_id: clientId,
         form_type: 'worksheet',
-        title: resource.title,
-        instructions: resource.description || 'Please review this resource.',
+        title: res.title,
+        instructions: res.description || 'Please review this resource.',
         status: 'assigned',
-        resource_id: resourceId
+        resource_id: resourceId,
       }))
 
       const { error } = await supabase.from('form_assignments').insert(payload)
@@ -1158,7 +1148,11 @@ export default function ResourceLibrary() {
     }
   }
 
-  const handleAssessmentAssign = async (templateId: string, clientIds: string[], options: any) => {
+  const handleAssessmentAssign = async (
+    templateId: string,
+    clientIds: string[],
+    options: { dueDate?: string; instructions?: string; reminderFrequency?: string }
+  ) => {
     try {
       await assignAssessment(templateId, clientIds, options)
       setShowAssessmentAssignModal(false)
@@ -1169,111 +1163,7 @@ export default function ResourceLibrary() {
     }
   }
 
-  const openResourceUrl = (r: Resource) => {
-    const url = r.media_url || r.external_url || ''
-    if (!url) return
-    window.open(url, '_blank', 'noopener,noreferrer')
-  }
-
-  /* ---------- Resource tab UI ---------- */
-
-  const renderResourcePreview = () => {
-    if (!selectedResource) return null
-    const r = selectedResource
-    const { label } = getContentType(r.content_type)
-
-    return (
-      <div className="fixed inset-0 z-50 overflow-y-auto">
-        <div className="flex min-h-screen items-center justify-center p-4">
-          <div className="fixed inset-0 bg-gray-900/60" onClick={() => setSelectedResource(null)} />
-          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl">
-            <div className="p-4 border-b flex items-center justify-between">
-              <div>
-                <div className="text-lg font-semibold text-gray-900">{r.title}</div>
-                <div className="text-xs text-gray-500 capitalize">{label} • {r.category}</div>
-              </div>
-              <button className="text-gray-400 hover:text-gray-600" onClick={() => setSelectedResource(null)} aria-label="Close">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-3">
-              {r.description && <p className="text-sm text-gray-700">{r.description}</p>}
-
-              {/* Simple viewers */}
-              {r.content_type === 'pdf' && r.media_url && (
-                <div className="border rounded overflow-hidden h-[60vh]">
-                  <iframe title="PDF" src={r.media_url} className="w-full h-full" />
-                </div>
-              )}
-
-              {r.content_type === 'video' && (r.external_url || r.media_url) && (
-                <div className="aspect-video w-full rounded overflow-hidden border">
-                  <iframe
-                    title="Video"
-                    src={(r.external_url || r.media_url) as string}
-                    className="w-full h-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              )}
-
-              {r.content_type === 'audio' && (r.media_url || r.external_url) && (
-                <audio controls src={(r.media_url || r.external_url) as string} className="w-full mt-2" />
-              )}
-
-              {r.content_type === 'interactive' && r.interactive_schema && (
-                <div className="border rounded p-3 space-y-3">
-                  <div className="text-sm font-medium text-gray-900">Interactive Items</div>
-                  {(r.interactive_schema.items || []).map((it: any) => (
-                    <div key={it.id} className="text-sm">
-                      <div className="font-medium">{it.prompt}</div>
-                      <div className="text-xs text-gray-500">Rating 1–{it.scale}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {r.content_type === 'course' && r.course_manifest && (
-                <div className="border rounded p-3 space-y-2">
-                  <div className="text-sm font-medium text-gray-900">{r.course_manifest.title}</div>
-                  {(r.course_manifest.modules || []).map((m: any, i: number) => (
-                    <div key={i} className="text-sm">
-                      <div className="font-medium">Module: {m.title}</div>
-                      <ul className="list-disc pl-5 text-gray-700">
-                        {(m.lessons || []).map((l: any, j: number) => (
-                          <li key={j}>{l.title} <span className="text-xs text-gray-500">({l.type})</span></li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 border-t flex items-center justify-end gap-2">
-              {(selectedResource.media_url || selectedResource.external_url) && (
-                <a
-                  onClick={() => openResourceUrl(selectedResource)}
-                  className="inline-flex items-center gap-1 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded cursor-pointer"
-                >
-                  <Download className="w-4 h-4" /> Open
-                </a>
-              )}
-              <button
-                onClick={() => { setShowAssignModal(true) }}
-                className="inline-flex items-center gap-1 px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                <Send className="w-4 h-4" /> Assign
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
+  // Render resources tab
   const renderResourcesTab = () => {
     if (resourcesLoading) {
       return (
@@ -1285,45 +1175,8 @@ export default function ResourceLibrary() {
 
     return (
       <div className="h-full flex flex-col">
-        {/* Sticky header + filters */}
+        {/* Filters header */}
         <div className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-gray-200 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Library className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Resource Library</h2>
-            </div>
-
-            {/* Create */}
-            <div className="relative">
-              <button
-                onClick={() => setCreateMenuOpen(v => !v)}
-                className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-              >
-                <Plus className="w-4 h-4" />
-                Create
-                <ChevronDown className="w-4 h-4 opacity-90" />
-              </button>
-
-              {createMenuOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                  <button
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                    onClick={() => { setShowCreateResource(true); setCreateMenuOpen(false) }}
-                  >
-                    New Resource (PDF/Video/Audio/Interactive)
-                  </button>
-                  <button
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                    onClick={() => { setShowCreateCourse(true); setCreateMenuOpen(false) }}
-                  >
-                    New Course (eLearning)
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
             <div className="relative lg:col-span-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -1336,7 +1189,7 @@ export default function ResourceLibrary() {
               />
             </div>
 
-            <div className="flex gap-2 overflow-x-auto">
+            <div className="flex gap-2 overflow-x-auto items-center">
               {categoriesWithCounts.map((c) => {
                 const Icon = c.icon
                 const active = selectedCategory === c.id
@@ -1357,7 +1210,7 @@ export default function ResourceLibrary() {
                 )
               })}
 
-              {/* view mode toggle */}
+              {/* View toggle */}
               <div className="ml-auto flex items-center gap-1">
                 <button
                   onClick={() => setViewMode('grid')}
@@ -1382,22 +1235,41 @@ export default function ResourceLibrary() {
               </div>
             )}
           </div>
+
+          {/* Inline create actions (replaces dropdown) */}
+          <div className="mt-3 flex justify-end">
+            <div className="inline-flex rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+              <button
+                onClick={() => setShowCreateResource(true)}
+                className="px-3 sm:px-4 py-2 text-sm font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                New Resource
+              </button>
+              <div className="w-px bg-gray-200" aria-hidden="true" />
+              <button
+                onClick={() => setShowCreateCourse(true)}
+                className="px-3 sm:px-4 py-2 text-sm font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              >
+                New Course
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Content area */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto p-3">
           {filteredResources.length === 0 ? (
             <div className="h-full grid place-items-center">
               <div className="text-center">
                 <Library className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                <h3 className="text-sm font-medium text-gray-900 mb-1">No resources found</h3>
-                <p className="text-xs text-gray-500">Try adjusting your search or filters</p>
+                <h3 className="text-sm font-medium text-gray-900 mb-1">No resources</h3>
+                <p className="text-xs text-gray-500">Try another filter or create one above.</p>
               </div>
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {filteredResources.map((r) => {
-                const { cls, Icon, label } = getContentType(r.content_type || undefined)
+                const { cls, Icon, label } = getContentType(r.content_type)
                 const isBookmarked = bookmarkedResources.includes(r.id)
                 return (
                   <div
@@ -1433,62 +1305,101 @@ export default function ResourceLibrary() {
                     <div className="flex gap-1">
                       <button
                         onClick={() => setSelectedResource(r)}
-                        className="flex-1 flex items-center justify-between px-3 py-2 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100"
+                        className="flex-1 flex items-center justify-center px-2 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100"
                       >
-                        <span className="inline-flex items-center gap-1">
-                          <Eye className="w-3.5 h-3.5" /> Preview
-                        </span>
-                        {(r.media_url || r.external_url) && <Download className="w-3.5 h-3.5 opacity-70" />}
+                        <Eye className="w-3.5 h-3.5 mr-1" />
+                        Preview
                       </button>
                       <button
                         onClick={() => { setSelectedResource(r); setShowAssignModal(true) }}
-                        className="flex-1 inline-flex items-center justify-center px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                        className="flex-1 flex items-center justify-center px-2 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
                       >
                         <Send className="w-3.5 h-3.5 mr-1" />
                         Assign
                       </button>
+                      {r.media_url && (
+                        <a
+                          href={r.media_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-center px-2 py-1.5 text-xs font-medium border rounded-md hover:bg-gray-50"
+                          title="Open"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </a>
+                      )}
                     </div>
                   </div>
                 )
               })}
             </div>
           ) : (
-            <div className="bg-white border rounded-lg overflow-hidden">
-              <ul className="divide-y">
-                {filteredResources.map((r) => {
-                  const { cls, Icon, label } = getContentType(r.content_type || undefined)
-                  return (
-                    <li key={r.id} className="p-3 hover:bg-gray-50">
-                      <div className="flex items-start justify-between">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Icon className="w-4 h-4" />
-                            <span className={`px-1.5 py-0.5 rounded text-[11px] capitalize ${cls}`}>{label}</span>
-                            <h4 className="font-medium text-gray-900 truncate">{r.title}</h4>
-                          </div>
-                          {r.description && (
-                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">{r.description}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            onClick={() => setSelectedResource(r)}
-                            className="px-3 py-1.5 text-xs bg-blue-50 border border-blue-200 rounded hover:bg-blue-100"
-                          >
-                            Preview
-                          </button>
-                          <button
-                            onClick={() => { setSelectedResource(r); setShowAssignModal(true) }}
-                            className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                          >
-                            Assign
-                          </button>
-                        </div>
+            <div className="space-y-2">
+              {filteredResources.map((r) => {
+                const { cls, Icon, label } = getContentType(r.content_type)
+                const isBookmarked = bookmarkedResources.includes(r.id)
+                return (
+                  <div
+                    key={r.id}
+                    className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-200 transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Icon className="w-4 h-4" />
+                        <span className={`px-1.5 py-0.5 rounded text-[11px] capitalize ${cls}`}>{label}</span>
                       </div>
-                    </li>
-                  )
-                })}
-              </ul>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-medium text-gray-900 text-sm truncate">{r.title}</h3>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {r.difficulty_level && (
+                              <span className={`px-2 py-0.5 text-[11px] rounded-full ${getDifficultyColor(r.difficulty_level)}`}>
+                                {r.difficulty_level}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-gray-500">{new Date(r.created_at).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-600 line-clamp-1">{r.description}</p>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => toggleBookmark(r.id)}
+                          className={`p-1 rounded ${isBookmarked ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`}
+                          aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark'}
+                        >
+                          {isBookmarked ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => setSelectedResource(r)}
+                          className="px-2 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100"
+                        >
+                          Preview
+                        </button>
+                        <button
+                          onClick={() => { setSelectedResource(r); setShowAssignModal(true) }}
+                          className="px-2 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+                        >
+                          Assign
+                        </button>
+                        {r.media_url && (
+                          <a
+                            href={r.media_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2 py-1.5 text-xs font-medium border rounded-md hover:bg-gray-50"
+                            title="Open"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -1497,59 +1408,61 @@ export default function ResourceLibrary() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
-      <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+    <div className="h-full flex flex-col">
+      {/* Top segmented tabs (moved above content) */}
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-3 py-3">
+          <div
+            className="inline-flex rounded-2xl p-1 bg-gray-100 border border-gray-200 shadow-sm"
+            role="tablist"
+            aria-label="Library Tabs"
+          >
+            <button
+              role="tab"
+              aria-selected={activeTab === 'assessments'}
+              onClick={() => setActiveTab('assessments')}
+              className={`px-4 py-2 text-sm font-medium rounded-xl transition ${
+                activeTab === 'assessments'
+                  ? 'bg-white shadow text-blue-700 border border-gray-200'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Psychometric Assessments
+            </button>
+            <button
+              role="tab"
+              aria-selected={activeTab === 'resources'}
+              onClick={() => setActiveTab('resources')}
+              className={`ml-1 px-4 py-2 text-sm font-medium rounded-xl transition ${
+                activeTab === 'resources'
+                  ? 'bg-white shadow text-blue-700 border border-gray-200'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Resources & Courses
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tab content */}
+      <div className="flex-1 min-h-0">
         {activeTab === 'assessments' ? (
           <AssessmentLibrary
-            onPreview={(t) => { setSelectedAssessmentId(t.id); setSelectedAssessmentName(t.name); setShowAssessmentAssignModal(true) }}
-            onAssign={(templateId, clientIds, options) => handleAssessmentAssign(templateId, clientIds, options)}
+            onAssign={(templateId) => {
+              setSelectedAssessmentId(templateId)
+              const t = templates.find(tt => tt.id === templateId)
+              setSelectedAssessmentName(t?.name || 'Assessment')
+              setShowAssessmentAssignModal(true)
+            }}
+            onPreview={(t) => {
+              // hook up to your existing preview flow if present
+              console.log('Preview assessment:', t?.id)
+            }}
           />
         ) : (
           renderResourcesTab()
         )}
-      </div>
-
-      <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between p-3 border-b">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('assessments')}
-              className={`px-3 py-1.5 rounded text-sm ${activeTab === 'assessments' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
-            >
-              Assessments
-            </button>
-            <button
-              onClick={() => setActiveTab('resources')}
-              className={`px-3 py-1.5 rounded text-sm ${activeTab === 'resources' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
-            >
-              Resources
-            </button>
-          </div>
-
-          {/* quick actions */}
-          {activeTab === 'resources' && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowCreateResource(true)}
-                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                + Resource
-              </button>
-              <button
-                onClick={() => setShowCreateCourse(true)}
-                className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
-              >
-                + Course
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="p-3 text-sm text-gray-600">
-          {activeTab === 'assessments'
-            ? 'Browse and assign psychometric assessments to clients.'
-            : 'Browse, preview, assign, and create resources & courses.'}
-        </div>
       </div>
 
       {/* Modals */}
@@ -1557,7 +1470,7 @@ export default function ResourceLibrary() {
         <AssignResourceModal
           resource={selectedResource}
           clients={clients}
-          onClose={() => setShowAssignModal(false)}
+          onClose={() => { setShowAssignModal(false); setSelectedResource(null) }}
           onAssign={assignResource}
         />
       )}
@@ -1575,20 +1488,16 @@ export default function ResourceLibrary() {
       {showCreateResource && (
         <CreateResourceModal
           onClose={() => setShowCreateResource(false)}
-          onCreated={(r) => setResources((prev) => [r, ...prev])}
+          onCreated={(res) => setResources(prev => [res, ...prev])}
         />
       )}
 
       {showCreateCourse && (
         <CreateCourseModal
           onClose={() => setShowCreateCourse(false)}
-          onCreated={(r) => setResources((prev) => [r, ...prev])}
+          onCreated={(res) => setResources(prev => [res, ...prev])}
         />
       )}
-
-      {/* Preview */}
-      {renderResourcePreview()}
     </div>
   )
 }
-
