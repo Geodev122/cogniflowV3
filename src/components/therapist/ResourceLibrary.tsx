@@ -1293,6 +1293,37 @@ export default function ResourceLibrary() {
               <h2 className="text-lg font-semibold text-gray-900">Resource Library</h2>
             </div>
 
+            {/* Create */}
+            <div className="relative">
+              <button
+                onClick={() => setCreateMenuOpen(v => !v)}
+                className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Create
+                <ChevronDown className="w-4 h-4 opacity-90" />
+              </button>
+
+              {createMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                    onClick={() => { setShowCreateResource(true); setCreateMenuOpen(false) }}
+                  >
+                    New Resource (PDF/Video/Audio/Interactive)
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                    onClick={() => { setShowCreateCourse(true); setCreateMenuOpen(false) }}
+                  >
+                    New Course (eLearning)
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
             <div className="relative lg:col-span-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
