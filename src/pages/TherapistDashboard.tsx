@@ -1,11 +1,13 @@
 // src/pages/TherapistDashboard.tsx
 import React, { useState, useEffect, useCallback, Suspense } from 'react'
-import { Navigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
+import { isRecursionError } from '../utils/helpers'
 import {
   Users,
   FileText,
   Calendar,
-  Library as LibraryIcon,
+  Library,
   CheckCircle,
   AlertTriangle,
   Menu,
@@ -23,47 +25,541 @@ import {
   LogOut,
   BarChart3,
   Building2,
+  MessageCircle,
+  Loader2,
+  Send,
 } from 'lucide-react'
-
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../hooks/useAuth'
-import { isRecursionError } from '../utils/helpers'
+import { Navigate } from 'react-router-dom'
 import { TherapistOnboarding } from '../components/therapist/TherapistOnboarding'
 
-/** Helper: gracefully support default OR named exports */
-const lazyEither = <T extends keyof any>(path: string, named?: T) =>
-  React.lazy(async () => {
-    const m: any = await import(/* @vite-ignore */ path)
-    return { default: m.default || (named ? m[named as any] : m.default) }
-  })
-
-/* ------------------------- Lazy loaded therapist tools ------------------------- */
-/** Client Care */
-const ClientManagement   = lazyEither('../components/therapist/ClientManagement',   'ClientManagement')
-const CaseManagement     = lazyEither('../components/therapist/CaseManagement',     'CaseManagement')
-const CaseFiles          = lazyEither('../components/therapist/CaseFiles',          'CaseFiles')
-const CaseFormulation    = lazyEither('../components/therapist/CaseFormulation',    'CaseFormulation')
-const IntakeForm         = lazyEither('../components/therapist/IntakeForm',         'IntakeForm')
-const TreatmentPlanning  = lazyEither('../components/therapist/TreatmentPlanning',  'TreatmentPlanning')
-const InBetweenSessions  = lazyEither('../components/therapist/InBetweenSessions',  'InBetweenSessions')
-const WorksheetManagement= lazyEither('../components/therapist/WorksheetManagement','WorksheetManagement')
-const ResourceLibrary    = lazyEither('../components/therapist/ResourceLibrary') // default export in your file
-const PsychometricForm   = lazyEither('../components/therapist/PsychometricForm',   'PsychometricForm')
-const AssessmentTools    = lazyEither('../components/therapist/AssessmentTools',    'AssessmentTools')
-
-/** Practice / Operations */
-const SessionManagement  = lazyEither('../components/therapist/SessionManagement',  'SessionManagement')
-const CommunicationTools = lazyEither('../components/therapist/CommunicationTools') // default export
-const PracticeManagement = lazyEither('../components/therapist/PracticeManagement', 'PracticeManagement')
-const DocumentationCompliance = lazyEither('../components/therapist/DocumentationCompliance','DocumentationCompliance')
-const ProgressMonitoring = lazyEither('../components/therapist/ProgressMonitoring','ProgressMonitoring')
-const ProgressChart      = lazyEither('../components/therapist/ProgressChart','ProgressChart')
-const ClinicRental       = lazyEither('../components/therapist/ClinicRental','ClinicRental')
-const GameExercise       = lazyEither('../components/therapist/GameExercise','GameExercise')
-const TherapistProfile   = lazyEither('../components/therapist/TherapistProfile','TherapistProfile')
+// Lazy tool pages that exist
+const ClientManagement = React.lazy(() =>
+  import('../components/therapist/ClientManagement').then(m => ({ default: m.ClientManagement }))
+)
+const SessionManagement = React.lazy(() =>
+  import('../components/therapist/SessionManagement').then(m => ({ default: m.SessionManagement }))
+)
+const CaseManagement = React.lazy(() =>
+  import('../components/therapist/CaseManagement').then(m => ({ default: m.CaseManagement }))
+)
+const CommunicationTools = React.lazy(() => import('../components/therapist/CommunicationTools'))
+const ResourceLibrary = React.lazy(() =>
+  import('../components/therapist/ResourceLibrary').then(m => ({ default: m.default || m }))
+)
 
 /* -----------------------------------------------------------------------------
-   Types
+   INLINE ProgressMetrics (keeps Vite happy even if file doesn’t exist yet)
+----------------------------------------------------------------------------- */
+const ProgressMetrics: React.FC = () => {
+  const cards = [
+    { title: 'Completed Assessments', value: 128, sub: '+12 this week' },
+    { title: 'Avg. PHQ-9 Change', value: '-2.1', sub: 'last 4 weeks' },
+    { title: 'Attendance Rate', value: '92%', sub: 'rolling 30 days' },
+  ]
+  const rows = [
+    { name: 'John Smith', metric: 'PHQ-9 Δ', value: '-3', note: 'Improving' },
+    { name: 'Emily Davis', metric: 'GAD-7 Δ', value: '-1', note: 'Stable' },
+    { name: 'Michael Lee', metric: 'PHQ-9 Δ', value: '-4', note: 'Improving' },
+  ]
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center gap-2 mb-6">
+        <BarChart3 className="w-6 h-6 text-blue-600" />
+        <h2 className="text-2xl font-bold text-gray-900">Progress Metrics</h2>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        {cards.map((c) => (
+          <div key={c.title} className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+            <div className="text-sm text-gray-600">{c.title}</div>
+            <div className="text-3xl font-bold text-gray-900 mt-1">{c.value}</div>
+            <div className="text-xs text-gray-500 mt-1">{c.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+        <div className="px-4 py-3 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-900">Recent Changes</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full table-fixed">
+            <colgroup>
+              <col className="w-1/2" />
+              <col className="w-1/4" />
+              <col className="w-1/6" />
+              <col className="w-1/6" />
+            </colgroup>
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <tr>
+                <th className="text-left px-4 py-3">Client</th>
+                <th className="text-left px-4 py-3">Metric</th>
+                <th className="text-left px-4 py-3">Value</th>
+                <th className="text-left px-4 py-3">Note</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 text-sm">
+              {rows.map((r, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">{r.name}</td>
+                  <td className="px-4 py-3">{r.metric}</td>
+                  <td className="px-4 py-3">{r.value}</td>
+                  <td className="px-4 py-3">{r.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* -----------------------------------------------------------------------------
+   CLINIC RENTALS (Supabase-wired)
+   Tables expected:
+     - clinic_spaces: id, name, location, amenities (string[]), pricing_hourly (number),
+                      pricing_daily (number), tailored_available (boolean),
+                      whatsapp (text), external_managed (boolean), active (boolean), created_at
+     - clinic_rental_requests: id, therapist_id, space_id, request_type ('hourly'|'daily'|'tailored'),
+                               preferred_date (date), duration_hours (number, nullable),
+                               notes (text), status (text default 'new'), created_at
+----------------------------------------------------------------------------- */
+type RequestType = 'hourly' | 'daily' | 'tailored'
+interface ClinicSpace {
+  id: string
+  name: string
+  location?: string | null
+  amenities?: string[] | null
+  pricing_hourly?: number | null
+  pricing_daily?: number | null
+  tailored_available?: boolean | null
+  whatsapp?: string | null
+  external_managed?: boolean | null
+  active?: boolean | null
+  created_at?: string | null
+}
+interface MyRequest {
+  id: string
+  created_at: string
+  request_type: RequestType
+  status: string
+  preferred_date: string | null
+  duration_hours: number | null
+  notes: string | null
+  space: { id: string; name: string } | null
+}
+
+const RequestBookingModal: React.FC<{
+  open: boolean
+  onClose: () => void
+  onSubmit: (payload: {
+    request_type: RequestType
+    preferred_date: string | null
+    duration_hours: number | null
+    notes: string
+  }) => Promise<void>
+  defaultType: RequestType
+  spaceName: string
+  submitting: boolean
+}> = ({ open, onClose, onSubmit, defaultType, spaceName, submitting }) => {
+  const [requestType, setRequestType] = useState<RequestType>(defaultType)
+  const [date, setDate] = useState<string>('')
+  const [hours, setHours] = useState<string>(requestType === 'hourly' ? '2' : '')
+  const [notes, setNotes] = useState('')
+
+  useEffect(() => {
+    setRequestType(defaultType)
+    if (defaultType === 'hourly') setHours('2')
+    else setHours('')
+  }, [defaultType])
+
+  if (!open) return null
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await onSubmit({
+      request_type: requestType,
+      preferred_date: date || null,
+      duration_hours: requestType === 'hourly' ? Number(hours || 0) || 1 : null,
+      notes,
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <div className="fixed inset-0 bg-gray-900/50" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg">
+          <form onSubmit={submit}>
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Request Clinic Space</h3>
+                <p className="text-sm text-gray-600">{spaceName}</p>
+              </div>
+              <button type="button" className="text-gray-400 hover:text-gray-600" onClick={onClose}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <label className="block">
+                <span className="block text-sm font-medium text-gray-700 mb-1">Request type</span>
+                <select
+                  value={requestType}
+                  onChange={(e) => setRequestType(e.target.value as RequestType)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="hourly">Hourly booking</option>
+                  <option value="daily">Per day booking</option>
+                  <option value="tailored">Tailored plan</option>
+                </select>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-700 mb-1">Preferred date (optional)</span>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </label>
+
+                {requestType === 'hourly' && (
+                  <label className="block">
+                    <span className="block text-sm font-medium text-gray-700 mb-1">Hours</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={hours}
+                      onChange={(e) => setHours(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <label className="block">
+                <span className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</span>
+                <textarea
+                  rows={3}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Share timing constraints, recurring interest, special setup needs…"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </label>
+            </div>
+            <div className="p-5 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {submitting ? 'Submitting…' : 'Submit request'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const ClinicRental: React.FC = () => {
+  const { profile } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [spaces, setSpaces] = useState<ClinicSpace[]>([])
+  const [requests, setRequests] = useState<MyRequest[]>([])
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalSubmitting, setModalSubmitting] = useState(false)
+  const [activeSpace, setActiveSpace] = useState<ClinicSpace | null>(null)
+  const [defaultType, setDefaultType] = useState<RequestType>('hourly')
+
+  const openWA = (phone: string, text: string) => {
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+  }
+
+  const fetchSpaces = useCallback(async () => {
+    try {
+      setError(null)
+      setLoading(true)
+      const { data, error: e } = await supabase
+        .from('clinic_spaces')
+        .select('id,name,location,amenities,pricing_hourly,pricing_daily,tailored_available,whatsapp,external_managed,active,created_at')
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+      if (e) throw e
+      setSpaces(data || [])
+    } catch (e: any) {
+      console.error('[ClinicRental] fetchSpaces error', e)
+      setError('Could not load clinic spaces.')
+      setSpaces([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const fetchRequests = useCallback(async () => {
+    if (!profile?.id) return
+    try {
+      const { data, error: e } = await supabase
+        .from('clinic_rental_requests')
+        .select('id,created_at,request_type,status,preferred_date,duration_hours,notes,space:clinic_spaces (id,name)')
+        .eq('therapist_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(5)
+      if (e) throw e
+      setRequests((data as any) || [])
+    } catch (e) {
+      console.warn('[ClinicRental] fetchRequests error', e)
+      setRequests([])
+    }
+  }, [profile?.id])
+
+  useEffect(() => {
+    fetchSpaces()
+  }, [fetchSpaces])
+
+  useEffect(() => {
+    fetchRequests()
+  }, [fetchRequests])
+
+  const openModal = (space: ClinicSpace, type: RequestType) => {
+    setActiveSpace(space)
+    setDefaultType(type)
+    setModalOpen(true)
+  }
+
+  const submitRequest = async (payload: {
+    request_type: RequestType
+    preferred_date: string | null
+    duration_hours: number | null
+    notes: string
+  }) => {
+    if (!profile?.id || !activeSpace?.id) return
+    try {
+      setModalSubmitting(true)
+      const { error: e } = await supabase.from('clinic_rental_requests').insert({
+        therapist_id: profile.id,
+        space_id: activeSpace.id,
+        request_type: payload.request_type,
+        preferred_date: payload.preferred_date,
+        duration_hours: payload.duration_hours,
+        notes: payload.notes || null,
+        status: 'new',
+      })
+      if (e) throw e
+      setModalOpen(false)
+      setActiveSpace(null)
+      await fetchRequests()
+      alert('Your request was submitted. The clinic/admin will get back to you.')
+    } catch (e: any) {
+      console.error('[ClinicRental] submitRequest error', e)
+      alert(e?.message || 'Failed to submit request.')
+    } finally {
+      setModalSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Building2 className="w-6 h-6 text-blue-600" />
+          Clinic Rentals
+        </h2>
+        <p className="text-gray-600 mt-1">
+          Book admin-listed clinic spaces by the hour, per day, or request a tailored plan. Externally managed listings use WhatsApp for enquiries.
+        </p>
+      </div>
+
+      {/* Spaces */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          </div>
+        ) : error ? (
+          <div className="flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 p-3 rounded">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{error}</span>
+          </div>
+        ) : spaces.length === 0 ? (
+          <div className="text-center py-10">
+            <Building2 className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+            <h3 className="text-gray-900 font-medium">No clinic spaces yet</h3>
+            <p className="text-sm text-gray-600">Admins haven’t added spaces. Check back soon.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {spaces.map((s) => (
+              <div key={s.id} className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 flex flex-col">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{s.name}</h3>
+                    <p className="text-sm text-gray-600">{s.location || '—'}</p>
+                  </div>
+                  <Building2 className="w-5 h-5 text-gray-300" />
+                </div>
+
+                {s.amenities?.length ? (
+                  <div className="mt-3">
+                    <div className="text-xs text-gray-500 mb-1">Amenities</div>
+                    <div className="flex flex-wrap gap-2">
+                      {s.amenities.slice(0, 8).map((a) => (
+                        <span key={a} className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">{a}</span>
+                      ))}
+                      {s.amenities.length > 8 && (
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                          +{s.amenities.length - 8}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <div className="rounded-md border border-gray-200 p-3 text-center">
+                    <div className="text-xs text-gray-500">Hour</div>
+                    <div className="text-sm font-semibold text-gray-900">
+                      {s.pricing_hourly != null ? `$${s.pricing_hourly}` : '—'}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 p-3 text-center">
+                    <div className="text-xs text-gray-500">Per Day</div>
+                    <div className="text-sm font-semibold text-gray-900">
+                      {s.pricing_daily != null ? `$${s.pricing_daily}` : '—'}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 p-3 text-center">
+                    <div className="text-xs text-gray-500">Tailored</div>
+                    <div className="text-sm font-semibold text-gray-900">
+                      {s.tailored_available ? 'Available' : '—'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                  {s.external_managed ? (
+                    <button
+                      onClick={() =>
+                        openWA(
+                          s.whatsapp || '',
+                          `Hi, I'm enquiring about "${s.name}" (externally managed).`
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      Enquire on WhatsApp
+                    </button>
+                  ) : (
+                    <>
+                      {s.pricing_hourly != null && (
+                        <button
+                          onClick={() => openModal(s, 'hourly')}
+                          className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm"
+                        >
+                          Book Hourly
+                        </button>
+                      )}
+                      {s.pricing_daily != null && (
+                        <button
+                          onClick={() => openModal(s, 'daily')}
+                          className="inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm"
+                        >
+                          Book Per Day
+                        </button>
+                      )}
+                      {s.tailored_available && (
+                        <button
+                          onClick={() => openModal(s, 'tailored')}
+                          className="inline-flex items-center justify-center gap-2 rounded-md bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 text-sm"
+                        >
+                          Tailored Plan
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {s.external_managed && s.whatsapp && (
+                  <p className="mt-2 text-xs text-emerald-700">
+                    Externally managed. Booking handled off-platform—tap Enquire to continue on WhatsApp.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* My latest requests */}
+      {profile?.id && (
+        <div className="mt-6 bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">My latest requests</h3>
+          {requests.length === 0 ? (
+            <p className="text-sm text-gray-600">No requests yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {requests.map((r) => (
+                <div key={r.id} className="flex items-center justify-between border border-gray-100 rounded p-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate">
+                      {r.space?.name || 'Unknown space'}
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      {new Date(r.created_at).toLocaleString()} • {r.request_type}
+                      {r.preferred_date ? ` • pref: ${r.preferred_date}` : ''}
+                      {r.duration_hours ? ` • ${r.duration_hours}h` : ''}
+                    </div>
+                    {r.notes && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{r.notes}</div>}
+                  </div>
+                  <span
+                    className={`ml-3 shrink-0 inline-flex px-2 py-1 text-[11px] rounded-full ${
+                      r.status === 'approved'
+                        ? 'bg-green-100 text-green-700'
+                        : r.status === 'rejected'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-yellow-100 text-yellow-700'
+                    }`}
+                  >
+                    {r.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <RequestBookingModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSubmit={submitRequest}
+        defaultType={defaultType}
+        spaceName={activeSpace?.name || ''}
+        submitting={modalSubmitting}
+      />
+    </div>
+  )
+}
+
+/* -----------------------------------------------------------------------------
+   Dashboard Types
 ----------------------------------------------------------------------------- */
 interface DashboardStats {
   totalClients: number
@@ -71,7 +567,11 @@ interface DashboardStats {
   patientsToday: number
   profileCompletion: number
 }
-interface OnboardingStep { id: string; title: string; completed: boolean }
+interface OnboardingStep {
+  id: string
+  title: string
+  completed: boolean
+}
 interface TodaySession {
   id: string
   client_name: string
@@ -93,93 +593,32 @@ interface ActivityItem {
   time: string
   icon: string
 }
-
-/* -----------------------------------------------------------------------------
-   Sidebar sections (includes **all files you listed**)
------------------------------------------------------------------------------ */
 type SectionId =
   | 'overview'
-
-  | 'client_mgmt'
-  | 'case_mgmt'
-  | 'case_files'
-  | 'case_formulation'
-  | 'intake'
-  | 'treatment'
-  | 'in_between'
-  | 'worksheets'
-  | 'resource_library'
-  | 'psychometric_form'
-  | 'assessment_tools'
-
+  | 'clients'
+  | 'cases'
   | 'sessions'
-  | 'communication'
-  | 'practice_mgmt'
-  | 'documentation'
-  | 'progress_monitoring'
-  | 'progress_chart'
-  | 'clinic_rental'
-  | 'game_exercise'
-  | 'therapist_profile'
-
+  | 'leads'
+  | 'metrics'
+  | 'clinic'
+  | 'resources'
   | 'supervision'
   | 'admin'
 
-const NAV = [
-  {
-    title: null,
-    items: [{ id: 'overview', name: 'Overview', icon: Target as any }]
-  },
-  {
-    title: 'Client Care',
-    items: [
-      { id: 'client_mgmt',       name: 'Client Management',    icon: Users },
-      { id: 'case_mgmt',         name: 'Case Management',      icon: FileText },
-      { id: 'case_files',        name: 'Case Files',           icon: FileText },
-      { id: 'case_formulation',  name: 'Case Formulation',     icon: Brain },
-      { id: 'intake',            name: 'Intake Form',          icon: FileText },
-      { id: 'treatment',         name: 'Treatment Planning',   icon: FileText },
-      { id: 'in_between',        name: 'In-Between Sessions',  icon: Calendar },
-      { id: 'worksheets',        name: 'Worksheet Management', icon: FileText },
-      { id: 'resource_library',  name: 'Resource Library',     icon: LibraryIcon },
-      { id: 'psychometric_form', name: 'Psychometric Form',    icon: FileText },
-      { id: 'assessment_tools',  name: 'Assessment Tools',     icon: BarChart3 },
-    ]
-  },
-  {
-    title: 'Practice',
-    items: [
-      { id: 'sessions',           name: 'Session Management',       icon: Calendar },
-      { id: 'communication',      name: 'Communication Tools',      icon: Users },
-      { id: 'practice_mgmt',      name: 'Practice Management',      icon: Target },
-      { id: 'documentation',      name: 'Documentation & Compliance', icon: Shield },
-      { id: 'progress_monitoring',name: 'Progress Monitoring',      icon: BarChart3 },
-      { id: 'progress_chart',     name: 'Progress Chart',           icon: BarChart3 },
-      { id: 'clinic_rental',      name: 'Clinic Rentals',           icon: Building2 },
-      { id: 'game_exercise',      name: 'Game / Exercise',          icon: Brain },
-      { id: 'therapist_profile',  name: 'Therapist Profile',        icon: User },
-    ]
-  },
-  {
-    title: 'Support',
-    items: [
-      { id: 'supervision', name: 'Supervision',        icon: Headphones },
-      { id: 'admin',       name: 'Contact Administrator', icon: Shield }
-    ]
-  }
-] as const
-
 /* -----------------------------------------------------------------------------
-   Component
+   MAIN COMPONENT
 ----------------------------------------------------------------------------- */
 export default function TherapistDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showOnboardingModal, setShowOnboardingModal] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
-  const [active, setActive] = useState<SectionId>('overview')
-
-  const [stats, setStats] = useState<DashboardStats>({ totalClients: 0, activeCases: 0, patientsToday: 0, profileCompletion: 0 })
+  const [stats, setStats] = useState<DashboardStats>({
+    totalClients: 0,
+    activeCases: 0,
+    patientsToday: 0,
+    profileCompletion: 0
+  })
   const [onboardingSteps, setOnboardingSteps] = useState<OnboardingStep[]>([])
   const [todaySessions, setTodaySessions] = useState<TodaySession[]>([])
   const [caseInsights, setCaseInsights] = useState<CaseInsight[]>([])
@@ -188,32 +627,59 @@ export default function TherapistDashboard() {
   const [profileLive, setProfileLive] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState<string | null>(null)
+  const [active, setActive] = useState<SectionId>('overview')
 
   const { profile, signOut } = useAuth()
+
+  const navigationSections = [
+    {
+      title: null,
+      items: [{ id: 'overview', name: 'Overview', icon: Target, color: 'blue' }]
+    },
+    {
+      title: 'Client Care',
+      items: [
+        { id: 'clients', name: 'Client Management', icon: Users, color: 'green' },
+        { id: 'cases', name: 'Case Management', icon: FileText, color: 'green' },
+        { id: 'resources', name: 'Resource Library', icon: Library, color: 'green' }
+      ]
+    },
+    {
+      title: 'Practice Management',
+      items: [
+        { id: 'sessions', name: 'Session Management', icon: Calendar, color: 'purple' },
+        { id: 'leads', name: 'Client Leads', icon: Users, color: 'purple' },
+        { id: 'metrics', name: 'Progress Metrics', icon: BarChart3, color: 'purple' },
+        { id: 'clinic', name: 'Clinic Rentals', icon: Building2, color: 'purple' }
+      ]
+    },
+    {
+      title: 'Support',
+      items: [
+        { id: 'supervision', name: 'Supervision', icon: Headphones, color: 'amber' },
+        { id: 'admin', name: 'Contact Administrator', icon: Shield, color: 'amber' }
+      ]
+    }
+  ] as const
 
   const fetchDashboardData = useCallback(async () => {
     if (!profile) return
     try {
       setLoading(true)
 
-      // Clients count
       const { data: clientRelations, error: relationsError } = await supabase
         .from('therapist_client_relations')
         .select('client_id')
         .eq('therapist_id', profile.id)
-
       if (relationsError) console.warn('dashboard: client relations error:', relationsError)
 
-      // Active cases
       const { data: activeCases, error: casesError } = await supabase
         .from('cases')
         .select('id')
         .eq('therapist_id', profile.id)
         .eq('status', 'active')
-
       if (casesError) console.warn('dashboard: active cases error:', casesError)
 
-      // Today's appointments (00:00–23:59)
       const today = new Date().toISOString().split('T')[0]
       const { data: todayAppointments, error: appointmentsError } = await supabase
         .from('appointments')
@@ -227,16 +693,14 @@ export default function TherapistDashboard() {
         .eq('therapist_id', profile.id)
         .gte('appointment_date', today)
         .lt('appointment_date', `${today}T23:59:59`)
-
       if (appointmentsError) console.warn('dashboard: today appts error:', appointmentsError)
 
-      // Onboarding steps from profile fields
       const steps: OnboardingStep[] = [
-        { id: 'basic',        title: 'Basic Information',       completed: !!profile.whatsapp_number },
-        { id: 'professional', title: 'Professional Details',    completed: !!profile.professional_details },
-        { id: 'verification', title: 'Verification',            completed: profile.verification_status === 'verified' },
-        { id: 'bio',          title: 'Bio & Story',             completed: !!(profile.professional_details?.bio && profile.professional_details.bio.length > 150) },
-        { id: 'locations',    title: 'Practice Locations',      completed: !!(profile.professional_details?.practice_locations?.length > 0) }
+        { id: 'basic', title: 'Basic Information', completed: !!profile.whatsapp_number },
+        { id: 'professional', title: 'Professional Details', completed: !!profile.professional_details },
+        { id: 'verification', title: 'Verification', completed: profile.verification_status === 'verified' },
+        { id: 'bio', title: 'Bio & Story', completed: !!(profile.professional_details?.bio && profile.professional_details.bio.length > 150) },
+        { id: 'locations', title: 'Practice Locations', completed: !!(profile.professional_details?.practice_locations?.length > 0) }
       ]
       const completedSteps = steps.filter(s => s.completed).length
       const profileCompletion = Math.round((completedSteps / steps.length) * 100)
@@ -252,24 +716,24 @@ export default function TherapistDashboard() {
       setProfileLive(isProfileLive)
 
       setTodaySessions(
-        (todayAppointments || []).map(apt => ({
+        todayAppointments?.map(apt => ({
           id: apt.id,
           client_name: `${apt.profiles?.first_name || 'Unknown'} ${apt.profiles?.last_name || 'Client'}`,
           time: new Date(apt.appointment_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
           type: apt.appointment_type,
           notes: apt.notes
-        }))
+        })) || []
       )
 
-      // Placeholder insights/activities – swap to Supabase if you have tables for these.
+      // placeholders
       setCaseInsights([
-        { client_name: 'John Smith',  insight: 'Consistent improvement in anxiety scores', recommendation: 'Consider bi-weekly sessions', priority: 'medium' },
-        { client_name: 'Emily Davis', insight: 'Missed last two assignments',               recommendation: 'Schedule check-in call',   priority: 'high' }
+        { client_name: 'John Smith',  insight: 'Showing consistent improvement in anxiety scores', recommendation: 'Consider reducing session frequency to bi-weekly', priority: 'medium' },
+        { client_name: 'Emily Davis', insight: 'Missed last two assignments', recommendation: 'Schedule check-in call to assess barriers', priority: 'high' }
       ])
       setRecentActivities([
         { id: '1', type: 'client',      title: 'John completed PHQ-9 assessment', description: 'Score improved from 15 to 12', time: '2 hours ago', icon: 'CheckCircle' },
-        { id: '2', type: 'supervision', title: 'Group supervision scheduled',     description: 'Dr. Wilson: Thursday 4pm',   time: '1 day ago',    icon: 'Headphones' },
-        { id: '3', type: 'admin',       title: 'Platform update',                 description: 'New features for assessments', time: '2 days ago',  icon: 'Bell' }
+        { id: '2', type: 'supervision', title: 'New supervision session available', description: 'Dr. Wilson scheduled group supervision', time: '1 day ago', icon: 'Headphones' },
+        { id: '3', type: 'admin',       title: 'Platform update',                   description: 'New features added to assessment tools', time: '2 days ago', icon: 'Bell' }
       ])
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
@@ -279,13 +743,16 @@ export default function TherapistDashboard() {
     }
   }, [profile])
 
-  useEffect(() => { if (profile) fetchDashboardData() }, [profile, fetchDashboardData])
+  useEffect(() => {
+    if (profile) fetchDashboardData()
+  }, [profile, fetchDashboardData])
 
   const handleSignOut = async () => {
     setIsSigningOut(true)
     setSignOutError(null)
-    try { await signOut() }
-    catch (error) {
+    try {
+      await signOut()
+    } catch (error) {
       console.error('Error signing out:', error)
       setSignOutError('Failed to sign out. Please try again.')
     } finally {
@@ -305,7 +772,6 @@ export default function TherapistDashboard() {
     setMobileMenuOpen(false)
   }
 
-  /* ------------------------------- Overview ------------------------------- */
   const Overview = () => (
     <div className="h-full overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
       {!profileLive && (
@@ -324,7 +790,7 @@ export default function TherapistDashboard() {
               </div>
             ))}
           </div>
-          <button onClick={() => setShowOnboardingModal(true)} className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700">
+          <button onClick={() => setShowOnboardingModal(true)} className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
             Continue Setup
           </button>
         </div>
@@ -423,7 +889,7 @@ export default function TherapistDashboard() {
                 </div>
                 <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
                   insight.priority === 'high' ? 'bg-red-100 text-red-800'
-                : insight.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+                    : insight.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
                 }`}>{insight.priority}</span>
               </div>
             </div>
@@ -432,21 +898,69 @@ export default function TherapistDashboard() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-6">Recent Activities</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div>
+            <h4 className="font-medium text-green-900 mb-3 flex items-center">
+              <Users className="w-4 h-4 mr-2 text-green-600" />Client Activities
+            </h4>
+            <div className="space-y-3">
+              {recentActivities.filter(a => a.type === 'client').map(a => (
+                <div key={a.id} className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-sm font-medium text-green-900">{a.title}</p>
+                  <p className="text-xs text-green-700">{a.description}</p>
+                  <p className="text-xs text-green-600 mt-1">{a.time}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h4 className="font-medium text-amber-900 mb-3 flex items-center">
+              <Headphones className="w-4 h-4 mr-2 text-amber-600" />Supervision Updates
+            </h4>
+            <div className="space-y-3">
+              {recentActivities.filter(a => a.type === 'supervision').map(a => (
+                <div key={a.id} className="p-3 bg-amber-50 rounded-lg">
+                  <p className="text-sm font-medium text-amber-900">{a.title}</p>
+                  <p className="text-xs text-amber-700">{a.description}</p>
+                  <p className="text-xs text-amber-600 mt-1">{a.time}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h4 className="font-medium text-blue-900 mb-3 flex items-center">
+              <Shield className="w-4 h-4 mr-2 text-blue-600" />Admin Updates
+            </h4>
+            <div className="space-y-3">
+              {recentActivities.filter(a => a.type === 'admin').map(a => (
+                <div key={a.id} className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-sm font-medium text-blue-900">{a.title}</p>
+                  <p className="text-xs text-blue-700">{a.description}</p>
+                  <p className="text-xs text-blue-600 mt-1">{a.time}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-6">Quick Actions</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <button onClick={() => goto('client_mgmt')} className="p-4 bg-green-50 hover:bg-green-100 rounded-lg">
+          <button onClick={() => goto('clients')} className="p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors group">
             <Users className="w-8 h-8 text-green-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-green-900">Add Client</p>
           </button>
-          <button onClick={() => goto('sessions')} className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg">
+          <button onClick={() => goto('sessions')} className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors group">
             <Calendar className="w-8 h-8 text-purple-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-purple-900">Schedule Session</p>
           </button>
-          <button onClick={() => goto('assessment_tools')} className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg">
-            <BarChart3 className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-blue-900">Assessments</p>
+          <button onClick={() => goto('leads')} className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group">
+            <Library className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+            <p className="text-sm font-medium text-blue-900">Assign Assessment</p>
           </button>
-          <button onClick={() => goto('case_mgmt')} className="p-4 bg-indigo-50 hover:bg-indigo-100 rounded-lg">
+          <button onClick={() => goto('cases')} className="p-4 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors group">
             <FileText className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-indigo-900">View Cases</p>
           </button>
@@ -465,24 +979,26 @@ export default function TherapistDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* Fixed Header */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-white shadow-sm border-b border-gray-200">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-3">
-                <img
-                  src="/thera-py-icon.png"
-                  alt="Thera-PY Logo"
-                  className="w-8 h-8"
-                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                />
-                <img
-                  src="/thera-py-image.png"
-                  alt="Thera-PY"
-                  className="h-6"
-                  onError={e => { (e.currentTarget as HTMLImageElement).outerHTML = '<span class="text-xl font-bold text-gray-900">Thera-PY</span>' }}
-                />
+              <div className="logo-container">
+                <div className="flex items-center space-x-3">
+                  <img
+                    src="/thera-py-icon.png"
+                    alt="Thera-PY Logo"
+                    className="w-8 h-8"
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                  />
+                  <img
+                    src="/thera-py-image.png"
+                    alt="Thera-PY"
+                    className="h-6"
+                    onError={e => { (e.currentTarget as HTMLImageElement).outerHTML = '<span class="text-xl font-bold text-gray-900">Thera-PY</span>' }}
+                  />
+                </div>
               </div>
               <div className="hidden sm:block"><p className="text-sm text-gray-500">Therapist Portal</p></div>
             </div>
@@ -497,7 +1013,7 @@ export default function TherapistDashboard() {
 
               <button
                 onClick={() => setShowProfileModal(true)}
-                className="flex items-center space-x-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md px-3 py-2"
+                className="flex items-center space-x-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md px-3 py-2 transition-colors"
               >
                 <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                   <span className="text-xs font-medium text-blue-600">
@@ -511,29 +1027,27 @@ export default function TherapistDashboard() {
               </button>
 
               <button
-                onClick={async () => {
-                  setIsSigningOut(true)
-                  setSignOutError(null)
-                  try { await signOut() } catch (e) {
-                    setSignOutError('Failed to sign out. Please try again.')
-                  } finally { setIsSigningOut(false) }
-                }}
+                onClick={handleSignOut}
                 disabled={isSigningOut}
-                className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md disabled:opacity-50"
+                className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-2 text-xs sm:text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Sign out"
               >
-                {isSigningOut ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600" /> : <LogOut className="w-4 h-4" />}
+                {isSigningOut ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                ) : (
+                  <LogOut className="w-4 h-4" />
+                )}
                 <span className="hidden sm:inline">{isSigningOut ? 'Signing out...' : 'Sign out'}</span>
               </button>
 
               {/* Mobile Menu Button */}
-              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-2 rounded-lg hover:bg-gray-100">
+              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors">
                 {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
             </div>
           </div>
 
-          {/* Sign out error */}
+          {/* Sign out error notification */}
           {signOutError && (
             <div className="bg-red-50 border-l-4 border-red-400 p-3">
               <div className="flex items-center">
@@ -547,7 +1061,7 @@ export default function TherapistDashboard() {
       </header>
 
       <div className="flex pt-16">
-        {/* Sidebar */}
+        {/* Sidebar (desktop) */}
         <div className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 fixed left-0 top-16 bottom-0 transition-all duration-300 shadow-lg z-30`}>
           <div className="flex-shrink-0 border-b border-gray-100">
             <div className="p-4 flex items-center justify-between">
@@ -558,17 +1072,18 @@ export default function TherapistDashboard() {
               )}
               <button
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className={`w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl flex items-center justify-center group ${sidebarCollapsed ? 'mx-auto' : ''}`}
+                className={`w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center hover:from-blue-600 hover:to-indigo-700 group transform hover:scale-110 ${sidebarCollapsed ? 'mx-auto' : ''} relative overflow-hidden`}
                 title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               >
-                <ChevronLeft className={`w-4 h-4 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
+                <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+                <ChevronLeft className={`w-4 h-4 transition-all duration-300 ${sidebarCollapsed ? 'rotate-180' : ''} group-hover:scale-125 relative z-10`} />
               </button>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-3">
             <nav className="space-y-6">
-              {NAV.map((section, idx) => (
+              {navigationSections.map((section, idx) => (
                 <div key={idx}>
                   {section.title && !sidebarCollapsed && (
                     <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-2 flex items-center">
@@ -579,19 +1094,24 @@ export default function TherapistDashboard() {
                   )}
                   <div className="space-y-1">
                     {section.items.map(tab => {
-                      const Icon = tab.icon as any
+                      const Icon = tab.icon
                       const isActive = active === (tab.id as SectionId)
                       return (
                         <button
                           key={tab.id}
-                          onClick={() => setActive(tab.id as SectionId)}
-                          className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-xl text-sm font-medium transition ${
-                            isActive ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md' : 'text-gray-700 hover:bg-gray-50'
+                          onClick={() => { setActive(tab.id as SectionId) }}
+                          className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-xl transition-all duration-200 text-sm font-medium group relative overflow-hidden ${
+                            isActive
+                              ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg transform scale-105 border border-blue-400'
+                              : 'text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:text-blue-900 hover:shadow-md hover:scale-102 hover:border hover:border-blue-200'
                           }`}
                           title={sidebarCollapsed ? tab.name : undefined}
                         >
-                          <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-400'}`} />
-                          {!sidebarCollapsed && <span>{tab.name}</span>}
+                          <Icon className={`w-5 h-5 flex-shrink-0 transition-all duration-200 group-hover:scale-125 ${isActive ? 'text-white drop-shadow-sm' : 'text-gray-400 group-hover:text-blue-600'}`} />
+                          {!sidebarCollapsed && <span className="transition-all duration-200 font-medium group-hover:font-semibold">{tab.name}</span>}
+                          {isActive && !sidebarCollapsed && <div className="absolute right-3 w-2 h-2 bg-white rounded-full opacity-90 animate-pulse shadow-sm"></div>}
+                          {isActive && <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent pointer-events-none"></div>}
+                          {!isActive && <div className="absolute inset-0 bg-gradient-to-r from-transparent to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"></div>}
                         </button>
                       )
                     })}
@@ -611,25 +1131,25 @@ export default function TherapistDashboard() {
           )}
         </div>
 
-        {/* Mobile overlay */}
+        {/* Mobile Navigation Overlay */}
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-0 z-50 pt-16">
             <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setMobileMenuOpen(false)} />
             <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-xl pt-16">
               <div className="h-full overflow-y-auto p-4">
                 <nav className="space-y-6">
-                  {NAV.map((section, idx) => (
+                  {navigationSections.map((section, idx) => (
                     <div key={idx}>
                       {section.title && <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">{section.title}</h3>}
                       <div className="space-y-1">
                         {section.items.map(tab => {
-                          const Icon = tab.icon as any
+                          const Icon = tab.icon
                           const isActive = active === (tab.id as SectionId)
                           return (
                             <button
                               key={tab.id}
-                              onClick={() => goto(tab.id as SectionId)}
-                              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm ${isActive ? 'text-blue-700 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}
+                              onClick={() => { goto(tab.id as SectionId) }}
+                              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-all text-sm font-medium ${isActive ? 'text-blue-700 bg-blue-50' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
                             >
                               <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />
                               <span>{tab.name}</span>
@@ -645,38 +1165,25 @@ export default function TherapistDashboard() {
           </div>
         )}
 
-        {/* Main content */}
+        {/* Main Content */}
         <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} bg-gray-50 min-h-0`}>
           <main className="min-h-[calc(100vh-4rem)] overflow-y-auto">
-            <Suspense fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>}>
-              {active === 'overview'            && <Overview />}
-
-              {active === 'client_mgmt'         && <ClientManagement />}
-              {active === 'case_mgmt'           && <CaseManagement />}
-              {active === 'case_files'          && <CaseFiles />}
-              {active === 'case_formulation'    && <CaseFormulation />}
-              {active === 'intake'              && <IntakeForm />}
-              {active === 'treatment'           && <TreatmentPlanning />}
-              {active === 'in_between'          && <InBetweenSessions />}
-              {active === 'worksheets'          && <WorksheetManagement />}
-              {active === 'resource_library'    && <ResourceLibrary />}
-              {active === 'psychometric_form'   && <PsychometricForm />}
-              {active === 'assessment_tools'    && <AssessmentTools />}
-
-              {active === 'sessions'            && <SessionManagement />}
-              {active === 'communication'        && <CommunicationTools />}
-              {active === 'practice_mgmt'       && <PracticeManagement />}
-              {active === 'documentation'       && <DocumentationCompliance />}
-              {active === 'progress_monitoring' && <ProgressMonitoring />}
-              {active === 'progress_chart'      && <ProgressChart />}
-              {active === 'clinic_rental'       && <ClinicRental />}
-              {active === 'game_exercise'       && <GameExercise />}
-              {active === 'therapist_profile'   && <TherapistProfile />}
+            <Suspense
+              fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>}
+            >
+              {active === 'overview'   && <Overview />}
+              {active === 'clients'    && <ClientManagement />}
+              {active === 'cases'      && <CaseManagement />}
+              {active === 'sessions'   && <SessionManagement />}
+              {active === 'leads'      && <CommunicationTools />}
+              {active === 'metrics'    && <ProgressMetrics />}
+              {active === 'clinic'     && <ClinicRental />}
+              {active === 'resources'  && <ResourceLibrary />}
 
               {(active === 'supervision' || active === 'admin') && (
                 <div className="p-6">
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
-                    {active === 'supervision' ? <Headphones className="mx-auto h-10 w-10 text-gray-300 mb-2" /> : <Shield className="mx-auto h-10 w-10 text-gray-300 mb-2" />}
+                    {(active === 'supervision') ? <Headphones className="mx-auto h-10 w-10 text-gray-300 mb-2" /> : <Shield className="mx-auto h-10 w-10 text-gray-300 mb-2" />}
                     <h3 className="text-gray-900 font-medium">
                       {active === 'supervision' ? 'Supervision' : 'Contact Administrator'}
                     </h3>
@@ -709,7 +1216,10 @@ export default function TherapistDashboard() {
                 <div className="p-6">
                   <SimpleTherapistProfile
                     profile={profile}
-                    onEdit={() => { setShowProfileModal(false); setShowOnboardingModal(true) }}
+                    onEdit={() => {
+                      setShowProfileModal(false)
+                      setShowOnboardingModal(true)
+                    }}
                   />
                 </div>
               </div>
@@ -721,7 +1231,7 @@ export default function TherapistDashboard() {
   )
 }
 
-/* --------------------------- Simple Profile Card --------------------------- */
+// Simple Modern Profile Component
 const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = ({ profile, onEdit }) => {
   const professionalDetails = profile?.professional_details || {}
   return (
@@ -806,7 +1316,7 @@ const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = (
       )}
 
       <div className="text-center">
-        <button onClick={onEdit} className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        <button onClick={onEdit} className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
           <User className="w-4 h-4 mr-2" />
           Edit Profile
         </button>
