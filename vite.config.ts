@@ -1,9 +1,13 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tsconfigPaths from 'vite-tsconfig-paths'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    tsconfigPaths(),
+    react()
+  ],
   build: {
     rollupOptions: {
       output: {
@@ -18,25 +22,25 @@ export default defineConfig({
     target: 'esnext',
     minify: 'terser',
     terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true
-      }
+      compress: { drop_console: true, drop_debugger: true }
     }
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom', '@supabase/supabase-js', 'lucide-react'],
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      '@supabase/supabase-js',
+      'lucide-react',
+      'zod',
+      'date-fns'
+    ],
     exclude: []
   },
   server: {
-    hmr: {
-      overlay: false
-    },
+    hmr: { overlay: false },
     host: true,
     port: 5173
   },
-  preview: {
-    port: 4173,
-    host: true
-  }
-});
+  preview: { port: 4173, host: true }
+})
