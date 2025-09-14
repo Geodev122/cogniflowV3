@@ -4,28 +4,8 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useAssessments } from '../../hooks/useAssessments'
 import {
-  Library,
-  Search,
-  Grid3X3,
-  List,
-  Plus,
-  Eye,
-  Send,
-  BookOpen,
-  FileText,
-  Video,
-  Headphones,
-  X,
-  Users,
-  Zap,
-  BookmarkCheck,
-  Bookmark,
-  Download,
-  AlertTriangle,
-  Clock,
-  ChevronDown,
-  Link as LinkIcon,
-  Trash2
+  Library, Search, Grid3X3, List, Plus, Eye, Send, BookOpen, FileText, Video, Headphones, X,
+  Users, Zap, BookmarkCheck, Bookmark, Download, AlertTriangle, Clock, ChevronDown, Link as LinkIcon, Trash2
 } from 'lucide-react'
 
 /* =========================
@@ -38,21 +18,21 @@ interface Resource {
   id: string
   title: string
   category: 'worksheet' | 'educational' | 'intervention' | 'protocol' | string
-  subcategory?: string
-  description?: string
-  content_type?: ContentType
-  tags?: string[]
-  difficulty_level?: 'beginner' | 'intermediate' | 'advanced' | string
-  evidence_level?: string
-  is_public?: boolean
+  subcategory?: string | null
+  description?: string | null
+  content_type?: ContentType | null
+  tags?: string[] | null
+  difficulty_level?: 'beginner' | 'intermediate' | 'advanced' | string | null
+  evidence_level?: string | null
+  is_public?: boolean | null
   created_at: string
 
-  // New fields to support uploads & complex content
-  media_url?: string | null          // final public URL (storage or external)
-  storage_path?: string | null       // storage path if uploaded
-  external_url?: string | null       // external link (YouTube/Vimeo/etc)
-  interactive_schema?: any | null    // JSON for interactive content
-  course_manifest?: any | null       // JSON for course with modules/lessons
+  // upload / complex content
+  media_url?: string | null
+  storage_path?: string | null
+  external_url?: string | null
+  interactive_schema?: any | null
+  course_manifest?: any | null
 }
 
 const CATEGORIES = [
@@ -63,99 +43,11 @@ const CATEGORIES = [
   { id: 'protocol', name: 'Protocols', icon: Headphones },
 ] as const
 
-const SAMPLE_RESOURCES: Resource[] = [
-  {
-    id: '1',
-    title: 'CBT Thought Record Worksheet',
-    category: 'worksheet',
-    subcategory: 'cognitive',
-    description:
-      'A comprehensive thought record worksheet for identifying and challenging negative thought patterns.',
-    content_type: 'pdf',
-    tags: ['CBT', 'thought-challenging', 'cognitive-restructuring'],
-    difficulty_level: 'beginner',
-    evidence_level: 'research_based',
-    is_public: true,
-    created_at: '2024-01-15T10:00:00Z',
-  },
-  {
-    id: '2',
-    title: 'Anxiety Management Protocol',
-    category: 'protocol',
-    subcategory: 'anxiety',
-    description: 'Step-by-step evidence-based protocol for managing acute anxiety episodes.',
-    content_type: 'interactive',
-    tags: ['anxiety', 'breathing', 'grounding'],
-    difficulty_level: 'intermediate',
-    evidence_level: 'research_based',
-    is_public: true,
-    created_at: '2024-01-14T14:30:00Z',
-  },
-  {
-    id: '3',
-    title: 'Depression Screening Guide',
-    category: 'educational',
-    subcategory: 'assessment',
-    description: 'Comprehensive guide for conducting depression screenings with PHQ-9 interpretation.',
-    content_type: 'pdf',
-    tags: ['depression', 'screening', 'PHQ-9'],
-    difficulty_level: 'advanced',
-    evidence_level: 'clinical_consensus',
-    is_public: true,
-    created_at: '2024-01-13T09:15:00Z',
-  },
-  {
-    id: '4',
-    title: 'Mindfulness Meditation Scripts',
-    category: 'intervention',
-    subcategory: 'mindfulness',
-    description: 'Collection of guided meditation scripts for various therapeutic contexts.',
-    content_type: 'audio',
-    tags: ['mindfulness', 'meditation', 'relaxation'],
-    difficulty_level: 'beginner',
-    evidence_level: 'research_based',
-    is_public: true,
-    created_at: '2024-01-12T16:45:00Z',
-  },
-  {
-    id: '5',
-    title: 'Trauma-Informed Care Guidelines',
-    category: 'protocol',
-    subcategory: 'trauma',
-    description: 'Best practices for providing trauma-informed care in therapeutic settings.',
-    content_type: 'course',
-    tags: ['trauma', 'PTSD', 'safety'],
-    difficulty_level: 'advanced',
-    evidence_level: 'research_based',
-    is_public: true,
-    created_at: '2024-01-11T11:20:00Z',
-    course_manifest: {
-      title: 'Trauma-Informed Care',
-      modules: [
-        { title: 'Foundations', lessons: [{ title: 'Principles', type: 'video', url: 'https://example.com/video' }] }
-      ]
-    }
-  },
-  {
-    id: '6',
-    title: 'Behavioral Activation Worksheet',
-    category: 'worksheet',
-    subcategory: 'behavioral',
-    description: 'Activity scheduling and mood monitoring worksheet for depression treatment.',
-    content_type: 'pdf',
-    tags: ['behavioral-activation', 'depression'],
-    difficulty_level: 'intermediate',
-    evidence_level: 'research_based',
-    is_public: true,
-    created_at: '2024-01-10T13:30:00Z',
-  },
-]
-
 /* =========================
    Helpers (icons/colors)
 ========================= */
 
-const getContentType = (type?: string) => {
+const getContentType = (type?: string | null) => {
   switch (type) {
     case 'pdf':
       return { cls: 'text-red-600 bg-red-50', Icon: FileText as any, label: 'pdf' }
@@ -172,7 +64,7 @@ const getContentType = (type?: string) => {
   }
 }
 
-const getDifficultyColor = (level?: string) => {
+const getDifficultyColor = (level?: string | null) => {
   switch (level) {
     case 'beginner':
       return 'bg-green-100 text-green-700'
@@ -186,11 +78,11 @@ const getDifficultyColor = (level?: string) => {
 }
 
 /* =========================
-   Assessments Library (left tab) — unchanged behavior
+   Assessments Library (left tab) — fetch via hook
 ========================= */
 
 interface AssessmentLibraryProps {
-  onAssign: (templateId: string, clientIds: string[]) => void
+  onAssign: (templateId: string, clientIds: string[], options: any) => void
   onPreview: (template: any) => void
 }
 
@@ -326,7 +218,7 @@ const AssessmentLibrary: React.FC<AssessmentLibraryProps> = ({ onAssign, onPrevi
                     Preview
                   </button>
                   <button
-                    onClick={() => onAssign(t.id, [])}
+                    onClick={() => onAssign(t.id, [], {})}
                     className="flex-1 inline-flex items-center justify-center px-3 py-2 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
                   >
                     <Send className="w-3.5 h-3.5 mr-1" />
@@ -620,7 +512,7 @@ const CreateResourceModal: React.FC<{
 
       let storage_path: string | null = null
       let media_url: string | null = null
-      let ext_url: string | null = externalUrl?.trim() || null
+      const ext_url: string | null = externalUrl?.trim() || null
       let interactive_schema: any | null = null
 
       if (contentType === 'interactive') {
@@ -1019,7 +911,7 @@ const CreateCourseModal: React.FC<{
                 </div>
 
                 <div className="p-3 space-y-4 max-h-80 overflow-y-auto">
-                  {modules.map((m, mi) => (
+                  {modules.map((m) => (
                     <div key={m.id} className="border rounded-lg">
                       <div className="flex items-center justify-between p-3 border-b bg-gray-50">
                         <input
@@ -1144,7 +1036,7 @@ export default function ResourceLibrary() {
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
 
   const { profile } = useAuth()
-  const { templates, assignAssessment } = useAssessments()
+  const { assignAssessment } = useAssessments()
 
   useEffect(() => {
     if (!profile) return
@@ -1206,16 +1098,12 @@ export default function ResourceLibrary() {
         .eq('is_public', true)
         .order('created_at', { ascending: false })
 
-      if (error || !data || !data.length) {
-        console.warn('[ResourceLibrary] using sample resources; DB empty or RLS blocked', { error })
-        setResources(SAMPLE_RESOURCES)
-      } else {
-        setResources(data as Resource[])
-      }
+      if (error) throw error
+      setResources((data || []) as Resource[])
     } catch (e: any) {
       console.error('[ResourceLibrary] fetchResources crash', e)
-      setResources(SAMPLE_RESOURCES)
-      setResourcesError('Could not load live resources. Showing samples.')
+      setResources([])
+      setResourcesError('Could not load resources.')
     } finally {
       setResourcesLoading(false)
     }
@@ -1225,8 +1113,7 @@ export default function ResourceLibrary() {
     const term = searchTerm.trim().toLowerCase()
     return resources.filter((r) => {
       const catOk = selectedCategory === 'all' || r.category === selectedCategory
-      const text =
-        `${r.title} ${r.description || ''} ${(r.tags || []).join(' ')}`.toLowerCase()
+      const text = `${r.title} ${r.description || ''} ${(r.tags || []).join(' ')}`.toLowerCase()
       const searchOk = !term || text.includes(term)
       return catOk && searchOk
     })
@@ -1256,7 +1143,6 @@ export default function ResourceLibrary() {
         title: resource.title,
         instructions: resource.description || 'Please review this resource.',
         status: 'assigned',
-        // optionally include a pointer to resource_id
         resource_id: resourceId
       }))
 
@@ -1283,7 +1169,110 @@ export default function ResourceLibrary() {
     }
   }
 
+  const openResourceUrl = (r: Resource) => {
+    const url = r.media_url || r.external_url || ''
+    if (!url) return
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   /* ---------- Resource tab UI ---------- */
+
+  const renderResourcePreview = () => {
+    if (!selectedResource) return null
+    const r = selectedResource
+    const { label } = getContentType(r.content_type)
+
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="flex min-h-screen items-center justify-center p-4">
+          <div className="fixed inset-0 bg-gray-900/60" onClick={() => setSelectedResource(null)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl">
+            <div className="p-4 border-b flex items-center justify-between">
+              <div>
+                <div className="text-lg font-semibold text-gray-900">{r.title}</div>
+                <div className="text-xs text-gray-500 capitalize">{label} • {r.category}</div>
+              </div>
+              <button className="text-gray-400 hover:text-gray-600" onClick={() => setSelectedResource(null)} aria-label="Close">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {r.description && <p className="text-sm text-gray-700">{r.description}</p>}
+
+              {/* Simple viewers */}
+              {r.content_type === 'pdf' && r.media_url && (
+                <div className="border rounded overflow-hidden h-[60vh]">
+                  <iframe title="PDF" src={r.media_url} className="w-full h-full" />
+                </div>
+              )}
+
+              {r.content_type === 'video' && (r.external_url || r.media_url) && (
+                <div className="aspect-video w-full rounded overflow-hidden border">
+                  <iframe
+                    title="Video"
+                    src={(r.external_url || r.media_url) as string}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              )}
+
+              {r.content_type === 'audio' && (r.media_url || r.external_url) && (
+                <audio controls src={(r.media_url || r.external_url) as string} className="w-full mt-2" />
+              )}
+
+              {r.content_type === 'interactive' && r.interactive_schema && (
+                <div className="border rounded p-3 space-y-3">
+                  <div className="text-sm font-medium text-gray-900">Interactive Items</div>
+                  {(r.interactive_schema.items || []).map((it: any) => (
+                    <div key={it.id} className="text-sm">
+                      <div className="font-medium">{it.prompt}</div>
+                      <div className="text-xs text-gray-500">Rating 1–{it.scale}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {r.content_type === 'course' && r.course_manifest && (
+                <div className="border rounded p-3 space-y-2">
+                  <div className="text-sm font-medium text-gray-900">{r.course_manifest.title}</div>
+                  {(r.course_manifest.modules || []).map((m: any, i: number) => (
+                    <div key={i} className="text-sm">
+                      <div className="font-medium">Module: {m.title}</div>
+                      <ul className="list-disc pl-5 text-gray-700">
+                        {(m.lessons || []).map((l: any, j: number) => (
+                          <li key={j}>{l.title} <span className="text-xs text-gray-500">({l.type})</span></li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t flex items-center justify-end gap-2">
+              {(selectedResource.media_url || selectedResource.external_url) && (
+                <a
+                  onClick={() => openResourceUrl(selectedResource)}
+                  className="inline-flex items-center gap-1 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded cursor-pointer"
+                >
+                  <Download className="w-4 h-4" /> Open
+                </a>
+              )}
+              <button
+                onClick={() => { setShowAssignModal(true) }}
+                className="inline-flex items-center gap-1 px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                <Send className="w-4 h-4" /> Assign
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const renderResourcesTab = () => {
     if (resourcesLoading) {
@@ -1304,7 +1293,7 @@ export default function ResourceLibrary() {
               <h2 className="text-lg font-semibold text-gray-900">Resource Library</h2>
             </div>
 
-            {/* Create (therapist & admin) */}
+            {/* Create */}
             <div className="relative">
               <button
                 onClick={() => setCreateMenuOpen(v => !v)}
@@ -1386,11 +1375,12 @@ export default function ResourceLibrary() {
               </div>
             </div>
 
-          {resourcesError && (
-            <div className="mt-2 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-2">
-              {resourcesError}
-            </div>
-          )}
+            {resourcesError && (
+              <div className="lg:col-span-3 mt-2 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-2">
+                {resourcesError}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Content area */}
@@ -1406,7 +1396,7 @@ export default function ResourceLibrary() {
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {filteredResources.map((r) => {
-                const { cls, Icon, label } = getContentType(r.content_type)
+                const { cls, Icon, label } = getContentType(r.content_type || undefined)
                 const isBookmarked = bookmarkedResources.includes(r.id)
                 return (
                   <div
@@ -1442,4 +1432,161 @@ export default function ResourceLibrary() {
                     <div className="flex gap-1">
                       <button
                         onClick={() => setSelectedResource(r)}
-                        className="flex-1 flex items-center just
+                        className="flex-1 flex items-center justify-between px-3 py-2 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100"
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          <Eye className="w-3.5 h-3.5" /> Preview
+                        </span>
+                        {(r.media_url || r.external_url) && <Download className="w-3.5 h-3.5 opacity-70" />}
+                      </button>
+                      <button
+                        onClick={() => { setSelectedResource(r); setShowAssignModal(true) }}
+                        className="flex-1 inline-flex items-center justify-center px-3 py-2 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                      >
+                        <Send className="w-3.5 h-3.5 mr-1" />
+                        Assign
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="bg-white border rounded-lg overflow-hidden">
+              <ul className="divide-y">
+                {filteredResources.map((r) => {
+                  const { cls, Icon, label } = getContentType(r.content_type || undefined)
+                  return (
+                    <li key={r.id} className="p-3 hover:bg-gray-50">
+                      <div className="flex items-start justify-between">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Icon className="w-4 h-4" />
+                            <span className={`px-1.5 py-0.5 rounded text-[11px] capitalize ${cls}`}>{label}</span>
+                            <h4 className="font-medium text-gray-900 truncate">{r.title}</h4>
+                          </div>
+                          {r.description && (
+                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">{r.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => setSelectedResource(r)}
+                            className="px-3 py-1.5 text-xs bg-blue-50 border border-blue-200 rounded hover:bg-blue-100"
+                          >
+                            Preview
+                          </button>
+                          <button
+                            onClick={() => { setSelectedResource(r); setShowAssignModal(true) }}
+                            className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                          >
+                            Assign
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-[calc(100vh-8rem)] grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
+      <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+        {activeTab === 'assessments' ? (
+          <AssessmentLibrary
+            onPreview={(t) => { setSelectedAssessmentId(t.id); setSelectedAssessmentName(t.name); setShowAssessmentAssignModal(true) }}
+            onAssign={(templateId, clientIds, options) => handleAssessmentAssign(templateId, clientIds, options)}
+          />
+        ) : (
+          renderResourcesTab()
+        )}
+      </div>
+
+      <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between p-3 border-b">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveTab('assessments')}
+              className={`px-3 py-1.5 rounded text-sm ${activeTab === 'assessments' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+            >
+              Assessments
+            </button>
+            <button
+              onClick={() => setActiveTab('resources')}
+              className={`px-3 py-1.5 rounded text-sm ${activeTab === 'resources' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+            >
+              Resources
+            </button>
+          </div>
+
+          {/* quick actions */}
+          {activeTab === 'resources' && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowCreateResource(true)}
+                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                + Resource
+              </button>
+              <button
+                onClick={() => setShowCreateCourse(true)}
+                className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
+              >
+                + Course
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="p-3 text-sm text-gray-600">
+          {activeTab === 'assessments'
+            ? 'Browse and assign psychometric assessments to clients.'
+            : 'Browse, preview, assign, and create resources & courses.'}
+        </div>
+      </div>
+
+      {/* Modals */}
+      {showAssignModal && selectedResource && (
+        <AssignResourceModal
+          resource={selectedResource}
+          clients={clients}
+          onClose={() => setShowAssignModal(false)}
+          onAssign={assignResource}
+        />
+      )}
+
+      {showAssessmentAssignModal && (
+        <AssignAssessmentModal
+          templateId={selectedAssessmentId}
+          templateName={selectedAssessmentName}
+          clients={clients}
+          onClose={() => setShowAssessmentAssignModal(false)}
+          onAssign={handleAssessmentAssign}
+        />
+      )}
+
+      {showCreateResource && (
+        <CreateResourceModal
+          onClose={() => setShowCreateResource(false)}
+          onCreated={(r) => setResources((prev) => [r, ...prev])}
+        />
+      )}
+
+      {showCreateCourse && (
+        <CreateCourseModal
+          onClose={() => setShowCreateCourse(false)}
+          onCreated={(r) => setResources((prev) => [r, ...prev])}
+        />
+      )}
+
+      {/* Preview */}
+      {renderResourcePreview()}
+    </div>
+  )
+}
