@@ -15,10 +15,12 @@ import {
   FileText,
   Calendar,
   ListChecks,
+  Plus,
 } from 'lucide-react'
 import { useAssessments } from '../../hooks/useAssessments'
 import { AssessmentInstance } from '../../types/assessment'
 import { supabase } from '../../lib/supabase'
+import AssignAssessmentModal from './AssignAssessmentModal'
 
 type Props = {
   onOpenInstance?: (instance: AssessmentInstance) => void
@@ -141,13 +143,15 @@ const AssessmentInstancesList: React.FC<Props> = ({
   const [page, setPage] = useState(1)
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
 
+  // Assign modal
+  const [showAssign, setShowAssign] = useState(false)
+
   // If we were given an initial client filter, apply it (and keep in sync if prop changes)
   useEffect(() => {
     if (initialClientId) {
       setClientFilter(initialClientId)
       onClientFilterChange?.(initialClientId)
     } else {
-      // only clear if previously set by prop
       setClientFilter(prev => (prev !== 'all' && prev === initialClientId ? 'all' : prev))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -165,7 +169,7 @@ const AssessmentInstancesList: React.FC<Props> = ({
   const [extraClientOption, setExtraClientOption] = useState<{ id: string; name: string } | null>(null)
 
   // If initialClientId isn't present in current instances (e.g., no assignments yet),
-  // try to fetch a display name so the select shows a friendly label.
+  // fetch a display name so the select shows a friendly label.
   useEffect(() => {
     let cancel = false
     const hydrate = async () => {
@@ -268,6 +272,14 @@ const AssessmentInstancesList: React.FC<Props> = ({
               <h2 className="text-lg font-semibold text-gray-900">Assigned Assessments</h2>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAssign(true)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700"
+                title="Assign assessment"
+              >
+                <Plus className="w-4 h-4" />
+                Assign
+              </button>
               <button
                 onClick={() => refetch()}
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border text-sm hover:bg-gray-50"
@@ -531,6 +543,19 @@ const AssessmentInstancesList: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {/* Assign modal */}
+      {showAssign && (
+        <AssignAssessmentModal
+          open={showAssign}
+          onClose={() => setShowAssign(false)}
+          initialClientId={clientFilter !== 'all' ? clientFilter : initialClientId}
+          onAssigned={() => {
+            setShowAssign(false)
+            refetch()
+          }}
+        />
+      )}
     </div>
   )
 }
