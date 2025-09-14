@@ -14,7 +14,19 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting */
+    /* Paths & base URL for nice imports */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"],
+      "@hooks/*": ["src/hooks/*"],
+      "@lib/*": ["src/lib/*"],
+      "@pages/*": ["src/pages/*"],
+      "@types/*": ["src/types/*"],
+      "@utils/*": ["src/utils/*"]
+    },
+
+    /* Linting / strictness */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
