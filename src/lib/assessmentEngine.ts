@@ -1,4 +1,9 @@
-import { AssessmentTemplate, AssessmentResponse, ScoringConfig, InterpretationRules } from '../types/assessment'
+import {
+  AssessmentTemplate,
+  AssessmentInstance,
+  ReminderFrequency,
+  AssessmentOption,
+} from '../types/assessment'
 
 /**
  * Assessment Scoring Engine
@@ -34,77 +39,161 @@ export class AssessmentScoringEngine {
         rawScore = this.calculateCustomScore()
         break
       default:
-        throw new Error(`Unsupported scoring method: ${scoring_config.method}`)
+        throw new Error(`Unsupported scoring method: ${String(scoring_config.method)}`)
     }
 
-    return Math.round(rawScore * 100) / 100 // Round to 2 decimal places
+    return Math.round(rawScore * 100) / 100 // 2 dp
   }
 
-  /**
-   * Calculate sum-based score
-   */
+  /* -------------------------
+     Normalization helpers
+  ------------------------- */
+
+  /** Get numeric bounds for a question (scale/slider/number). */
+  private getBounds(q: any): { min?: number; max?: number } {
+    // prefer explicit min/max; fallback to scale_min/max
+    const min = q.min ?? q.scale_min
+    const max = q.max ?? q.scale_max
+    return { min, max }
+  }
+
+  /** If options are objects, return their `value[]`; if strings, return indices. */
+  private getOptionIndexFromValue(qOptions: AssessmentOption[] | undefined, value: any): number | undefined {
+    if (!qOptions) return undefined
+    // object options: {label, value}
+    if (qOptions.length > 0 && typeof qOptions[0] === 'object') {
+      const idx = (qOptions as { label: string; value: any }[]).findIndex(o => o.value === value)
+      return idx >= 0 ? idx : undefined
+    }
+    // string options: match by string value
+    if (typeof value === 'string') {
+      const idx = (qOptions as string[]).findIndex(o => o === value)
+      return idx >= 0 ? idx : undefined
+    }
+    // if already number, assume it's an index
+    if (typeof value === 'number') return value
+    return undefined
+  }
+
+  /** Normalize any response to a numeric value suitable for scoring, or `undefined` if not numeric. */
+  private normalizeNumeric(question: any, response: any): number | undefined {
+    if (response === undefined || response === null) return undefined
+
+    switch (question.type) {
+      case 'scale':
+      case 'likert':
+      case 'slider':
+      case 'number': {
+        const num =
+          typeof response === 'number' ? response : Number.parseFloat(response as any)
+        if (Number.isNaN(num)) return undefined
+        let val = num
+        // reverse scoring
+        const { min, max } = this.getBounds(question)
+        if (question.reverse_scored && max !== undefined) {
+          const lo = (min ?? 0)
+          val = (max - num) + lo
+        }
+        return val
+      }
+
+      case 'boolean': {
+        return response === true ? 1 : response === false ? 0 : undefined
+      }
+
+      case 'single_choice': {
+        // allow value or index
+        const idx = this.getOptionIndexFromValue(question.options, response)
+        if (idx === undefined) return undefined
+        // store as 0-based; scoring usually expects 0..n or 1..n — we keep 0..n and let ranges be authored accordingly
+        let val = idx
+        // reverse scoring using bounds inferred from options length
+        if (question.reverse_scored && question.options && question.options.length > 0) {
+          const max = question.options.length - 1
+          val = max - idx
+        }
+        return val
+      }
+
+      case 'multiple_choice':
+      case 'multi_choice': {
+        // if array of values/indices: sum their normalized numeric equivalents (common practice)
+        if (!Array.isArray(response)) return undefined
+        let total = 0
+        for (const sel of response) {
+          const idx = this.getOptionIndexFromValue(question.options, sel)
+          if (idx !== undefined) total += idx
+        }
+        // reverse scoring (rare for MCQ); treat as if reversing each selection relative to max index
+        if (question.reverse_scored && question.options && question.options.length > 0) {
+          const max = question.options.length - 1
+          total = response.reduce((acc, sel) => {
+            const idx = this.getOptionIndexFromValue(question.options, sel)
+            return acc + (idx !== undefined ? (max - idx) : 0)
+          }, 0)
+        }
+        return total
+      }
+
+      case 'text':
+      case 'textarea':
+      case 'date':
+      case 'time': {
+        // Not inherently numeric; score only if weighted_items explicitly includes this id, in which case coerce number if possible.
+        const num = typeof response === 'number' ? response : Number.parseFloat(response as any)
+        return Number.isNaN(num) ? undefined : num
+      }
+
+      default:
+        return undefined
+    }
+  }
+
+  /* -------------------------
+     Scoring methods
+  ------------------------- */
+
   private calculateSumScore(): number {
     let sum = 0
-    
-    this.template.questions.forEach(question => {
-      const response = this.responses[question.id]
-      if (response !== undefined && response !== null) {
-        let value = typeof response === 'number' ? response : parseInt(response)
-        
-        // Handle reverse scoring
-        if (question.reverse_scored && question.scale_max !== undefined) {
-          value = question.scale_max - value + (question.scale_min || 0)
-        }
-        
-        sum += value
-      }
-    })
-    
+    for (const q of this.template.questions) {
+      const val = this.normalizeNumeric(q, this.responses[q.id])
+      if (typeof val === 'number') sum += val
+    }
     return sum
   }
 
-  /**
-   * Calculate average-based score
-   */
   private calculateAverageScore(): number {
-    const sum = this.calculateSumScore()
-    const validResponses = this.template.questions.filter(q => 
-      this.responses[q.id] !== undefined && this.responses[q.id] !== null
-    ).length
-    
-    return validResponses > 0 ? sum / validResponses : 0
-  }
-
-  /**
-   * Calculate weighted score
-   */
-  private calculateWeightedScore(): number {
-    let weightedSum = 0
-    const weights = this.template.scoring_config.weighted_items || {}
-    
-    this.template.questions.forEach(question => {
-      const response = this.responses[question.id]
-      if (response !== undefined && response !== null) {
-        let value = typeof response === 'number' ? response : parseInt(response)
-        
-        if (question.reverse_scored && question.scale_max !== undefined) {
-          value = question.scale_max - value + (question.scale_min || 0)
-        }
-        
-        const weight = weights[question.id] || 1
-        weightedSum += value * weight
+    let sum = 0
+    let count = 0
+    for (const q of this.template.questions) {
+      const val = this.normalizeNumeric(q, this.responses[q.id])
+      if (typeof val === 'number') {
+        sum += val
+        count++
       }
-    })
-    
-    return weightedSum
+    }
+    return count > 0 ? sum / count : 0
   }
 
-  /**
-   * Calculate custom score (placeholder for complex algorithms)
-   */
+  private calculateWeightedScore(): number {
+    let weighted = 0
+    const weights = this.template.scoring_config.weighted_items || {}
+    for (const q of this.template.questions) {
+      const val = this.normalizeNumeric(q, this.responses[q.id])
+      if (typeof val === 'number') {
+        const w = typeof weights[q.id] === 'number' ? weights[q.id] : 1
+        weighted += val * w
+      }
+    }
+    return weighted
+  }
+
+  /** Custom scoring hook — author a simple keyword in `scoring_config.custom_logic`; falls back to sum. */
   private calculateCustomScore(): number {
-    // This would implement custom scoring logic specific to certain assessments
-    // For now, fallback to sum method
+    const logic = (this.template.scoring_config.custom_logic || '').trim().toLowerCase()
+    if (logic === 'average') return this.calculateAverageScore()
+    if (logic === 'weighted_sum') return this.calculateWeightedScore()
+    // Fallback
     return this.calculateSumScore()
   }
 
@@ -114,18 +203,18 @@ export class AssessmentScoringEngine {
   calculateSubscaleScores(): Record<string, number> {
     const subscales = this.template.scoring_config.subscales || []
     const subscaleScores: Record<string, number> = {}
-    
-    subscales.forEach(subscale => {
-      let subscaleSum = 0
-      subscale.items.forEach(itemId => {
-        const response = this.responses[itemId]
-        if (response !== undefined && response !== null) {
-          subscaleSum += typeof response === 'number' ? response : parseInt(response)
-        }
-      })
-      subscaleScores[subscale.name] = subscaleSum
-    })
-    
+
+    for (const sub of subscales) {
+      let subtotal = 0
+      for (const itemId of sub.items) {
+        const q = this.template.questions.find(qq => qq.id === itemId)
+        if (!q) continue
+        const val = this.normalizeNumeric(q, this.responses[itemId])
+        if (typeof val === 'number') subtotal += val
+      }
+      subscaleScores[sub.name] = subtotal
+    }
+
     return subscaleScores
   }
 
@@ -133,28 +222,25 @@ export class AssessmentScoringEngine {
    * Get interpretation based on score
    */
   getInterpretation(score: number) {
-    const ranges = this.template.interpretation_rules.ranges || []
-    
-    const matchingRange = ranges.find(range => 
-      score >= range.min && score <= range.max
-    )
-    
-    if (!matchingRange) {
+    const ranges = this.template.interpretation_rules?.ranges || []
+    const match = ranges.find(r => score >= r.min && score <= r.max)
+
+    if (!match) {
       return {
         category: 'Unknown',
         description: 'Score interpretation not available',
         severity: 'unknown',
         clinical_significance: 'unknown',
-        recommendations: 'Consult with healthcare provider'
+        recommendations: 'Consult with the treating clinician.',
       }
     }
-    
+
     return {
-      category: matchingRange.label,
-      description: matchingRange.description,
-      severity: matchingRange.severity,
-      clinical_significance: matchingRange.clinical_significance,
-      recommendations: matchingRange.recommendations
+      category: match.label,
+      description: match.description,
+      severity: match.severity,
+      clinical_significance: match.clinical_significance,
+      recommendations: match.recommendations,
     }
   }
 
@@ -171,123 +257,201 @@ export class AssessmentScoringEngine {
       message: string
       action_required: boolean
     }> = []
-    
-    const cutoffs = this.template.clinical_cutoffs
-    
-    // Check clinical cutoff
-    if (cutoffs.clinical_cutoff && score >= cutoffs.clinical_cutoff) {
+
+    const cutoffs = this.template.clinical_cutoffs || {}
+
+    // Clinical cutoff
+    if (typeof cutoffs.clinical_cutoff === 'number' && score >= cutoffs.clinical_cutoff) {
       alerts.push({
         type: 'warning',
         message: `Score exceeds clinical cutoff (${cutoffs.clinical_cutoff}). Consider further evaluation.`,
-        action_required: true
+        action_required: true,
       })
     }
-    
-    // Check suicide risk (PHQ-9 item 9)
-    if (cutoffs.suicide_risk_item && cutoffs.suicide_risk_threshold) {
-      const suicideResponse = this.responses[cutoffs.suicide_risk_item]
-      if (suicideResponse >= cutoffs.suicide_risk_threshold) {
+
+    // Suicide risk item threshold
+    if (cutoffs.suicide_risk_item && typeof cutoffs.suicide_risk_threshold === 'number') {
+      const val = this.normalizeNumeric(
+        this.template.questions.find(q => q.id === cutoffs.suicide_risk_item),
+        this.responses[cutoffs.suicide_risk_item]
+      )
+      if (typeof val === 'number' && val >= cutoffs.suicide_risk_threshold) {
         alerts.push({
           type: 'critical',
           message: 'Suicide risk indicated. Immediate safety assessment required.',
-          action_required: true
+          action_required: true,
         })
       }
     }
-    
-    // Check custom alerts from interpretation rules
-    const customAlerts = this.template.interpretation_rules.clinical_alerts || []
-    customAlerts.forEach(alert => {
-      // Simple condition evaluation (can be enhanced)
-      if (this.evaluateCondition(alert.condition, score)) {
+
+    // Custom alert conditions (safe parser)
+    const custom = this.template.interpretation_rules?.clinical_alerts || []
+    for (const a of custom) {
+      if (this.safeEvalScoreCondition(a.condition, score)) {
         alerts.push({
-          type: alert.severity,
-          message: alert.message,
-          action_required: alert.action_required
+          type: a.severity,
+          message: a.message,
+          action_required: a.action_required,
         })
       }
-    })
-    
+    }
+
     return alerts
   }
 
-  /**
-   * Evaluate condition for alerts (simplified)
-   */
-  private evaluateCondition(condition: string, score: number): boolean {
-    // Simple condition parser - can be enhanced for complex logic
-    try {
-      return eval(condition.replace('score', score.toString()))
-    } catch {
-      return false
+  /** Safe evaluator for expressions like: "score >= 10", "score < 5" */
+  private safeEvalScoreCondition(cond: string, score: number): boolean {
+    if (!cond) return false
+    const normalized = cond.replace(/\s+/g, '')
+
+    // support operators in this order to avoid partial matches
+    const ops = ['>=', '<=', '>', '<', '==', '!='] as const
+    for (const op of ops) {
+      const parts = normalized.split(op)
+      if (parts.length === 2) {
+        const [lhs, rhs] = parts
+        if (lhs !== 'score') return false
+        const rhsNum = Number(rhs)
+        if (Number.isNaN(rhsNum)) return false
+        switch (op) {
+          case '>=': return score >= rhsNum
+          case '<=': return score <= rhsNum
+          case '>':  return score > rhsNum
+          case '<':  return score < rhsNum
+          case '==': return score === rhsNum
+          case '!=': return score !== rhsNum
+        }
+      }
     }
+    return false
   }
 
   /**
-   * Generate narrative report
+   * Generate narrative report (generic; no instrument-specific hardcoding)
    */
   generateNarrativeReport(score: number, interpretation: any): string {
     const date = new Date().toLocaleDateString()
-    const percentile = Math.round((score / this.template.scoring_config.max_score) * 100)
-    
+    const max = this.template.scoring_config?.max_score ?? 0
+    const percentile = max > 0 ? Math.round((score / max) * 100) : 0
+
     let report = `Assessment: ${this.template.name} (${this.template.abbreviation})\n`
     report += `Date: ${date}\n`
-    report += `Score: ${score}/${this.template.scoring_config.max_score} (${percentile}%)\n`
+    report += `Score: ${score}/${max} (${percentile}%)\n`
     report += `Interpretation: ${interpretation.category}\n\n`
-    
+
     report += `Clinical Summary:\n`
-    report += `The client completed the ${this.template.name}, which ${this.template.description.toLowerCase()}. `
-    report += `The obtained score of ${score} falls within the "${interpretation.category}" range, indicating ${interpretation.description.toLowerCase()}.\n\n`
-    
-    // Add specific clinical considerations based on assessment type
-    if (this.template.abbreviation === 'PHQ-9' && score >= 10) {
-      report += `Clinical Considerations: The score suggests clinically significant depressive symptoms that may warrant further evaluation and treatment planning.\n`
-    } else if (this.template.abbreviation === 'GAD-7' && score >= 10) {
-      report += `Clinical Considerations: The score indicates clinically significant anxiety symptoms that may benefit from therapeutic intervention.\n`
-    }
-    
-    report += `\nRecommendations: ${interpretation.recommendations}`
-    
+    report += `The client completed the ${this.template.name}. `
+    report += `The score of ${score} falls within the "${interpretation.category}" range, `
+    report += `which is described as: ${interpretation.description}.\n\n`
+
+    report += `Recommendations:\n${interpretation.recommendations}`
+
     return report
   }
 
   /**
-   * Validate responses completeness
+   * Validate responses completeness & basic constraints
    */
   validateResponses(): {
     isComplete: boolean
     missingQuestions: string[]
     invalidResponses: string[]
   } {
-    const missingQuestions: string[] = []
-    const invalidResponses: string[] = []
-    
-    this.template.questions.forEach(question => {
-      const response = this.responses[question.id]
-      
-      // Check if required question is answered
-      if (question.required !== false && (response === undefined || response === null)) {
-        missingQuestions.push(question.id)
-        return
+    const missing: string[] = []
+    const invalid: string[] = []
+
+    for (const q of this.template.questions) {
+      const r = this.responses[q.id]
+
+      // required
+      if (q.required !== false && (r === undefined || r === null || r === '')) {
+        missing.push(q.id)
+        continue
       }
-      
-      // Validate response value
-      if (response !== undefined && response !== null) {
-        if (question.type === 'scale') {
-          const numValue = typeof response === 'number' ? response : parseInt(response)
-          if (isNaN(numValue) || 
-              (question.scale_min !== undefined && numValue < question.scale_min) ||
-              (question.scale_max !== undefined && numValue > question.scale_max)) {
-            invalidResponses.push(question.id)
+
+      if (r === undefined || r === null || r === '') continue
+
+      // type-specific validation
+      switch (q.type) {
+        case 'scale':
+        case 'likert':
+        case 'slider':
+        case 'number': {
+          const num = typeof r === 'number' ? r : Number.parseFloat(r as any)
+          const { min, max } = this.getBounds(q)
+          if (Number.isNaN(num) ||
+              (min !== undefined && num < min) ||
+              (max !== undefined && num > max)) {
+            invalid.push(q.id)
           }
+          if (q.step && typeof q.step === 'number') {
+            const withinStep = ((num - (min ?? 0)) % q.step) === 0
+            if (!withinStep) {
+              // step mismatch is considered invalid but tolerates floating point imprecision
+              const epsilon = 1e-6
+              if (Math.abs(((num - (min ?? 0)) % q.step)) > epsilon) invalid.push(q.id)
+            }
+          }
+          break
         }
+
+        case 'single_choice': {
+          const idx = this.getOptionIndexFromValue(q.options, r)
+          if (idx === undefined) invalid.push(q.id)
+          break
+        }
+
+        case 'multiple_choice':
+        case 'multi_choice': {
+          if (!Array.isArray(r)) {
+            invalid.push(q.id)
+            break
+          }
+          for (const sel of r) {
+            const idx = this.getOptionIndexFromValue(q.options, sel)
+            if (idx === undefined) {
+              invalid.push(q.id)
+              break
+            }
+          }
+          break
+        }
+
+        case 'text':
+        case 'textarea': {
+          if (q.validation?.pattern) {
+            try {
+              const re = new RegExp(q.validation.pattern)
+              if (!re.test(String(r))) invalid.push(q.id)
+            } catch {
+              // bad pattern in DB: ignore the regex check rather than failing user entry
+            }
+          }
+          if (q.validation?.min_value !== undefined || q.validation?.max_value !== undefined) {
+            const num = Number(r)
+            if (Number.isNaN(num)) {
+              invalid.push(q.id)
+            } else {
+              if (q.validation.min_value !== undefined && num < q.validation.min_value) invalid.push(q.id)
+              if (q.validation.max_value !== undefined && num > q.validation.max_value) invalid.push(q.id)
+            }
+          }
+          break
+        }
+
+        case 'boolean':
+        case 'date':
+        case 'time':
+        default:
+          // no extra validation here (could add date/time format checks later)
+          break
       }
-    })
-    
+    }
+
     return {
-      isComplete: missingQuestions.length === 0,
-      missingQuestions,
-      invalidResponses
+      isComplete: missing.length === 0,
+      missingQuestions: missing,
+      invalidResponses: invalid,
     }
   }
 
@@ -295,12 +459,9 @@ export class AssessmentScoringEngine {
    * Get completion percentage
    */
   getCompletionPercentage(): number {
-    const totalQuestions = this.template.questions.length
-    const answeredQuestions = this.template.questions.filter(q => 
-      this.responses[q.id] !== undefined && this.responses[q.id] !== null
-    ).length
-    
-    return totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0
+    const total = this.template.questions.length
+    const answered = this.template.questions.filter(q => this.responses[q.id] !== undefined && this.responses[q.id] !== null && this.responses[q.id] !== '').length
+    return total > 0 ? Math.round((answered / total) * 100) : 0
   }
 }
 
@@ -333,7 +494,10 @@ export class AssessmentFactory {
       status: 'assigned',
       due_date: options.dueDate,
       reminder_frequency: options.reminderFrequency || 'none',
-      expires_at: options.dueDate ? new Date(new Date(options.dueDate).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() : undefined
+      // simple default: 7 days after due_date if present
+      expires_at: options.dueDate
+        ? new Date(new Date(options.dueDate).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        : undefined,
     }
   }
 
@@ -345,7 +509,7 @@ export class AssessmentFactory {
     errors: string[]
   } {
     const errors: string[] = []
-    
+
     if (!template.name) errors.push('Template name is required')
     if (!template.abbreviation) errors.push('Template abbreviation is required')
     if (!template.category) errors.push('Template category is required')
@@ -354,11 +518,8 @@ export class AssessmentFactory {
     }
     if (!template.scoring_config) errors.push('Scoring configuration is required')
     if (!template.interpretation_rules) errors.push('Interpretation rules are required')
-    
-    return {
-      isValid: errors.length === 0,
-      errors
-    }
+
+    return { isValid: errors.length === 0, errors }
   }
 }
 
@@ -366,34 +527,25 @@ export class AssessmentFactory {
  * Assessment Utilities
  */
 export class AssessmentUtils {
-  /**
-   * Format score for display
-   */
   static formatScore(score: number, maxScore: number, showPercentage = true): string {
-    const percentage = Math.round((score / maxScore) * 100)
+    const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0
     return showPercentage ? `${score}/${maxScore} (${percentage}%)` : `${score}/${maxScore}`
   }
 
-  /**
-   * Get severity color
-   */
   static getSeverityColor(severity: string): string {
-    const colors = {
+    const colors: Record<string, string> = {
       minimal: 'text-green-600 bg-green-100',
       mild: 'text-yellow-600 bg-yellow-100',
       moderate: 'text-orange-600 bg-orange-100',
       moderately_severe: 'text-red-600 bg-red-100',
       severe: 'text-red-700 bg-red-200',
-      very_severe: 'text-red-800 bg-red-300'
+      very_severe: 'text-red-800 bg-red-300',
     }
-    return colors[severity as keyof typeof colors] || 'text-gray-600 bg-gray-100'
+    return colors[severity] || 'text-gray-600 bg-gray-100'
   }
 
-  /**
-   * Get category icon
-   */
   static getCategoryIcon(category: string): string {
-    const icons = {
+    const icons: Record<string, string> = {
       anxiety: '😰',
       depression: '😔',
       trauma: '🛡️',
@@ -403,26 +555,19 @@ export class AssessmentUtils {
       substance: '🚫',
       eating: '🍽️',
       sleep: '😴',
-      general: '📋'
+      general: '📋',
     }
-    return icons[category as keyof typeof icons] || '📋'
+    return icons[category] || '📋'
   }
 
-  /**
-   * Estimate completion time
-   */
   static estimateCompletionTime(questionCount: number): string {
     const minutesPerQuestion = 0.5
     const totalMinutes = Math.ceil(questionCount * minutesPerQuestion)
-    
     if (totalMinutes < 1) return '< 1 minute'
     if (totalMinutes === 1) return '1 minute'
     return `${totalMinutes} minutes`
   }
 
-  /**
-   * Generate assessment summary
-   */
   static generateSummary(template: AssessmentTemplate, score: number, interpretation: any): string {
     return `${template.abbreviation}: ${score}/${template.scoring_config.max_score} - ${interpretation.category}`
   }
