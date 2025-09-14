@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Navigate, Link } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
-import { Brain, Eye, EyeOff } from 'lucide-react'
+import { useAuth } from '../../hooks/useAuth'
+import { Eye, EyeOff } from 'lucide-react'
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('')
@@ -21,17 +21,15 @@ export const Login: React.FC = () => {
     e.preventDefault()
     setLoading(true)
     setError('')
-
     try {
       await signIn(email, password)
-    } catch (error: any) {
-      setError(error.message)
+    } catch (err: any) {
+      setError(err?.message || 'Unable to sign in')
     } finally {
       setLoading(false)
     }
   }
 
-  // Show auth errors
   const displayError = error || authError
 
   return (
@@ -40,40 +38,35 @@ export const Login: React.FC = () => {
         <div className="text-center">
           <div className="flex justify-center">
             <div className="flex items-center space-x-4 mb-6">
-              <img 
+              <img
                 src="/thera-py-icon.png"
-                alt="Thera-PY Logo" 
+                alt="Thera-PY Logo"
                 className="w-16 h-16"
                 onError={(e) => {
                   console.error('Logo icon failed to load')
-                  e.currentTarget.style.display = 'none'
+                  ;(e.currentTarget as HTMLImageElement).style.display = 'none'
                 }}
               />
-              <img 
+              <img
                 src="/thera-py-image.png"
-                alt="Thera-PY" 
+                alt="Thera-PY"
                 className="h-12"
                 onError={(e) => {
                   console.error('Logo text failed to load')
-                  e.currentTarget.outerHTML = '<span class="logo-text-large text-3xl font-bold text-gray-900">Thera-PY</span>'
+                  ;(e.currentTarget as HTMLImageElement).outerHTML =
+                    '<span class="logo-text-large text-3xl font-bold text-gray-900">Thera-PY</span>'
                 }}
               />
             </div>
           </div>
-          <h2 className="mt-6 text-2xl font-bold text-gray-900">
-            Welcome back
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Your digital bridge in Cognitive Behavioral Therapy
-          </p>
+          <h2 className="mt-6 text-2xl font-bold text-gray-900">Welcome back</h2>
+          <p className="mt-2 text-sm text-gray-600">Your digital bridge in Cognitive Behavioral Therapy</p>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
               <input
                 id="email"
                 name="email"
@@ -87,9 +80,7 @@ export const Login: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
               <div className="mt-1 relative">
                 <input
                   id="password"
@@ -132,7 +123,6 @@ export const Login: React.FC = () => {
               'Sign in'
             )}
           </button>
-
 
           <div className="text-center">
             <p className="text-sm text-gray-600">
