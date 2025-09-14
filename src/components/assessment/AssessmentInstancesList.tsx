@@ -4,7 +4,6 @@ import {
   Search,
   Filter,
   RefreshCw,
-  ChevronDown,
   MoreVertical,
   Eye,
   Play,
@@ -19,9 +18,14 @@ import {
 } from 'lucide-react'
 import { useAssessments } from '../../hooks/useAssessments'
 import { AssessmentInstance } from '../../types/assessment'
+import { supabase } from '../../lib/supabase'
 
 type Props = {
   onOpenInstance?: (instance: AssessmentInstance) => void
+  /** Optional: prefilter to a client (e.g., from ?clientId=) */
+  initialClientId?: string
+  /** Optional: bubble client filter changes up (to sync URL chip) */
+  onClientFilterChange?: (id: string | null) => void
 }
 
 type SortKey = 'assigned_at' | 'due_date' | 'status' | 'client' | 'template'
@@ -120,7 +124,11 @@ const statusOptions: Array<{ id: string; label: string }> = [
 
 const PAGE_SIZE = 12
 
-const AssessmentInstancesList: React.FC<Props> = ({ onOpenInstance }) => {
+const AssessmentInstancesList: React.FC<Props> = ({
+  onOpenInstance,
+  initialClientId,
+  onClientFilterChange,
+}) => {
   const { instances, loading, error, refetch, updateInstanceStatus, deleteInstance } = useAssessments()
 
   // UI state
@@ -133,23 +141,59 @@ const AssessmentInstancesList: React.FC<Props> = ({ onOpenInstance }) => {
   const [page, setPage] = useState(1)
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
 
-  // Derived filter options
-  const clientOptions = useMemo(() => {
-    const uniq = new Map<string, string>()
+  // If we were given an initial client filter, apply it (and keep in sync if prop changes)
+  useEffect(() => {
+    if (initialClientId) {
+      setClientFilter(initialClientId)
+      onClientFilterChange?.(initialClientId)
+    } else {
+      // only clear if previously set by prop
+      setClientFilter(prev => (prev !== 'all' && prev === initialClientId ? 'all' : prev))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialClientId])
+
+  // Derived filter options from list data
+  const clientMap = useMemo(() => {
+    const m = new Map<string, string>()
     instances.forEach(i => {
-      if (i.client) {
-        uniq.set(i.client_id, `${i.client.first_name} ${i.client.last_name}`)
-      }
+      if (i.client) m.set(i.client_id, `${i.client.first_name} ${i.client.last_name}`)
     })
-    return [{ id: 'all', name: 'All clients' }, ...Array.from(uniq).map(([id, name]) => ({ id, name }))]
+    return m
   }, [instances])
+
+  const [extraClientOption, setExtraClientOption] = useState<{ id: string; name: string } | null>(null)
+
+  // If initialClientId isn't present in current instances (e.g., no assignments yet),
+  // try to fetch a display name so the select shows a friendly label.
+  useEffect(() => {
+    let cancel = false
+    const hydrate = async () => {
+      if (!initialClientId) { setExtraClientOption(null); return }
+      if (clientMap.has(initialClientId)) { setExtraClientOption(null); return }
+      const { data, error: e } = await supabase
+        .from('profiles')
+        .select('first_name,last_name')
+        .eq('id', initialClientId)
+        .single()
+      if (cancel) return
+      if (e || !data) setExtraClientOption({ id: initialClientId, name: 'Selected Client' })
+      else setExtraClientOption({ id: initialClientId, name: `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'Selected Client' })
+    }
+    hydrate()
+    return () => { cancel = true }
+  }, [initialClientId, clientMap])
+
+  const clientOptions = useMemo(() => {
+    const base = [{ id: 'all', name: 'All clients' }, ...Array.from(clientMap).map(([id, name]) => ({ id, name }))]
+    if (extraClientOption && !base.find(o => o.id === extraClientOption.id)) return [base[0], extraClientOption, ...base.slice(1)]
+    return base
+  }, [clientMap, extraClientOption])
 
   const templateOptions = useMemo(() => {
     const uniq = new Map<string, string>()
     instances.forEach(i => {
-      if (i.template) {
-        uniq.set(i.template_id, i.template.name)
-      }
+      if (i.template) uniq.set(i.template_id, i.template.name)
     })
     return [{ id: 'all', name: 'All templates' }, ...Array.from(uniq).map(([id, name]) => ({ id, name }))]
   }, [instances])
@@ -185,6 +229,11 @@ const AssessmentInstancesList: React.FC<Props> = ({ onOpenInstance }) => {
     // reset page when filters change
     setPage(1)
   }, [search, status, clientFilter, templateFilter])
+
+  // bubble filter changes up (for URL chip sync)
+  useEffect(() => {
+    onClientFilterChange?.(clientFilter === 'all' ? null : clientFilter)
+  }, [clientFilter, onClientFilterChange])
 
   const toggleSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -418,13 +467,11 @@ const AssessmentInstancesList: React.FC<Props> = ({ onOpenInstance }) => {
                 {/* Bottom */}
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs text-gray-500">
-                    {/* simple legend */}
                     <Dot className={i.status === 'completed' ? 'bg-green-500' : i.status === 'in_progress' ? 'bg-blue-500' : 'bg-gray-400'} />
                     <span>{i.status === 'completed' ? 'Completed' : i.status === 'in_progress' ? 'In progress' : 'Assigned'}</span>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {/* optional progress column (may not exist in type; safely optional) */}
                     {'progress' in i ? <ProgressBar value={(i as any).progress} /> : <div className="text-xs text-gray-400 w-28 text-right"> </div>}
 
                     {i.status === 'assigned' && (
