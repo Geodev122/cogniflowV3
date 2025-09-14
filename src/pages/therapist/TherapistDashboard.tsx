@@ -1,9 +1,9 @@
 // src/pages/TherapistDashboard.tsx
 import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../hooks/useAuth'
-import { isRecursionError } from '../utils/helpers'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../hooks/useAuth'
+import { isRecursionError } from '../../utils/helpers'
 import {
   Users, FileText, Calendar, Library, CheckCircle, AlertTriangle, Menu, X, Target, ChevronLeft,
   User, CalendarDays, Brain, Shield, Headphones, Plus, Eye, LogOut, BarChart3, Building2,
