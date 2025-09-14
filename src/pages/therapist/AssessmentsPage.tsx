@@ -9,40 +9,41 @@ import AssessmentWorkspace from '../../components/assessment/AssessmentWorkspace
 /**
  * Therapist Assessments Page
  * - Route-friendly wrapper around AssessmentWorkspace
- * - Supports deep linking: /therapist/assessments/:instanceId?
- * - Access guard: restrict to therapists (best-effort via profile.role if available)
- * - No hardcoded data. Supabase-wired via useAuth + workspace fetches
+ * - Deep linking: /therapist/assessments/:instanceId?
+ * - Access guard: therapist-only (best-effort via profile.role)
+ * - Supabase-wired: records last-seen analytics (non-blocking, no hard-coded IDs)
  */
 const AssessmentsPage: React.FC = () => {
   const navigate = useNavigate()
   const { instanceId } = useParams<{ instanceId?: string }>()
   const { profile, loading: authLoading } = useAuth()
 
-  // Optional: best-effort guard — if your profile has a role field.
+  // Best-effort role guard (relies on your profiles schema; RLS should still enforce server-side)
   const isTherapist = useMemo(() => {
-    // If your profiles table has a 'role' or 'user_type' field:
-    // return profile?.role === 'therapist' || profile?.user_type === 'therapist'
-    // If not set up yet, default to true to avoid blocking during development:
-    return profile ? true : false
+    // If your "profiles" table has role, keep this check aligned with your RLS.
+    // This intentionally errs on the side of allowing access during setup to avoid false-negatives in dev.
+    return profile?.role ? profile.role === 'therapist' : !!profile
   }, [profile])
 
+  // Lightweight analytics / last-seen persistence (ignore errors; no hard-coding)
   useEffect(() => {
-    // Example: you might want to record last visit to this page in a lightweight way
-    // (best-effort, ignore failure — useful later for analytics)
     if (!profile) return
-    const upsertVisit = async () => {
+    const writeLastSeen = async () => {
       try {
+        // Table "user_last_seen" is optional; write if present.
         await supabase.from('user_last_seen').upsert({
           user_id: profile.id,
           page: 'therapist_assessments',
+          // store the instance if deep-linked (handy for "continue where you left off")
+          context: instanceId ? { instanceId } : null,
           seen_at: new Date().toISOString(),
         })
       } catch {
-        // ignore analytics failures
+        // Non-blocking analytics; intentionally ignore.
       }
     }
-    upsertVisit()
-  }, [profile])
+    writeLastSeen()
+  }, [profile, instanceId])
 
   if (authLoading) {
     return (
@@ -62,7 +63,7 @@ const AssessmentsPage: React.FC = () => {
             Please sign in to access assessments.
           </p>
           <button
-            onClick={() => navigate('/auth')}
+            onClick={() => navigate('/login')}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
           >
             Go to sign in
@@ -119,7 +120,7 @@ const AssessmentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Main content: the Workspace drives all Supabase I/O */}
+      {/* Main content: AssessmentWorkspace owns all Supabase I/O for instances/templates */}
       <div className="min-h-0">
         <AssessmentWorkspace
           initialInstanceId={instanceId}
