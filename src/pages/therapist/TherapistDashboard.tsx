@@ -9,23 +9,23 @@ import {
   User, CalendarDays, Brain, Shield, Headphones, Plus, Eye, LogOut, BarChart3, Building2,
   ShieldCheck, Star, Bell, ClipboardList, Activity, ChevronRight
 } from 'lucide-react'
-import { TherapistOnboarding } from '../components/therapist/TherapistOnboarding'
+import { TherapistOnboarding } from '../../components/therapist/TherapistOnboarding'
 
 // Lazy-load EXISTING repo modules (names must match actual exports)
 const ClientManagement = React.lazy(() =>
-  import('../components/therapist/ClientManagement').then(m => ({ default: (m as any).ClientManagement ?? m.default }))
+  import('../../components/therapist/ClientManagement').then(m => ({ default: (m as any).ClientManagement ?? m.default }))
 )
 const SessionManagement = React.lazy(() =>
-  import('../components/therapist/SessionManagement').then(m => ({ default: (m as any).SessionManagement ?? m.default }))
+  import('../../components/therapist/SessionManagement').then(m => ({ default: (m as any).SessionManagement ?? m.default }))
 )
 const CaseManagement = React.lazy(() =>
-  import('../components/therapist/CaseManagement').then(m => ({ default: (m as any).CaseManagement ?? m.default }))
+  import('../../components/therapist/CaseManagement').then(m => ({ default: (m as any).CaseManagement ?? m.default }))
 )
 const CommunicationTools = React.lazy(() =>
-  import('../components/therapist/CommunicationTools').then(m => ({ default: (m as any).default ?? m }))
+  import('../../components/therapist/CommunicationTools').then(m => ({ default: (m as any).default ?? m }))
 )
 const ResourceLibrary = React.lazy(() =>
-  import('../components/therapist/ResourceLibrary').then(m => ({ default: (m as any).default ?? m }))
+  import('../../components/therapist/ResourceLibrary').then(m => ({ default: (m as any).default ?? m }))
 )
 
 // NEW split components (assuming these exist in your repo; otherwise create later)
