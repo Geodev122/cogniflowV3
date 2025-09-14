@@ -25,7 +25,7 @@ interface Resource {
   difficulty_level?: 'beginner' | 'intermediate' | 'advanced' | string | null
   evidence_level?: string | null
   is_public?: boolean | null
-  created_at: string
+  d_at: string
 
   // upload / complex content
   media_url?: string | null
@@ -472,13 +472,13 @@ const AssignResourceModal: React.FC<{
 }
 
 /* =========================
-   Create Resource Modal (PDF/Video/Audio/Interactive)
+    Resource Modal (PDF/Video/Audio/Interactive)
 ========================= */
 
-const CreateResourceModal: React.FC<{
+const ResourceModal: React.FC<{
   onClose: () => void
-  onCreated: (resource: Resource) => void
-}> = ({ onClose, onCreated }) => {
+  ond: (resource: Resource) => void
+}> = ({ onClose, ond }) => {
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('worksheet')
   const [description, setDescription] = useState('')
@@ -557,16 +557,16 @@ const CreateResourceModal: React.FC<{
           interactive_schema,
         })
         .select(
-          'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
+          'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, d_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
         )
         .single()
 
       if (error) throw error
-      onCreated(data as Resource)
+      ond(data as Resource)
       onClose()
     } catch (err) {
-      console.error('CreateResource error:', err)
-      alert('Could not create resource. Check storage bucket "resource_files" and RLS.')
+      console.error('Resource error:', err)
+      alert('Could not  resource. Check storage bucket "resource_files" and RLS.')
     } finally {
       setLoading(false)
     }
@@ -579,7 +579,7 @@ const CreateResourceModal: React.FC<{
         <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full">
           <form onSubmit={submit}>
             <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Create Resource</h3>
+              <h3 className="text-lg font-semibold text-gray-900"> Resource</h3>
               <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
@@ -745,7 +745,7 @@ const CreateResourceModal: React.FC<{
                 disabled={loading || !title.trim()}
                 className="px-6 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
               >
-                {loading ? 'Saving…' : 'Create'}
+                {loading ? 'Saving…' : ''}
               </button>
             </div>
           </form>
@@ -756,16 +756,16 @@ const CreateResourceModal: React.FC<{
 }
 
 /* =========================
-   Create Course Modal (eLearning)
+    Course Modal (eLearning)
 ========================= */
 
 type CourseLesson = { id: string; title: string; type: 'text' | 'video' | 'audio' | 'pdf' | 'interactive' | 'link'; url?: string; content?: string }
 type CourseModule = { id: string; title: string; lessons: CourseLesson[] }
 
-const CreateCourseModal: React.FC<{
+const CourseModal: React.FC<{
   onClose: () => void
-  onCreated: (resource: Resource) => void
-}> = ({ onClose, onCreated }) => {
+  ond: (resource: Resource) => void
+}> = ({ onClose, ond }) => {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [difficulty, setDifficulty] = useState('beginner')
@@ -826,16 +826,16 @@ const CreateCourseModal: React.FC<{
           course_manifest: manifest
         })
         .select(
-          'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
+          'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, d_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
         )
         .single()
 
       if (error) throw error
-      onCreated(data as Resource)
+      ond(data as Resource)
       onClose()
     } catch (err) {
-      console.error('CreateCourse error:', err)
-      alert('Could not create course. Ensure table "resource_library" allows JSONB in course_manifest.')
+      console.error('Course error:', err)
+      alert('Could not  course. Ensure table "resource_library" allows JSONB in course_manifest.')
     } finally {
       setSaving(false)
     }
@@ -848,7 +848,7 @@ const CreateCourseModal: React.FC<{
         <div className="relative bg-white rounded-xl shadow-xl max-w-3xl w-full">
           <form onSubmit={submit}>
             <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Create Course</h3>
+              <h3 className="text-lg font-semibold text-gray-900"> Course</h3>
               <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
@@ -1002,7 +1002,7 @@ const CreateCourseModal: React.FC<{
                 disabled={saving || !title.trim()}
                 className="px-6 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                {saving ? 'Saving…' : 'Create Course'}
+                {saving ? 'Saving…' : ' Course'}
               </button>
             </div>
           </form>
@@ -1034,9 +1034,9 @@ export default function ResourceLibrary() {
   const [bookmarkedResources, setBookmarkedResources] = useState<string[]>([])
   const [resourcesLoading, setResourcesLoading] = useState(false)
   const [resourcesError, setResourcesError] = useState<string | null>(null)
-  const [showCreateResource, setShowCreateResource] = useState(false)
-  const [showCreateCourse, setShowCreateCourse] = useState(false)
-  const [createMenuOpen, setCreateMenuOpen] = useState(false)
+  const [showResource, setShowResource] = useState(false)
+  const [showCourse, setShowCourse] = useState(false)
+  const [MenuOpen, setMenuOpen] = useState(false)
 
   const { profile } = useAuth()
   const { templates, assignAssessment } = useAssessments()
@@ -1103,10 +1103,10 @@ export default function ResourceLibrary() {
       const { data, error } = await supabase
         .from('resource_library')
         .select(
-          'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
+          'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, d_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
         )
         .eq('is_public', true)
-        .order('created_at', { ascending: false })
+        .order('d_at', { ascending: false })
 
       if (error || !data || !data.length) {
         console.warn('[ResourceLibrary] using sample resources; DB empty or RLS blocked', { error })
@@ -1235,30 +1235,30 @@ export default function ResourceLibrary() {
             </button>
           </div>
 
-          {/* inline create menu only on Resources */}
+          {/* inline  menu only on Resources */}
           {isRes && (
             <div className="mt-3 flex justify-end">
               <div className="relative">
                 <button
-                  onClick={() => setCreateMenuOpen(v => !v)}
+                  onClick={() => setMenuOpen(v => !v)}
                   className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                 >
                   <Plus className="w-4 h-4" />
-                  Create
+                  
                   <ChevronDown className="w-4 h-4 opacity-90" />
                 </button>
 
-                {createMenuOpen && (
+                {MenuOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
                     <button
                       className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                      onClick={() => { setShowCreateResource(true); setCreateMenuOpen(false) }}
+                      onClick={() => { setShowResource(true); setMenuOpen(false) }}
                     >
                       New Resource (PDF/Video/Audio/Interactive)
                     </button>
                     <button
                       className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                      onClick={() => { setShowCreateCourse(true); setCreateMenuOpen(false) }}
+                      onClick={() => { setShowCourse(true); setMenuOpen(false) }}
                     >
                       New Course (eLearning)
                     </button>
@@ -1393,7 +1393,7 @@ export default function ResourceLibrary() {
                           {r.difficulty_level}
                         </span>
                       )}
-                      <span className="text-[11px] text-gray-500">{new Date(r.created_at).toLocaleDateString()}</span>
+                      <span className="text-[11px] text-gray-500">{new Date(r.d_at).toLocaleDateString()}</span>
                     </div>
 
                     <div className="flex gap-1">
@@ -1514,19 +1514,20 @@ export default function ResourceLibrary() {
         />
       )}
 
-      {showCreateResource && (
-        <CreateResourceModal
-          onClose={() => setShowCreateResource(false)}
-          onCreated={(res) => setResources(prev => [res, ...prev])}
+      {showResource && (
+        <ResourceModal
+          onClose={() => setShowResource(false)}
+          ond={(res) => setResources(prev => [res, ...prev])}
         />
       )}
 
-      {showCreateCourse && (
-        <CreateCourseModal
-          onClose={() => setShowCreateCourse(false)}
-          onCreated={(res) => setResources(prev => [res, ...prev])}
+      {showCourse && (
+        <CourseModal
+          onClose={() => setShowCourse(false)}
+          ond={(res) => setResources(prev => [res, ...prev])}
         />
       )}
     </div>
   )
 }
+
