@@ -1,4 +1,3 @@
-// src/pages/TherapistDashboard.tsx
 import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -28,11 +27,22 @@ import {
   MessageCircle,
   Loader2,
   Send,
+  Filter,
+  Search,
+  Download,
+  Upload,
+  ShieldCheck,
+  CreditCard,
+  IdCard,
+  Ticket,
+  Star,
+  Bell,
+  ClipboardList,
 } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { TherapistOnboarding } from '../components/therapist/TherapistOnboarding'
 
-// Lazy tool pages that exist
+// Lazy modules that exist in your repo already
 const ClientManagement = React.lazy(() =>
   import('../components/therapist/ClientManagement').then(m => ({ default: m.ClientManagement }))
 )
@@ -47,14 +57,15 @@ const ResourceLibrary = React.lazy(() =>
   import('../components/therapist/ResourceLibrary').then(m => ({ default: m.default || m }))
 )
 
-/* -----------------------------------------------------------------------------
-   INLINE ProgressMetrics (keeps Vite happy even if file doesn’t exist yet)
------------------------------------------------------------------------------ */
+/* ──────────────────────────────────────────────────────────────────────────────
+   Inline Progress Metrics (keeps Vite happy even if you later extract it)
+────────────────────────────────────────────────────────────────────────────── */
 const ProgressMetrics: React.FC = () => {
   const cards = [
-    { title: 'Completed Assessments', value: 128, sub: '+12 this week' },
-    { title: 'Avg. PHQ-9 Change', value: '-2.1', sub: 'last 4 weeks' },
-    { title: 'Attendance Rate', value: '92%', sub: 'rolling 30 days' },
+    { title: 'Active Cases', value: 18, sub: 'now' },
+    { title: 'Upcoming Sessions', value: 7, sub: 'next 48h' },
+    { title: 'Pending Assessments', value: 5, sub: 'awaiting client' },
+    { title: 'Alerts', value: 2, sub: 'action needed' },
   ]
   const rows = [
     { name: 'John Smith', metric: 'PHQ-9 Δ', value: '-3', note: 'Improving' },
@@ -68,7 +79,7 @@ const ProgressMetrics: React.FC = () => {
         <h2 className="text-2xl font-bold text-gray-900">Progress Metrics</h2>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {cards.map((c) => (
           <div key={c.title} className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
             <div className="text-sm text-gray-600">{c.title}</div>
@@ -115,16 +126,15 @@ const ProgressMetrics: React.FC = () => {
   )
 }
 
-/* -----------------------------------------------------------------------------
-   CLINIC RENTALS (Supabase-wired)
-   Tables expected:
-     - clinic_spaces: id, name, location, amenities (string[]), pricing_hourly (number),
-                      pricing_daily (number), tailored_available (boolean),
-                      whatsapp (text), external_managed (boolean), active (boolean), created_at
-     - clinic_rental_requests: id, therapist_id, space_id, request_type ('hourly'|'daily'|'tailored'),
-                               preferred_date (date), duration_hours (number, nullable),
-                               notes (text), status (text default 'new'), created_at
------------------------------------------------------------------------------ */
+/* ──────────────────────────────────────────────────────────────────────────────
+   Clinic Rentals (Supabase wired)
+   Tables:
+     clinic_spaces(active bool, ...), clinic_rental_requests(therapist_id uuid, ...)
+
+   RLS (reference):
+     - spaces: SELECT active=true for authenticated
+     - requests: INSERT/SELECT where therapist_id = auth.uid()
+────────────────────────────────────────────────────────────────────────────── */
 type RequestType = 'hourly' | 'daily' | 'tailored'
 interface ClinicSpace {
   id: string
@@ -165,13 +175,12 @@ const RequestBookingModal: React.FC<{
 }> = ({ open, onClose, onSubmit, defaultType, spaceName, submitting }) => {
   const [requestType, setRequestType] = useState<RequestType>(defaultType)
   const [date, setDate] = useState<string>('')
-  const [hours, setHours] = useState<string>(requestType === 'hourly' ? '2' : '')
+  const [hours, setHours] = useState<string>(defaultType === 'hourly' ? '2' : '')
   const [notes, setNotes] = useState('')
 
   useEffect(() => {
     setRequestType(defaultType)
-    if (defaultType === 'hourly') setHours('2')
-    else setHours('')
+    setHours(defaultType === 'hourly' ? '2' : '')
   }, [defaultType])
 
   if (!open) return null
@@ -248,7 +257,7 @@ const RequestBookingModal: React.FC<{
                   rows={3}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Share timing constraints, recurring interest, special setup needs…"
+                  placeholder="Timing constraints, recurring interest, special setup needs…"
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </label>
@@ -289,6 +298,7 @@ const ClinicRental: React.FC = () => {
   const [defaultType, setDefaultType] = useState<RequestType>('hourly')
 
   const openWA = (phone: string, text: string) => {
+    if (!phone) return
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
   }
 
@@ -386,7 +396,6 @@ const ClinicRental: React.FC = () => {
         </p>
       </div>
 
-      {/* Spaces */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -558,9 +567,866 @@ const ClinicRental: React.FC = () => {
   )
 }
 
-/* -----------------------------------------------------------------------------
-   Dashboard Types
------------------------------------------------------------------------------ */
+/* ──────────────────────────────────────────────────────────────────────────────
+   Clienteles (All vs My Clients) – role-aware reveal
+   Tables: profiles (role='client'), therapist_client_relations(therapist_id, client_id)
+────────────────────────────────────────────────────────────────────────────── */
+const Clienteles: React.FC = () => {
+  const { profile } = useAuth()
+  const [scope, setScope] = useState<'mine' | 'all'>('mine')
+  const [q, setQ] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [rows, setRows] = useState<any[]>([])
+  const [myIds, setMyIds] = useState<Set<string>>(new Set())
+
+  const fetchMineIds = useCallback(async () => {
+    if (!profile?.id) return
+    const { data, error: e } = await supabase
+      .from('therapist_client_relations')
+      .select('client_id')
+      .eq('therapist_id', profile.id)
+    if (e) {
+      console.warn('[Clienteles] relations error', e)
+      setMyIds(new Set())
+    } else {
+      setMyIds(new Set((data || []).map(d => d.client_id)))
+    }
+  }, [profile?.id])
+
+  const fetchRows = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      let query = supabase
+        .from('profiles')
+        .select('id, first_name, last_name, email, phone, city, country, created_at, role')
+        .eq('role', 'client')
+        .order('created_at', { ascending: false })
+
+      const { data, error: e } = await query
+      if (e) throw e
+      setRows(data || [])
+    } catch (e: any) {
+      console.error('[Clienteles] fetchRows', e)
+      setError('Could not load clients.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchMineIds()
+    fetchRows()
+  }, [fetchMineIds, fetchRows])
+
+  const filtered = rows.filter(r => {
+    const text = `${r.first_name || ''} ${r.last_name || ''} ${r.email || ''} ${r.city || ''}`.toLowerCase()
+    const okScope = scope === 'all' ? true : myIds.has(r.id)
+    const okQ = !q.trim() || text.includes(q.trim().toLowerCase())
+    return okScope && okQ
+  })
+
+  const sendIntake = (via: 'whatsapp' | 'email', r: any) => {
+    const link = `${window.location.origin}/intake/${r.id}`
+    if (via === 'whatsapp') {
+      const phone = (r.phone || '').replace(/[^\d]/g, '')
+      if (!phone) return alert('No phone on file.')
+      const text = `Hello ${r.first_name || ''}, please complete your intake form: ${link}`
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+    } else {
+      window.location.href = `mailto:${r.email}?subject=Intake%20Form&body=${encodeURIComponent('Please complete your intake: ' + link)}`
+    }
+  }
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Users className="w-6 h-6 text-blue-600" />
+          <h2 className="text-2xl font-bold text-gray-900">Clienteles</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search clients…"
+              className="pl-9 pr-3 py-2 border rounded-lg text-sm"
+            />
+          </div>
+          <select
+            value={scope}
+            onChange={(e) => setScope(e.target.value as any)}
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="mine">My Clients</option>
+            <option value="all">All Clients</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="py-12 grid place-items-center">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          </div>
+        ) : error ? (
+          <div className="p-4 text-red-700 bg-red-50 border-b border-red-200 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{error}</span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-16 text-center">
+            <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+            <div className="text-gray-900 font-medium">No clients found</div>
+            <div className="text-sm text-gray-600">Try changing filters or search</div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
+                <tr>
+                  <th className="text-left px-4 py-3">Name</th>
+                  <th className="text-left px-4 py-3">City</th>
+                  <th className="text-left px-4 py-3">Country</th>
+                  <th className="text-left px-4 py-3">Contact</th>
+                  <th className="text-right px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y text-sm">
+                {filtered.map(r => {
+                  const isMine = myIds.has(r.id)
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">
+                          {r.first_name} {r.last_name}
+                        </div>
+                        <div className="text-xs text-gray-500">{new Date(r.created_at).toLocaleDateString()}</div>
+                      </td>
+                      <td className="px-4 py-3">{r.city || '—'}</td>
+                      <td className="px-4 py-3">{r.country || '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="text-xs text-gray-600">
+                          {isMine ? r.email : 'Hidden'}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {isMine ? r.phone || '—' : '—'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2 justify-end">
+                          <button
+                            onClick={() => sendIntake('whatsapp', r)}
+                            className="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 text-xs"
+                          >
+                            WhatsApp Intake
+                          </button>
+                          <button
+                            onClick={() => sendIntake('email', r)}
+                            className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs"
+                          >
+                            Email Intake
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 text-xs text-gray-500 flex items-center gap-1">
+        <ShieldCheck className="w-3.5 h-3.5" />
+        Private contact details are only visible for **My Clients** (linked via assignment).
+      </div>
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   Session Board – live session workspace
+   Tables:
+     session_notes (id, therapist_id, client_id, case_id, content text, updated_at)
+────────────────────────────────────────────────────────────────────────────── */
+const SessionBoard: React.FC = () => {
+  const { profile } = useAuth()
+  const [clientId, setClientId] = useState<string>('')
+  const [caseId, setCaseId] = useState<string>('')
+  const [content, setContent] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveInfo, setSaveInfo] = useState<string | null>(null)
+  const [resources, setResources] = useState<any[]>([])
+
+  // Quick attachable resources (compact pull from public resource_library)
+  useEffect(() => {
+    ;(async () => {
+      const { data } = await supabase
+        .from('resource_library')
+        .select('id,title,content_type,category')
+        .eq('is_public', true)
+        .limit(8)
+      setResources(data || [])
+    })()
+  }, [])
+
+  const autoSave = useCallback(
+    async (next: string) => {
+      if (!profile?.id) return
+      setSaving(true)
+      setSaveInfo(null)
+      try {
+        const { error } = await supabase
+          .from('session_notes')
+          .upsert(
+            {
+              therapist_id: profile.id,
+              client_id: clientId || null,
+              case_id: caseId || null,
+              content: next,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'therapist_id,case_id' } as any
+          )
+        if (error) throw error
+        setSaveInfo('Saved')
+      } catch (e: any) {
+        setSaveInfo('Save failed')
+      } finally {
+        setSaving(false)
+      }
+    },
+    [profile?.id, clientId, caseId]
+  )
+
+  // Debounced save
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (content.trim().length) autoSave(content)
+    }, 600)
+    return () => clearTimeout(t)
+  }, [content, autoSave])
+
+  const attach = (r: any) => {
+    setContent((prev) => prev + `\n\n[Attached Resource] ${r.title} (${r.content_type}/${r.category})`)
+  }
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="w-6 h-6 text-blue-600" />
+          <h2 className="text-2xl font-bold text-gray-900">Session Board</h2>
+        </div>
+        <div className="text-xs text-gray-500">
+          {saving ? 'Saving…' : saveInfo || 'Idle'}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Left: Resources */}
+        <div className="bg-white border rounded-lg shadow-sm p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm font-semibold text-gray-900">Quick Resources</div>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('open-resource-library'))}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              Open Library
+            </button>
+          </div>
+          {resources.length === 0 ? (
+            <div className="text-sm text-gray-500">No resources yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {resources.map((r) => (
+                <div key={r.id} className="flex items-center justify-between border rounded p-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate">{r.title}</div>
+                    <div className="text-xs text-gray-500">{r.content_type} • {r.category}</div>
+                  </div>
+                  <button
+                    onClick={() => attach(r)}
+                    className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Attach
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Notes */}
+        <div className="lg:col-span-2 bg-white border rounded-lg shadow-sm p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+            <input
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              placeholder="Client ID (optional)"
+              className="px-3 py-2 border rounded text-sm"
+            />
+            <input
+              value={caseId}
+              onChange={(e) => setCaseId(e.target.value)}
+              placeholder="Case ID (optional)"
+              className="px-3 py-2 border rounded text-sm"
+            />
+            <div className="text-xs text-gray-500 flex items-center md:justify-end">
+              {new Date().toLocaleString()}
+            </div>
+          </div>
+          <textarea
+            rows={16}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Live session notes…"
+            className="w-full border rounded p-3 text-sm"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   Licensing & Compliance
+   Storage bucket: licensing
+   Table: therapist_licenses(id, therapist_id, file_path, expires_on, status)
+────────────────────────────────────────────────────────────────────────────── */
+const LicensingCompliance: React.FC = () => {
+  const { profile } = useAuth()
+  const [rows, setRows] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [expires, setExpires] = useState<string>('')
+
+  const load = useCallback(async () => {
+    if (!profile?.id) return
+    try {
+      setLoading(true)
+      const { data, error: e } = await supabase
+        .from('therapist_licenses')
+        .select('*')
+        .eq('therapist_id', profile.id)
+        .order('created_at', { ascending: false })
+      if (e) throw e
+      setRows(data || [])
+    } catch (e: any) {
+      setError('Could not load licenses')
+    } finally {
+      setLoading(false)
+    }
+  }, [profile?.id])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const upload = async () => {
+    if (!profile?.id || !file) return
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${profile.id}/${Date.now()}.${ext}`
+      const { error: st } = await supabase.storage.from('licensing').upload(path, file, { upsert: true })
+      if (st) throw st
+      const { error: ins } = await supabase.from('therapist_licenses').insert({
+        therapist_id: profile.id,
+        file_path: path,
+        expires_on: expires || null,
+        status: 'submitted'
+      })
+      if (ins) throw ins
+      setFile(null)
+      setExpires('')
+      await load()
+      alert('License uploaded.')
+    } catch (e: any) {
+      alert(e?.message || 'Upload failed')
+    }
+  }
+
+  const daysLeft = (d?: string | null) => {
+    if (!d) return null
+    const ms = new Date(d).getTime() - Date.now()
+    return Math.ceil(ms / (1000 * 60 * 60 * 24))
+  }
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-4">
+      <div className="flex items-center gap-2">
+        <IdCard className="w-6 h-6 text-blue-600" />
+        <h2 className="text-2xl font-bold text-gray-900">Licensing & Compliance</h2>
+      </div>
+
+      <div className="bg-white border rounded-lg shadow-sm p-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" />
+          <input
+            type="date"
+            value={expires}
+            onChange={(e) => setExpires(e.target.value)}
+            className="px-3 py-2 border rounded text-sm"
+            placeholder="Expiry date"
+          />
+          <button
+            onClick={upload}
+            disabled={!file}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            <Upload className="w-4 h-4 inline mr-1" />
+            Upload License
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="py-10 grid place-items-center">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          </div>
+        ) : error ? (
+          <div className="p-4 text-red-700 bg-red-50 border-b border-red-200 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5" />
+            <span>{error}</span>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="py-10 text-center">
+            <IdCard className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+            <div className="text-gray-900 font-medium">No licenses uploaded</div>
+            <div className="text-sm text-gray-600">Upload your license to enable verification & renewal reminders.</div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
+                <tr>
+                  <th className="text-left px-4 py-3">File</th>
+                  <th className="text-left px-4 py-3">Expiry</th>
+                  <th className="text-left px-4 py-3">Status</th>
+                  <th className="text-right px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y text-sm">
+                {rows.map(r => {
+                  const left = daysLeft(r.expires_on)
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900 truncate">{r.file_path}</div>
+                        <div className="text-xs text-gray-500">{new Date(r.created_at).toLocaleString()}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {r.expires_on ? (
+                          <span className={`${left !== null && left <= 30 ? 'text-red-600 font-medium' : 'text-gray-700'}`}>
+                            {r.expires_on} {left !== null && `• ${left}d`}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          r.status === 'approved' ? 'bg-green-100 text-green-700'
+                            : r.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                        }`}>{r.status || 'pending'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <a
+                          href={supabase.storage.from('licensing').getPublicUrl(r.file_path).data.publicUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 rounded hover:bg-gray-200 text-xs"
+                        >
+                          <Download className="w-3.5 h-3.5" /> View
+                        </a>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      <div className="text-xs text-gray-500 flex items-center gap-1">
+        <Bell className="w-3.5 h-3.5" /> We’ll alert you 30/14/7 days before expiry.
+      </div>
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   Supervision – simple share/feed
+   Tables: supervision_threads(id, therapist_id, case_id, title, status)
+           supervision_comments(thread_id, author_id, content, created_at)
+────────────────────────────────────────────────────────────────────────────── */
+const SupervisionPanel: React.FC = () => {
+  const { profile } = useAuth()
+  const [threads, setThreads] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [title, setTitle] = useState('')
+  const [caseId, setCaseId] = useState('')
+  const [creating, setCreating] = useState(false)
+
+  const load = useCallback(async () => {
+    if (!profile?.id) return
+    try {
+      setLoading(true)
+      const { data } = await supabase
+        .from('supervision_threads')
+        .select('id,title,status,created_at,case_id')
+        .eq('therapist_id', profile.id)
+        .order('created_at', { ascending: false })
+      setThreads(data || [])
+    } finally {
+      setLoading(false)
+    }
+  }, [profile?.id])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const create = async () => {
+    if (!title.trim()) return
+    try {
+      setCreating(true)
+      await supabase.from('supervision_threads').insert({
+        therapist_id: profile?.id,
+        title: title.trim(),
+        case_id: caseId || null,
+        status: 'open'
+      })
+      setTitle('')
+      setCaseId('')
+      await load()
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-4">
+      <div className="flex items-center gap-2">
+        <Headphones className="w-6 h-6 text-blue-600" />
+        <h2 className="text-2xl font-bold text-gray-900">Supervision</h2>
+      </div>
+
+      <div className="bg-white border rounded-lg shadow-sm p-4">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Thread title"
+            className="md:col-span-3 px-3 py-2 border rounded text-sm"
+          />
+          <input
+            value={caseId}
+            onChange={(e) => setCaseId(e.target.value)}
+            placeholder="Case ID (optional)"
+            className="md:col-span-2 px-3 py-2 border rounded text-sm"
+          />
+          <button
+            onClick={create}
+            disabled={creating}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            Start Thread
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="py-10 grid place-items-center">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          </div>
+        ) : threads.length === 0 ? (
+          <div className="py-10 text-center">
+            <Headphones className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+            <div className="text-gray-900 font-medium">No supervision threads</div>
+            <div className="text-sm text-gray-600">Create a thread to request feedback.</div>
+          </div>
+        ) : (
+          <ul className="divide-y">
+            {threads.map(t => (
+              <li key={t.id} className="p-4 hover:bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-gray-900">{t.title}</div>
+                    <div className="text-xs text-gray-500">
+                      Case: {t.case_id || '—'} • {new Date(t.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <span className={`px-2 py-1 text-xs rounded-full ${
+                    t.status === 'resolved' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                  }`}>{t.status}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   VIP Opportunities – announcements
+   Table: vip_offers(id,title,body,expires_on,cta_label,cta_url)
+────────────────────────────────────────────────────────────────────────────── */
+const VIPOpportunities: React.FC = () => {
+  const [offers, setOffers] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    ;(async () => {
+      const { data } = await supabase
+        .from('vip_offers')
+        .select('*')
+        .gte('expires_on', new Date().toISOString().slice(0, 10))
+        .order('expires_on', { ascending: true })
+      setOffers(data || [])
+      setLoading(false)
+    })()
+  }, [])
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      <div className="flex items-center gap-2 mb-4">
+        <Star className="w-6 h-6 text-blue-600" />
+        <h2 className="text-2xl font-bold text-gray-900">VIP Opportunities</h2>
+      </div>
+
+      <div className="bg-white border rounded-lg shadow-sm">
+        {loading ? (
+          <div className="py-12 grid place-items-center">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          </div>
+        ) : offers.length === 0 ? (
+          <div className="py-12 text-center">
+            <Star className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+            <div className="text-gray-900 font-medium">No active offers</div>
+            <div className="text-sm text-gray-600">New opportunities will appear here.</div>
+          </div>
+        ) : (
+          <ul className="divide-y">
+            {offers.map(o => (
+              <li key={o.id} className="p-4 hover:bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 truncate">{o.title}</div>
+                    <div className="text-sm text-gray-700 mt-1">{o.body}</div>
+                    <div className="text-xs text-gray-500 mt-1">Expires: {o.expires_on}</div>
+                  </div>
+                  {o.cta_url && (
+                    <a
+                      className="ml-3 shrink-0 px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                      href={o.cta_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {o.cta_label || 'Learn more'}
+                    </a>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   Membership – billing snapshot
+   Tables: subscriptions(therapist_id,status,renewal_on), invoices(id,therapist_id,amount_cents,status,created_at,invoice_url)
+────────────────────────────────────────────────────────────────────────────── */
+const MembershipPanel: React.FC = () => {
+  const { profile } = useAuth()
+  const [sub, setSub] = useState<any | null>(null)
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    ;(async () => {
+      if (!profile?.id) return
+      setLoading(true)
+      const [{ data: s }, { data: inv }] = await Promise.all([
+        supabase.from('subscriptions').select('*').eq('therapist_id', profile.id).maybeSingle(),
+        supabase.from('invoices').select('*').eq('therapist_id', profile.id).order('created_at', { ascending: false }).limit(10),
+      ])
+      setSub(s || null)
+      setInvoices(inv || [])
+      setLoading(false)
+    })()
+  }, [profile?.id])
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-4">
+      <div className="flex items-center gap-2">
+        <CreditCard className="w-6 h-6 text-blue-600" />
+        <h2 className="text-2xl font-bold text-gray-900">Membership</h2>
+      </div>
+
+      <div className="bg-white border rounded-lg shadow-sm p-4">
+        {loading ? (
+          <div className="py-8 grid place-items-center">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          </div>
+        ) : !sub ? (
+          <div className="text-sm text-gray-700">
+            No active subscription. Please contact admin to activate your membership.
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="text-sm">
+              <div><span className="text-gray-600">Status:</span> <span className="font-medium">{sub.status}</span></div>
+              <div><span className="text-gray-600">Renews on:</span> <span className="font-medium">{sub.renewal_on || '—'}</span></div>
+            </div>
+            <div className="text-xs text-gray-500">For upgrades/renewal changes, contact support.</div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-200">
+          <div className="font-semibold text-sm text-gray-900">Invoices</div>
+        </div>
+        {loading ? (
+          <div className="py-8 grid place-items-center">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          </div>
+        ) : invoices.length === 0 ? (
+          <div className="py-10 text-center text-sm text-gray-600">No invoices yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
+                <tr>
+                  <th className="text-left px-4 py-3">Date</th>
+                  <th className="text-left px-4 py-3">Amount</th>
+                  <th className="text-left px-4 py-3">Status</th>
+                  <th className="text-right px-4 py-3">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y text-sm">
+                {invoices.map(inv => (
+                  <tr key={inv.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">{new Date(inv.created_at).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">${(inv.amount_cents / 100).toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        inv.status === 'paid' ? 'bg-green-100 text-green-700'
+                          : inv.status === 'void' ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>{inv.status}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {inv.invoice_url ? (
+                        <a
+                          href={inv.invoice_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                        >
+                          View
+                        </a>
+                      ) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   Contact Administrator – support tickets
+   Table: support_tickets(id,therapist_id,subject,body,priority,status,created_at)
+────────────────────────────────────────────────────────────────────────────── */
+const ContactAdminPanel: React.FC = () => {
+  const { profile } = useAuth()
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+  const [priority, setPriority] = useState<'low' | 'normal' | 'high'>('normal')
+  const [sending, setSending] = useState(false)
+
+  const submit = async () => {
+    if (!subject.trim() || !body.trim() || !profile?.id) return
+    try {
+      setSending(true)
+      const { error } = await supabase.from('support_tickets').insert({
+        therapist_id: profile.id,
+        subject: subject.trim(),
+        body: body.trim(),
+        priority,
+        status: 'new'
+      })
+      if (error) throw error
+      setSubject(''); setBody(''); setPriority('normal')
+      alert('Ticket submitted. We will get back to you soon.')
+    } catch (e: any) {
+      alert(e?.message || 'Failed to submit ticket.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto space-y-4">
+      <div className="flex items-center gap-2">
+        <Shield className="w-6 h-6 text-blue-600" />
+        <h2 className="text-2xl font-bold text-gray-900">Contact Administrator</h2>
+      </div>
+
+      <div className="bg-white border rounded-lg shadow-sm p-4 space-y-3">
+        <input
+          value={subject} onChange={(e) => setSubject(e.target.value)}
+          placeholder="Subject"
+          className="w-full px-3 py-2 border rounded text-sm"
+        />
+        <select
+          value={priority} onChange={(e) => setPriority(e.target.value as any)}
+          className="px-3 py-2 border rounded text-sm"
+        >
+          <option value="low">Low priority</option>
+          <option value="normal">Normal</option>
+          <option value="high">High / urgent</option>
+        </select>
+        <textarea
+          rows={8}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Describe your issue or request…"
+          className="w-full px-3 py-2 border rounded text-sm"
+        />
+        <div className="flex justify-end">
+          <button
+            onClick={submit}
+            disabled={sending}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {sending ? 'Sending…' : 'Submit Ticket'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   Types for main page
+────────────────────────────────────────────────────────────────────────────── */
 interface DashboardStats {
   totalClients: number
   activeCases: number
@@ -595,19 +1461,25 @@ interface ActivityItem {
 }
 type SectionId =
   | 'overview'
+  | 'clienteles'
   | 'clients'
   | 'cases'
   | 'sessions'
+  | 'sessionBoard'
   | 'leads'
   | 'metrics'
   | 'clinic'
   | 'resources'
+  | 'licensing'
   | 'supervision'
+  | 'vip'
+  | 'profile'
+  | 'membership'
   | 'admin'
 
-/* -----------------------------------------------------------------------------
-   MAIN COMPONENT
------------------------------------------------------------------------------ */
+/* ──────────────────────────────────────────────────────────────────────────────
+   Main Component
+────────────────────────────────────────────────────────────────────────────── */
 export default function TherapistDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -637,27 +1509,38 @@ export default function TherapistDashboard() {
       items: [{ id: 'overview', name: 'Overview', icon: Target, color: 'blue' }]
     },
     {
-      title: 'Client Care',
+      title: 'Client Access',
       items: [
+        { id: 'clienteles', name: 'Clienteles', icon: Users, color: 'green' },
         { id: 'clients', name: 'Client Management', icon: Users, color: 'green' },
         { id: 'cases', name: 'Case Management', icon: FileText, color: 'green' },
-        { id: 'resources', name: 'Resource Library', icon: Library, color: 'green' }
+        { id: 'resources', name: 'Resource Library', icon: Library, color: 'green' },
       ]
     },
     {
       title: 'Practice Management',
       items: [
         { id: 'sessions', name: 'Session Management', icon: Calendar, color: 'purple' },
+        { id: 'sessionBoard', name: 'Session Board', icon: ClipboardList, color: 'purple' },
         { id: 'leads', name: 'Client Leads', icon: Users, color: 'purple' },
         { id: 'metrics', name: 'Progress Metrics', icon: BarChart3, color: 'purple' },
-        { id: 'clinic', name: 'Clinic Rentals', icon: Building2, color: 'purple' }
+        { id: 'clinic', name: 'Clinic Rentals', icon: Building2, color: 'purple' },
       ]
     },
     {
-      title: 'Support',
+      title: 'Profession Management',
       items: [
+        { id: 'licensing', name: 'Licensing & Compliance', icon: ShieldCheck, color: 'amber' },
         { id: 'supervision', name: 'Supervision', icon: Headphones, color: 'amber' },
-        { id: 'admin', name: 'Contact Administrator', icon: Shield, color: 'amber' }
+        { id: 'vip', name: 'VIP Opportunities', icon: Star, color: 'amber' },
+      ]
+    },
+    {
+      title: 'Account',
+      items: [
+        { id: 'profile', name: 'Therapist Profile', icon: User, color: 'blue' },
+        { id: 'membership', name: 'Membership', icon: CreditCard, color: 'blue' },
+        { id: 'admin', name: 'Contact Administrator', icon: Shield, color: 'blue' },
       ]
     }
   ] as const
@@ -725,15 +1608,15 @@ export default function TherapistDashboard() {
         })) || []
       )
 
-      // placeholders
+      // Placeholder insights/activities
       setCaseInsights([
-        { client_name: 'John Smith',  insight: 'Showing consistent improvement in anxiety scores', recommendation: 'Consider reducing session frequency to bi-weekly', priority: 'medium' },
-        { client_name: 'Emily Davis', insight: 'Missed last two assignments', recommendation: 'Schedule check-in call to assess barriers', priority: 'high' }
+        { client_name: 'John Smith',  insight: 'Consistent improvement in anxiety scores', recommendation: 'Consider bi-weekly sessions', priority: 'medium' },
+        { client_name: 'Emily Davis', insight: 'Missed two assignments', recommendation: 'Schedule check-in for barriers', priority: 'high' }
       ])
       setRecentActivities([
-        { id: '1', type: 'client',      title: 'John completed PHQ-9 assessment', description: 'Score improved from 15 to 12', time: '2 hours ago', icon: 'CheckCircle' },
-        { id: '2', type: 'supervision', title: 'New supervision session available', description: 'Dr. Wilson scheduled group supervision', time: '1 day ago', icon: 'Headphones' },
-        { id: '3', type: 'admin',       title: 'Platform update',                   description: 'New features added to assessment tools', time: '2 days ago', icon: 'Bell' }
+        { id: '1', type: 'client',      title: 'John completed PHQ-9', description: 'Score improved 15 → 12', time: '2h ago', icon: 'CheckCircle' },
+        { id: '2', type: 'supervision', title: 'New supervision slot', description: 'Dr. Wilson opens group session', time: '1d ago', icon: 'Headphones' },
+        { id: '3', type: 'admin',       title: 'Platform update',      description: 'New assessment tools', time: '2d ago', icon: 'Bell' }
       ])
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
@@ -811,17 +1694,9 @@ export default function TherapistDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Clients</p>
-              <p className="text-3xl font-bold text-blue-600">{stats.totalClients}</p>
-            </div>
-            <div className="p-3 bg-blue-100 rounded-full"><Users className="h-6 w-6 text-blue-600" /></div>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Active Cases</p>
@@ -830,17 +1705,36 @@ export default function TherapistDashboard() {
             <div className="p-3 bg-green-100 rounded-full"><FileText className="h-6 w-6 text-green-600" /></div>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Patients Today</p>
+              <p className="text-sm font-medium text-gray-600">Upcoming Sessions</p>
               <p className="text-3xl font-bold text-purple-600">{stats.patientsToday}</p>
             </div>
             <div className="p-3 bg-purple-100 rounded-full"><CalendarDays className="h-6 w-6 text-purple-600" /></div>
           </div>
         </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Clients</p>
+              <p className="text-3xl font-bold text-blue-600">{stats.totalClients}</p>
+            </div>
+            <div className="p-3 bg-blue-100 rounded-full"><Users className="h-6 w-6 text-blue-600" /></div>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Profile</p>
+              <p className="text-3xl font-bold text-indigo-600">{stats.profileCompletion}%</p>
+            </div>
+            <div className="p-3 bg-indigo-100 rounded-full"><ShieldCheck className="h-6 w-6 text-indigo-600" /></div>
+          </div>
+        </div>
       </div>
 
+      {/* Today schedule */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Today's Schedule</h3>
@@ -872,11 +1766,13 @@ export default function TherapistDashboard() {
         )}
       </div>
 
+      {/* Insights + Activities */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center space-x-3 mb-6">
           <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg">
             <Brain className="w-5 h-5 text-white" />
           </div>
+          <h3 className="text-lg font-semibold text-gray-900">Case Insights</h3>
         </div>
         <div className="space-y-4">
           {caseInsights.map((insight, index) => (
@@ -897,68 +1793,21 @@ export default function TherapistDashboard() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-6">Recent Activities</h3>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div>
-            <h4 className="font-medium text-green-900 mb-3 flex items-center">
-              <Users className="w-4 h-4 mr-2 text-green-600" />Client Activities
-            </h4>
-            <div className="space-y-3">
-              {recentActivities.filter(a => a.type === 'client').map(a => (
-                <div key={a.id} className="p-3 bg-green-50 rounded-lg">
-                  <p className="text-sm font-medium text-green-900">{a.title}</p>
-                  <p className="text-xs text-green-700">{a.description}</p>
-                  <p className="text-xs text-green-600 mt-1">{a.time}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h4 className="font-medium text-amber-900 mb-3 flex items-center">
-              <Headphones className="w-4 h-4 mr-2 text-amber-600" />Supervision Updates
-            </h4>
-            <div className="space-y-3">
-              {recentActivities.filter(a => a.type === 'supervision').map(a => (
-                <div key={a.id} className="p-3 bg-amber-50 rounded-lg">
-                  <p className="text-sm font-medium text-amber-900">{a.title}</p>
-                  <p className="text-xs text-amber-700">{a.description}</p>
-                  <p className="text-xs text-amber-600 mt-1">{a.time}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h4 className="font-medium text-blue-900 mb-3 flex items-center">
-              <Shield className="w-4 h-4 mr-2 text-blue-600" />Admin Updates
-            </h4>
-            <div className="space-y-3">
-              {recentActivities.filter(a => a.type === 'admin').map(a => (
-                <div key={a.id} className="p-3 bg-blue-50 rounded-lg">
-                  <p className="text-sm font-medium text-blue-900">{a.title}</p>
-                  <p className="text-xs text-blue-700">{a.description}</p>
-                  <p className="text-xs text-blue-600 mt-1">{a.time}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
+      {/* Quick Actions */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-6">Quick Actions</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <button onClick={() => goto('clients')} className="p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors group">
+          <button onClick={() => goto('clienteles')} className="p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors group">
             <Users className="w-8 h-8 text-green-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-green-900">Add Client</p>
+            <p className="text-sm font-medium text-green-900">Find Client</p>
           </button>
           <button onClick={() => goto('sessions')} className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors group">
             <Calendar className="w-8 h-8 text-purple-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-purple-900">Schedule Session</p>
           </button>
-          <button onClick={() => goto('leads')} className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group">
+          <button onClick={() => goto('resources')} className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group">
             <Library className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-blue-900">Assign Assessment</p>
+            <p className="text-sm font-medium text-blue-900">Resource Library</p>
           </button>
           <button onClick={() => goto('cases')} className="p-4 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors group">
             <FileText className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
@@ -1171,26 +2020,34 @@ export default function TherapistDashboard() {
             <Suspense
               fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>}
             >
-              {active === 'overview'   && <Overview />}
-              {active === 'clients'    && <ClientManagement />}
-              {active === 'cases'      && <CaseManagement />}
-              {active === 'sessions'   && <SessionManagement />}
-              {active === 'leads'      && <CommunicationTools />}
-              {active === 'metrics'    && <ProgressMetrics />}
-              {active === 'clinic'     && <ClinicRental />}
-              {active === 'resources'  && <ResourceLibrary />}
+              {active === 'overview'      && <Overview />}
+              {active === 'clienteles'    && <Clienteles />}
+              {active === 'clients'       && <ClientManagement />}
+              {active === 'cases'         && <CaseManagement />}
+              {active === 'sessions'      && <SessionManagement />}
+              {active === 'sessionBoard'  && <SessionBoard />}
+              {active === 'leads'         && <CommunicationTools />}
+              {active === 'metrics'       && <ProgressMetrics />}
+              {active === 'clinic'        && <ClinicRental />}
+              {active === 'resources'     && <ResourceLibrary />}
+              {active === 'licensing'     && <LicensingCompliance />}
+              {active === 'supervision'   && <SupervisionPanel />}
+              {active === 'vip'           && <VIPOpportunities />}
 
-              {(active === 'supervision' || active === 'admin') && (
+              {active === 'profile' && (
                 <div className="p-6">
-                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
-                    {(active === 'supervision') ? <Headphones className="mx-auto h-10 w-10 text-gray-300 mb-2" /> : <Shield className="mx-auto h-10 w-10 text-gray-300 mb-2" />}
-                    <h3 className="text-gray-900 font-medium">
-                      {active === 'supervision' ? 'Supervision' : 'Contact Administrator'}
-                    </h3>
-                    <p className="text-sm text-gray-600 mt-1">This section will be available soon.</p>
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8">
+                    <SimpleTherapistProfile
+                      profile={profile}
+                      onEdit={() => setShowOnboardingModal(true)}
+                    />
                   </div>
                 </div>
               )}
+
+              {active === 'membership' && <MembershipPanel />}
+
+              {active === 'admin' && <ContactAdminPanel />}
             </Suspense>
           </main>
         </div>
@@ -1231,7 +2088,9 @@ export default function TherapistDashboard() {
   )
 }
 
-// Simple Modern Profile Component
+/* ──────────────────────────────────────────────────────────────────────────────
+   Simple Profile Card
+────────────────────────────────────────────────────────────────────────────── */
 const SimpleTherapistProfile: React.FC<{ profile: any; onEdit: () => void }> = ({ profile, onEdit }) => {
   const professionalDetails = profile?.professional_details || {}
   return (
