@@ -1,0 +1,4 @@
+-- Create storage buckets for documents and public resources
+-- Run once; ignore "already exists" errors if re-run.
+select storage.create_bucket('documents',  jsonb_build_object('public', false));
+select storage.create_bucket('public-resources', jsonb_build_object('public', true));
