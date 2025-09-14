@@ -29,15 +29,15 @@ const ResourceLibrary = React.lazy(() =>
 )
 
 // NEW split components (assuming these exist in your repo; otherwise create later)
-const Clienteles = React.lazy(() => import('../components/therapist/Clienteles').then(m => ({ default: m.Clienteles })))
-const SessionBoard = React.lazy(() => import('../components/therapist/SessionBoard').then(m => ({ default: m.SessionBoard })))
-const ClinicRentalPanel = React.lazy(() => import('../components/therapist/ClinicRentalPanel').then(m => ({ default: m.ClinicRentalPanel })))
-const LicensingCompliance = React.lazy(() => import('../components/therapist/LicensingCompliance').then(m => ({ default: m.LicensingCompliance })))
-const SupervisionPanel = React.lazy(() => import('../components/therapist/SupervisionPanel').then(m => ({ default: m.SupervisionPanel })))
-const VIPOpportunities = React.lazy(() => import('../components/therapist/VIPOpportunities').then(m => ({ default: m.VIPOpportunities })))
-const MembershipPanel = React.lazy(() => import('../components/therapist/MembershipPanel').then(m => ({ default: m.MembershipPanel })))
-const ProgressMetrics = React.lazy(() => import('../components/therapist/ProgressMetrics').then(m => ({ default: m.ProgressMetrics })))
-const SimpleTherapistProfile = React.lazy(() => import('../components/therapist/SimpleTherapistProfile').then(m => ({ default: m.SimpleTherapistProfile })))
+const Clienteles = React.lazy(() => import('../../components/therapist/Clienteles').then(m => ({ default: m.Clienteles })))
+const SessionBoard = React.lazy(() => import('../../components/therapist/SessionBoard').then(m => ({ default: m.SessionBoard })))
+const ClinicRentalPanel = React.lazy(() => import('../../components/therapist/ClinicRentalPanel').then(m => ({ default: m.ClinicRentalPanel })))
+const LicensingCompliance = React.lazy(() => import('../../components/therapist/LicensingCompliance').then(m => ({ default: m.LicensingCompliance })))
+const SupervisionPanel = React.lazy(() => import('../../components/therapist/SupervisionPanel').then(m => ({ default: m.SupervisionPanel })))
+const VIPOpportunities = React.lazy(() => import('../../components/therapist/VIPOpportunities').then(m => ({ default: m.VIPOpportunities })))
+const MembershipPanel = React.lazy(() => import('../../components/therapist/MembershipPanel').then(m => ({ default: m.MembershipPanel })))
+const ProgressMetrics = React.lazy(() => import('../../components/therapist/ProgressMetrics').then(m => ({ default: m.ProgressMetrics })))
+const SimpleTherapistProfile = React.lazy(() => import('../../components/therapist/SimpleTherapistProfile').then(m => ({ default: m.SimpleTherapistProfile })))
 
 interface DashboardStats {
   totalClients: number
