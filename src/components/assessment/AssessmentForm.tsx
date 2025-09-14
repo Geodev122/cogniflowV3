@@ -1,5 +1,6 @@
+// src/components/assessment/AssessmentForm.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { AssessmentInstance, AssessmentFormProps } from '../../types/assessment'
+import { AssessmentFormProps } from '../../types/assessment'
 import { AssessmentRenderer } from './AssessmentRenderer'
 import { AssessmentScoringEngine } from '../../lib/assessmentEngine'
 import { supabase } from '../../lib/supabase'
@@ -50,51 +51,62 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
     subscaleScores?: Record<string, number>
   } | null>(null)
 
-  const template = instance.template // convenience alias
+  const template = instance.template
   const debouncedTimer = useRef<number | null>(null)
 
   /* ────────────────────────────────────────────────────────────────────────────
-     Load any existing responses + any saved result (if already completed)
+     Load existing responses + saved result (if completed)
   ─────────────────────────────────────────────────────────────────────────────*/
   useEffect(() => {
     const load = async () => {
-      // Load responses
-      const { data, error } = await supabase
-        .from('assessment_responses')
-        .select('question_id, response_value')
-        .eq('instance_id', instance.id)
+      try {
+        // Responses
+        const { data, error } = await supabase
+          .from('assessment_responses')
+          .select('question_id, response_value')
+          .eq('instance_id', instance.id)
 
-      if (!error && data) {
+        if (error) throw error
+
         const map: Record<string, any> = {}
-        for (const r of data) map[r.question_id] = r.response_value
+        for (const r of data || []) map[r.question_id] = r.response_value
         setResponses(map)
-      } else if (error) {
-        console.error('[AssessmentForm] load responses error:', error)
+      } catch (err) {
+        console.error('[AssessmentForm] load responses error:', err)
       }
 
-      // If completed, fetch stored results to display (avoid client recompute discrepancies)
+      // Existing results (if completed)
       if (instance.status === 'completed') {
-        const { data: resRows, error: resErr } = await supabase
-          .from('assessment_results')
-          .select('id, instance_id, total_score, max_score, interpretation, alerts, narrative_report, subscale_scores, created_at')
-          .eq('instance_id', instance.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .returns<DbResultRow[]>()
+        try {
+          const { data: resRows, error: resErr } = await supabase
+            .from('assessment_results')
+            .select(
+              'id, instance_id, total_score, max_score, interpretation, alerts, narrative_report, subscale_scores, created_at'
+            )
+            .eq('instance_id', instance.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .returns<DbResultRow[]>()
 
-        if (!resErr && resRows && resRows.length) {
-          const r = resRows[0]
-          setCalculatedScore({
-            score: Number(r.total_score ?? 0),
-            maxScore: Number(r.max_score ?? (template?.scoring_config?.max_score ?? 0)),
-            interpretation: r.interpretation,
-            alerts: Array.isArray(r.alerts) ? r.alerts : [],
-            narrativeReport: r.narrative_report || '',
-            subscaleScores: r.subscale_scores || undefined,
-          })
+          if (resErr) throw resErr
+
+          if (resRows && resRows.length) {
+            const r = resRows[0]
+            setCalculatedScore({
+              score: Number(r.total_score ?? 0),
+              maxScore: Number(r.max_score ?? (template?.scoring_config?.max_score ?? 0)),
+              interpretation: r.interpretation,
+              alerts: Array.isArray(r.alerts) ? r.alerts : [],
+              narrativeReport: r.narrative_report || '',
+              subscaleScores: r.subscale_scores || undefined,
+            })
+          }
+        } catch (err) {
+          console.error('[AssessmentForm] load results error:', err)
         }
       }
     }
+
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instance.id])
@@ -104,27 +116,30 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
   ─────────────────────────────────────────────────────────────────────────────*/
   const totalQuestions = template?.questions?.length ?? 0
   const answeredQuestions = useMemo(
-    () => Object.keys(responses).filter(k => responses[k] !== undefined && responses[k] !== null).length,
+    () =>
+      Object.keys(responses).filter(
+        (k) => responses[k] !== undefined && responses[k] !== null && responses[k] !== ''
+      ).length,
     [responses]
   )
   const progressPct = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0
+
+  // Only required questions must be answered to complete
   const isFormComplete =
-    !!template?.questions?.every(q => responses[q.id] !== undefined && responses[q.id] !== null)
+    !!template?.questions
+      ?.filter((q: any) => q.required !== false)
+      .every((q: any) => responses[q.id] !== undefined && responses[q.id] !== null && responses[q.id] !== '')
 
   /* ────────────────────────────────────────────────────────────────────────────
-     Helpers: debounced progress update on instance
+     Debounced progress update on instance
   ─────────────────────────────────────────────────────────────────────────────*/
   useEffect(() => {
     if (!showProgress) return
     if (debouncedTimer.current) window.clearTimeout(debouncedTimer.current)
     debouncedTimer.current = window.setTimeout(async () => {
       try {
-        await supabase
-          .from('assessment_instances')
-          .update({ progress: progressPct })
-          .eq('id', instance.id)
+        await supabase.from('assessment_instances').update({ progress: progressPct }).eq('id', instance.id)
       } catch (e) {
-        // best-effort
         console.warn('[AssessmentForm] progress update failed:', e)
       }
     }, 400)
@@ -151,7 +166,6 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
       })
       if (upErr) throw upErr
 
-      // Move to in_progress (idempotent)
       if (instance.status === 'assigned') {
         await supabase
           .from('assessment_instances')
@@ -192,7 +206,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
   }
 
   /* ────────────────────────────────────────────────────────────────────────────
-     Complete flow: validate → finalize responses → compute → persist result
+     Complete flow: validate → finalize → compute → persist → read back
   ─────────────────────────────────────────────────────────────────────────────*/
   const handleComplete = async () => {
     if (!template) return
@@ -221,7 +235,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
         if (respErr) throw respErr
       }
 
-      // Update instance → completed
+      // Update instance
       {
         const { error: instErr } = await supabase
           .from('assessment_instances')
@@ -234,43 +248,55 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
         if (instErr) throw instErr
       }
 
-      // Compute result snapshot
+      // Compute result
       const score = engine.calculateRawScore()
       const maxScore =
         template?.scoring_config?.max_score != null
           ? Number(template.scoring_config.max_score)
-          : Number(score) // fallback
+          : Number(score)
       const interpretation = engine.getInterpretation(score)
       const alerts = engine.checkClinicalAlerts(score)
       const narrativeReport = engine.generateNarrativeReport(score, interpretation)
-      const subscaleScores =
-        typeof engine.calculateSubscales === 'function'
-          ? engine.calculateSubscales()
-          : undefined
+      const subscaleScores = engine.calculateSubscaleScores?.() ?? undefined
 
-      // Persist a canonical result record (assessment_results)
+      // Persist canonical result (idempotent upsert on unique(instance_id))
       {
-        const { error: resErr } = await supabase.from('assessment_results').insert({
-          instance_id: instance.id,
-          total_score: Number(score),
-          max_score: Number(maxScore),
-          interpretation,
-          alerts,
-          narrative_report: narrativeReport,
-          subscale_scores: subscaleScores ?? null,
-          created_at: new Date().toISOString(),
-        })
+        const { error: resErr } = await supabase.from('assessment_results').upsert(
+          {
+            instance_id: instance.id,
+            total_score: Number(score),
+            max_score: Number(maxScore),
+            interpretation,
+            alerts,
+            narrative_report: narrativeReport,
+            subscale_scores: subscaleScores ?? null,
+          },
+          { onConflict: 'instance_id' }
+        )
         if (resErr) throw resErr
       }
 
-      // Show results immediately in UI
+      // Read back the saved snapshot we’ll display
+      const { data: resRows, error: readErr } = await supabase
+        .from('assessment_results')
+        .select(
+          'id, instance_id, total_score, max_score, interpretation, alerts, narrative_report, subscale_scores, created_at'
+        )
+        .eq('instance_id', instance.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .returns<DbResultRow[]>()
+
+      if (readErr) throw readErr
+
+      const saved = resRows?.[0]
       setCalculatedScore({
-        score: Number(score),
-        maxScore: Number(maxScore),
-        interpretation,
-        alerts,
-        narrativeReport,
-        subscaleScores: subscaleScores ?? undefined,
+        score: saved ? Number(saved.total_score ?? score) : Number(score),
+        maxScore: saved ? Number(saved.max_score ?? maxScore) : Number(maxScore),
+        interpretation: saved?.interpretation ?? interpretation,
+        alerts: (saved?.alerts as any[]) ?? alerts,
+        narrativeReport: saved?.narrative_report ?? narrativeReport,
+        subscaleScores: (saved?.subscale_scores as Record<string, number> | null) || undefined,
       })
       setShowResults(true)
 
@@ -369,9 +395,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
                       {alert.message}
                     </p>
                     {alert.action_required && (
-                      <p className="text-sm mt-1 text-gray-600">
-                        Action required by therapist
-                      </p>
+                      <p className="text-sm mt-1 text-gray-600">Action required by therapist</p>
                     )}
                   </div>
                 </div>
@@ -393,15 +417,11 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
             </div>
             <div>
               <span className="font-medium text-gray-700">Description: </span>
-              <span className="text-gray-900">
-                {calculatedScore.interpretation?.description}
-              </span>
+              <span className="text-gray-900">{calculatedScore.interpretation?.description}</span>
             </div>
             <div>
               <span className="font-medium text-gray-700">Recommendations: </span>
-              <span className="text-gray-900">
-                {calculatedScore.interpretation?.recommendations}
-              </span>
+              <span className="text-gray-900">{calculatedScore.interpretation?.recommendations}</span>
             </div>
           </div>
         </div>
@@ -446,11 +466,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
             }`}
           >
             <div className="flex items-center space-x-1">
-              {instance.status === 'completed' ? (
-                <CheckCircle className="w-4 h-4" />
-              ) : (
-                <Clock className="w-4 h-4" />
-              )}
+              {instance.status === 'completed' ? <CheckCircle className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
               <span className="capitalize">{instance.status.replace('_', ' ')}</span>
             </div>
           </div>
@@ -469,9 +485,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
           <div className="flex items-start space-x-2">
             <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
             <div>
-              <h4 className="font-medium text-red-900">
-                Please complete all required questions
-              </h4>
+              <h4 className="font-medium text-red-900">Please complete all required questions</h4>
               <ul className="text-sm text-red-800 mt-1 list-disc list-inside">
                 {validationErrors.map((questionId) => {
                   const question = template?.questions.find((q: any) => q.id === questionId)
@@ -496,9 +510,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
       {/* Actions */}
       {!readonly && instance.status !== 'completed' && (
         <div className="flex justify-between items-center bg-white border border-gray-200 rounded-lg p-4">
-          <div className="text-sm text-gray-600">
-            Progress: {progressPct}% complete
-          </div>
+          <div className="text-sm text-gray-600">Progress: {progressPct}% complete</div>
           <div className="flex space-x-3">
             <button
               onClick={handleSave}
