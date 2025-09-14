@@ -1,14 +1,14 @@
 // src/pages/TherapistDashboard.tsx
 import React, { useState, useEffect, useCallback, Suspense } from 'react'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { isRecursionError } from '../utils/helpers'
 import {
   Users, FileText, Calendar, Library, CheckCircle, AlertTriangle, Menu, X, Target, ChevronLeft,
-  User, CalendarDays, Brain, Shield, Headphones, Plus, Eye, Phone, LogOut, BarChart3, Building2,
-  ShieldCheck, Star, Bell, ClipboardList
+  User, CalendarDays, Brain, Shield, Headphones, Plus, Eye, LogOut, BarChart3, Building2,
+  ShieldCheck, Star, Bell, ClipboardList, Activity, ChevronRight
 } from 'lucide-react'
-import { Navigate } from 'react-router-dom'
 import { TherapistOnboarding } from '../components/therapist/TherapistOnboarding'
 
 // Lazy-load EXISTING repo modules (names must match actual exports)
@@ -28,7 +28,7 @@ const ResourceLibrary = React.lazy(() =>
   import('../components/therapist/ResourceLibrary').then(m => ({ default: (m as any).default ?? m }))
 )
 
-// NEW split components (created below)
+// NEW split components (assuming these exist in your repo; otherwise create later)
 const Clienteles = React.lazy(() => import('../components/therapist/Clienteles').then(m => ({ default: m.Clienteles })))
 const SessionBoard = React.lazy(() => import('../components/therapist/SessionBoard').then(m => ({ default: m.SessionBoard })))
 const ClinicRentalPanel = React.lazy(() => import('../components/therapist/ClinicRentalPanel').then(m => ({ default: m.ClinicRentalPanel })))
@@ -44,37 +44,67 @@ interface DashboardStats {
   activeCases: number
   patientsToday: number
   profileCompletion: number
+  assessmentsInProgress: number
 }
+
 interface OnboardingStep { id: string; title: string; completed: boolean }
 interface TodaySession { id: string; client_name: string; time: string; type: string; notes?: string }
+
+type InsightPriority = 'high' | 'medium' | 'low'
 interface CaseInsight {
-  client_name: string; insight: string; recommendation: string; priority: 'high' | 'medium' | 'low'
+  client_name: string
+  insight: string
+  recommendation: string
+  priority: InsightPriority
 }
+
 interface ActivityItem {
-  id: string; type: 'client' | 'supervision' | 'admin'; title: string; description: string; time: string; icon: string
+  id: string
+  type: 'client' | 'supervision' | 'admin'
+  title: string
+  description: string
+  time: string
+  icon: string
 }
+
+interface RecentAssessmentItem {
+  id: string
+  title: string
+  status: 'assigned' | 'in_progress' | 'completed' | 'expired' | 'cancelled'
+  clientName: string
+  abbrev?: string
+  assigned_at?: string
+  completed_at?: string
+}
+
 type SectionId =
   | 'overview' | 'clienteles' | 'clients' | 'cases' | 'sessions' | 'sessionBoard'
   | 'leads' | 'metrics' | 'clinic' | 'resources' | 'licensing'
   | 'supervision' | 'vip' | 'profile' | 'membership' | 'admin'
 
 export default function TherapistDashboard() {
+  const navigate = useNavigate()
+  const { profile, signOut } = useAuth()
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showOnboardingModal, setShowOnboardingModal] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
-  const [stats, setStats] = useState<DashboardStats>({ totalClients: 0, activeCases: 0, patientsToday: 0, profileCompletion: 0 })
+
+  const [stats, setStats] = useState<DashboardStats>({
+    totalClients: 0, activeCases: 0, patientsToday: 0, profileCompletion: 0, assessmentsInProgress: 0
+  })
   const [onboardingSteps, setOnboardingSteps] = useState<OnboardingStep[]>([])
   const [todaySessions, setTodaySessions] = useState<TodaySession[]>([])
   const [caseInsights, setCaseInsights] = useState<CaseInsight[]>([])
   const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([])
+  const [recentAssessments, setRecentAssessments] = useState<RecentAssessmentItem[]>([])
+
   const [loading, setLoading] = useState(true)
   const [profileLive, setProfileLive] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState<string | null>(null)
   const [active, setActive] = useState<SectionId>('overview')
-
-  const { profile, signOut } = useAuth()
 
   const navigationSections = [
     { title: null, items: [{ id: 'overview', name: 'Overview', icon: Target }] },
@@ -84,6 +114,7 @@ export default function TherapistDashboard() {
         { id: 'clienteles', name: 'Clienteles', icon: Users },
         { id: 'clients', name: 'Client Management', icon: Users },
         { id: 'cases', name: 'Case Management', icon: FileText },
+        // We keep Assessments as a ROUTE (button below), not a dashboard tab, to avoid loading the whole workspace here
         { id: 'resources', name: 'Resource Library', icon: Library },
       ]
     },
@@ -119,12 +150,16 @@ export default function TherapistDashboard() {
     if (!profile) return
     try {
       setLoading(true)
+
+      // Clients linked to therapist
       const { data: clientRelations, error: relationsError } = await supabase
         .from('therapist_client_relations')
         .select('client_id')
         .eq('therapist_id', profile.id)
+
       if (relationsError) console.warn('dashboard: client relations error:', relationsError)
 
+      // Active cases
       const { data: activeCases, error: casesError } = await supabase
         .from('cases')
         .select('id')
@@ -132,18 +167,100 @@ export default function TherapistDashboard() {
         .eq('status', 'active')
       if (casesError) console.warn('dashboard: active cases error:', casesError)
 
-      const today = new Date().toISOString().split('T')[0]
+      // Today appointments
+      const todayISO = new Date()
+      const yyyy = todayISO.getFullYear()
+      const mm = String(todayISO.getMonth() + 1).padStart(2, '0')
+      const dd = String(todayISO.getDate()).padStart(2, '0')
+      const dayStart = `${yyyy}-${mm}-${dd}T00:00:00`
+      const dayEnd = `${yyyy}-${mm}-${dd}T23:59:59`
+
       const { data: appts, error: appointmentsError } = await supabase
         .from('appointments')
         .select(`
-          id, appointment_date, appointment_type, notes,
+          id, appointment_date, appointment_type, notes, client_id,
           profiles:profiles!appointments_client_id_fkey(first_name,last_name)
         `)
         .eq('therapist_id', profile.id)
-        .gte('appointment_date', today)
-        .lt('appointment_date', `${today}T23:59:59`)
+        .gte('appointment_date', dayStart)
+        .lte('appointment_date', dayEnd)
+
       if (appointmentsError) console.warn('dashboard: today appts error:', appointmentsError)
 
+      // Assessments (last 3) + counts
+      const { data: inst, error: instErr } = await supabase
+        .from('assessment_instances')
+        .select('id, template_id, client_id, title, status, assigned_at, completed_at')
+        .eq('therapist_id', profile.id)
+        .order('assigned_at', { ascending: false })
+        .limit(12)
+
+      if (instErr) console.warn('dashboard: instances error:', instErr)
+
+      const inProgressCount = (inst || []).filter(i => i.status === 'in_progress').length
+
+      // resolve names: clients + templates (no complex joins to avoid RLS recursion)
+      const templateIds = Array.from(new Set((inst || []).map(i => i.template_id)))
+      const clientIds = Array.from(new Set((inst || []).map(i => i.client_id)))
+
+      const [{ data: tpls }, { data: clients }] = await Promise.all([
+        templateIds.length
+          ? supabase.from('assessment_templates').select('id, abbreviation, name').in('id', templateIds)
+          : Promise.resolve({ data: [] as any[] }),
+        clientIds.length
+          ? supabase.from('profiles').select('id, first_name, last_name').in('id', clientIds)
+          : Promise.resolve({ data: [] as any[] })
+      ])
+
+      const recent3: RecentAssessmentItem[] = (inst || [])
+        .slice(0, 3)
+        .map(i => {
+          const c = (clients || []).find(p => p.id === i.client_id)
+          const t = (tpls || []).find(tp => tp.id === i.template_id)
+          return {
+            id: i.id,
+            title: i.title || t?.name || 'Assessment',
+            status: i.status as RecentAssessmentItem['status'],
+            clientName: `${c?.first_name || ''} ${c?.last_name || ''}`.trim() || 'Client',
+            abbrev: t?.abbreviation,
+            assigned_at: i.assigned_at || undefined,
+            completed_at: i.completed_at || undefined
+          }
+        })
+
+      // Insights from recent results w/ alerts (critical/warning)
+      let insights: CaseInsight[] = []
+      if (inst && inst.length) {
+        const recentIds = inst.map(i => i.id)
+        const { data: results, error: resErr } = await supabase
+          .from('assessment_results')
+          .select('instance_id, alerts, interpretation')
+          .in('instance_id', recentIds)
+          .order('created_at', { ascending: false })
+          .limit(30)
+        if (resErr) console.warn('dashboard: results error:', resErr)
+
+        const byInstance = new Map<string, any>(results?.map(r => [r.instance_id, r]) || [])
+        insights = recent3
+          .map(item => {
+            const r = byInstance.get(item.id)
+            const alerts = Array.isArray(r?.alerts) ? r.alerts : []
+            const crit = alerts.find((a: any) => a?.type === 'critical')
+            const warn = alerts.find((a: any) => a?.type === 'warning')
+            if (!crit && !warn) return null
+            const picked = crit || warn
+            const priority: InsightPriority = crit ? 'high' : 'medium'
+            return {
+              client_name: item.clientName,
+              insight: picked?.message || 'Review clinical alert',
+              recommendation: 'Open assessment results for actionable steps',
+              priority
+            } as CaseInsight
+          })
+          .filter(Boolean) as CaseInsight[]
+      }
+
+      // Onboarding
       const steps: OnboardingStep[] = [
         { id: 'basic', title: 'Basic Information', completed: !!profile.whatsapp_number },
         { id: 'professional', title: 'Professional Details', completed: !!profile.professional_details },
@@ -159,7 +276,8 @@ export default function TherapistDashboard() {
         totalClients: clientRelations?.length || 0,
         activeCases: activeCases?.length || 0,
         patientsToday: appts?.length || 0,
-        profileCompletion
+        profileCompletion,
+        assessmentsInProgress: inProgressCount
       })
       setOnboardingSteps(steps)
       setProfileLive(isProfileLive)
@@ -168,23 +286,41 @@ export default function TherapistDashboard() {
         (appts || []).map(apt => ({
           id: apt.id,
           client_name: `${apt.profiles?.first_name || 'Unknown'} ${apt.profiles?.last_name || 'Client'}`,
-          time: new Date(apt.appointment_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          time: new Date(apt.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           type: apt.appointment_type,
           notes: apt.notes
         }))
       )
 
-      // Sample insights/activity placeholders
-      setCaseInsights([
-        { client_name: 'John Smith',  insight: 'Consistent improvement in anxiety scores', recommendation: 'Consider bi-weekly sessions', priority: 'medium' },
-        { client_name: 'Emily Davis', insight: 'Missed two assignments', recommendation: 'Schedule check-in for barriers', priority: 'high' }
-      ])
-      setRecentActivities([
-        { id: '1', type: 'client',      title: 'John completed PHQ-9', description: 'Score improved 15 → 12', time: '2h ago', icon: 'CheckCircle' },
-        { id: '2', type: 'supervision', title: 'New supervision slot', description: 'Dr. Wilson opens group session', time: '1d ago', icon: 'Headphones' },
-        { id: '3', type: 'admin',       title: 'Platform update',      description: 'New assessment tools', time: '2d ago', icon: 'Bell' }
-      ])
-    } catch (error) {
+      setRecentAssessments(recent3)
+
+      // Lightweight activity feed from assessments & appointments
+      const activities: ActivityItem[] = []
+      if ((appts || []).length) {
+        activities.push({
+          id: 'act-appt',
+          type: 'client',
+          title: 'Today’s schedule ready',
+          description: `${appts?.length} appointment(s)`,
+          time: 'today',
+          icon: 'Calendar'
+        })
+      }
+      if ((inst || []).length) {
+        activities.push({
+          id: 'act-assess',
+          type: 'client',
+          title: 'Assessments updated',
+          description: `${inst?.length} recent assignment(s)`,
+          time: 'recent',
+          icon: 'Activity'
+        })
+      }
+      setRecentActivities(activities)
+
+      // If no alerts found, keep insights empty (no placeholders)
+      setCaseInsights(insights || [])
+    } catch (error: any) {
       console.error('Error fetching dashboard data:', error)
       if (isRecursionError(error)) console.error('RLS recursion detected in dashboard data fetch')
     } finally {
@@ -235,7 +371,7 @@ export default function TherapistDashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold mb-1">Welcome back, Dr. {profile?.first_name}!</h2>
-            <p className="text-blue-100">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            <p className="text-blue-100">{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
           </div>
           {profileLive && (
             <div className="flex items-center space-x-2 bg-green-500 bg-opacity-20 px-3 py-1 rounded-full">
@@ -247,7 +383,7 @@ export default function TherapistDashboard() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
@@ -278,6 +414,15 @@ export default function TherapistDashboard() {
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
+              <p className="text-sm font-medium text-gray-600">Assessments In Progress</p>
+              <p className="text-3xl font-bold text-amber-600">{stats.assessmentsInProgress}</p>
+            </div>
+            <div className="p-3 bg-amber-100 rounded-full"><Brain className="h-6 w-6 text-amber-600" /></div>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
               <p className="text-sm font-medium text-gray-600">Profile</p>
               <p className="text-3xl font-bold text-indigo-600">{stats.profileCompletion}%</p>
             </div>
@@ -286,69 +431,128 @@ export default function TherapistDashboard() {
         </div>
       </div>
 
-      {/* Today schedule */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900">Today's Schedule</h3>
-          <button onClick={() => goto('sessions')} className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
-            <Plus className="w-4 h-4 mr-1" /> Schedule
-          </button>
-        </div>
-        {todaySessions.length === 0 ? (
-          <div className="text-center py-8">
-            <Calendar className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h4 className="text-lg font-medium text-gray-900 mb-2">No sessions today</h4>
-            <p className="text-gray-600">Your schedule is clear for today</p>
+      {/* Row: Today's schedule + Recent Assessments */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Today's schedule */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900">Today's Schedule</h3>
+            <button onClick={() => goto('sessions')} className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+              <Plus className="w-4 h-4 mr-1" /> Schedule
+            </button>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {todaySessions.map(session => (
-              <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><User className="w-5 h-5 text-blue-600" /></div>
-                  <div>
-                    <h4 className="font-medium text-gray-900">{session.client_name}</h4>
-                    <p className="text-sm text-gray-600">{session.time} • {session.type}</p>
+          {todaySessions.length === 0 ? (
+            <div className="text-center py-8">
+              <Calendar className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <h4 className="text-lg font-medium text-gray-900 mb-2">No sessions today</h4>
+              <p className="text-gray-600">Your schedule is clear for today</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {todaySessions.map(session => (
+                <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><User className="w-5 h-5 text-blue-600" /></div>
+                    <div>
+                      <h4 className="font-medium text-gray-900">{session.client_name}</h4>
+                      <p className="text-sm text-gray-600">{session.time} • {session.type}</p>
+                    </div>
                   </div>
+                  <button className="text-blue-600 hover:text-blue-800"><Eye className="w-4 h-4" /></button>
                 </div>
-                <button className="text-blue-600 hover:text-blue-800"><Eye className="w-4 h-4" /></button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recent Assessments */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <div className="p-2 bg-blue-100 rounded-lg"><Brain className="w-5 h-5 text-blue-600" /></div>
+              <h3 className="text-lg font-semibold text-gray-900">Recent Assessments</h3>
+            </div>
+            <button
+              onClick={() => navigate('/therapist/assessments')}
+              className="inline-flex items-center text-sm text-blue-700 hover:text-blue-900"
+            >
+              Open Workspace <ChevronRight className="w-4 h-4 ml-1" />
+            </button>
+          </div>
+
+          {recentAssessments.length === 0 ? (
+            <div className="text-center py-10">
+              <Activity className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+              <p className="text-gray-600 text-sm">No assessment activity yet</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentAssessments.map(a => (
+                <button
+                  key={a.id}
+                  onClick={() => navigate(`/therapist/assessments/${a.id}`)}
+                  className="w-full text-left p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-between"
+                >
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-medium text-gray-900">{a.title}</span>
+                      {a.abbrev && <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">{a.abbrev}</span>}
+                    </div>
+                    <div className="text-sm text-gray-600 mt-0.5">{a.clientName}</div>
+                  </div>
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full ${
+                      a.status === 'completed'
+                        ? 'bg-green-100 text-green-700'
+                        : a.status === 'in_progress'
+                        ? 'bg-blue-100 text-blue-700'
+                        : a.status === 'assigned'
+                        ? 'bg-gray-100 text-gray-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    {a.status.replace('_', ' ')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Case Insights (from assessment alerts) */}
+      {caseInsights.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg">
+              <Brain className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">Case Insights</h3>
+          </div>
+          <div className="space-y-4">
+            {caseInsights.map((insight, index) => (
+              <div key={index} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">{insight.client_name}</h4>
+                    <p className="text-sm text-gray-600 mt-1">{insight.insight}</p>
+                    <p className="text-sm text-blue-600 mt-2">💡 {insight.recommendation}</p>
+                  </div>
+                  <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                    insight.priority === 'high' ? 'bg-red-100 text-red-800'
+                      : insight.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+                  }`}>{insight.priority}</span>
+                </div>
               </div>
             ))}
           </div>
-        )}
-      </div>
-
-      {/* Case Insights */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg">
-            <Brain className="w-5 h-5 text-white" />
-          </div>
-          <h3 className="text-lg font-semibold text-gray-900">Case Insights</h3>
         </div>
-        <div className="space-y-4">
-          {caseInsights.map((insight, index) => (
-            <div key={index} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h4 className="font-medium text-gray-900">{insight.client_name}</h4>
-                  <p className="text-sm text-gray-600 mt-1">{insight.insight}</p>
-                  <p className="text-sm text-blue-600 mt-2">💡 {insight.recommendation}</p>
-                </div>
-                <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                  insight.priority === 'high' ? 'bg-red-100 text-red-800'
-                    : insight.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
-                }`}>{insight.priority}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Quick Actions */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-6">Quick Actions</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <button onClick={() => goto('clienteles')} className="p-4 bg-green-50 hover:bg-green-100 rounded-lg transition-colors group">
             <Users className="w-8 h-8 text-green-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-green-900">Find Client</p>
@@ -356,6 +560,10 @@ export default function TherapistDashboard() {
           <button onClick={() => goto('sessions')} className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors group">
             <Calendar className="w-8 h-8 text-purple-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-purple-900">Schedule Session</p>
+          </button>
+          <button onClick={() => navigate('/therapist/assessments')} className="p-4 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors group">
+            <Brain className="w-8 h-8 text-amber-600 mx-auto mb-2" />
+            <p className="text-sm font-medium text-amber-900">Assessments</p>
           </button>
           <button onClick={() => goto('resources')} className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group">
             <Library className="w-8 h-8 text-blue-600 mx-auto mb-2" />
@@ -396,7 +604,7 @@ export default function TherapistDashboard() {
                   src="/thera-py-image.png"
                   alt="Thera-PY"
                   className="h-6"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).outerHTML = '<span class="text-xl font-bold text-gray-900">Thera-PY</span>' }}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).outerHTML = '<span class=q>Thera-PY</span>' }}
                 />
               </div>
               <div className="hidden sm:block"><p className="text-sm text-gray-500">Therapist Portal</p></div>
@@ -518,6 +726,26 @@ export default function TherapistDashboard() {
                         </button>
                       )
                     })}
+
+                    {/* Dedicated ROUTE item for Assessments */}
+                    {!sidebarCollapsed && (
+                      <button
+                        onClick={() => navigate('/therapist/assessments')}
+                        className="w-full flex items-center space-x-3 px-3 py-3 rounded-xl transition-all duration-200 text-sm font-medium text-gray-700 hover:bg-gradient-to-r hover:from-amber-50 hover:to-yellow-50 hover:text-amber-900 hover:shadow-md hover:border hover:border-amber-200"
+                      >
+                        <Brain className="w-5 h-5 text-amber-600" />
+                        <span>Assessments</span>
+                      </button>
+                    )}
+                    {sidebarCollapsed && (
+                      <button
+                        title="Assessments"
+                        onClick={() => navigate('/therapist/assessments')}
+                        className="w-full flex items-center justify-center px-3 py-3 rounded-xl transition-all duration-200 hover:bg-amber-50"
+                      >
+                        <Brain className="w-5 h-5 text-amber-600" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -560,6 +788,13 @@ export default function TherapistDashboard() {
                             </button>
                           )
                         })}
+                        <button
+                          onClick={() => { setMobileMenuOpen(false); navigate('/therapist/assessments') }}
+                          className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-all text-sm font-medium text-amber-800 bg-amber-50 hover:bg-amber-100"
+                        >
+                          <Brain className="w-5 h-5 text-amber-600" />
+                          <span>Assessments</span>
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -599,7 +834,6 @@ export default function TherapistDashboard() {
               {active === 'membership'    && <MembershipPanel />}
               {active === 'admin'         && (
                 <div className="p-6">
-                  {/* Simple inline contact panel to keep dashboard lean; keep your full version if you have it */}
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
                     <Shield className="mx-auto h-10 w-10 text-gray-300 mb-2" />
                     <h3 className="text-gray-900 font-medium">Contact Administrator</h3>
