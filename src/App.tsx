@@ -24,10 +24,14 @@ const CaseManagement = React.lazy(() =>
 // CommunicationTools has a default export already
 const CommunicationTools = React.lazy(() => import('./components/therapist/CommunicationTools'))
 
+// --- NEW: Therapist Assessments page (default export) ---
+const AssessmentsPage = React.lazy(() => import('./pages/therapist/AssessmentsPage'))
+
 // --- Preload helpers ---
 const preloadTherapistArea = () => {
   import('./pages/TherapistDashboard')
   import('./pages/ProgressMetrics')
+  import('./pages/therapist/AssessmentsPage')
   import('./components/therapist/ClientManagement').then(m => m)
   import('./components/therapist/SessionManagement').then(m => m)
   import('./components/therapist/CaseManagement').then(m => m)
@@ -177,6 +181,25 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
+            {/* NEW: Assessments routes */}
+            <Route
+              path="/therapist/assessments"
+              element={
+                <ProtectedRoute role="therapist">
+                  <AssessmentsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/therapist/assessments/:instanceId"
+              element={
+                <ProtectedRoute role="therapist">
+                  <AssessmentsPage />
+                </ProtectedRoute>
+              }
+            />
+
             <Route
               path="/metrics"
               element={
