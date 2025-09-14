@@ -9,7 +9,8 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, role }) => {
   const { user, profile, loading } = useAuth()
-
+export { ProtectedRoute as default, ProtectedRoute } from './therapist/ProtectedRoute'
+  
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
