@@ -14,7 +14,7 @@ type Props = {
   initialClientId?: string
   /** Optionally preselect a template */
   initialTemplateId?: string
-  /** Called after a successful assignment */
+  /** Called after a successful assignment (count of clients assigned) */
   onAssigned?: (count: number) => void
 }
 
@@ -113,23 +113,22 @@ const AssignAssessmentModal: React.FC<Props> = ({
       // Search (first/last/email/city)
       const search = q.trim()
       if (search) {
-        // Do a best-effort OR across fields (Supabase does not support OR across .ilike directly in one call without a filter string)
-        // We'll approximate by filtering post-fetch below for safety with RLS & simplicity; but we can try ilike on name OR email:
-        // The most reliable: fetch a *slightly* larger page server-side, then filter client-side.
-        // To keep it simple & consistent, apply mild server-side filter on email and fallback client-side refine.
-        query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,city.ilike.%${search}%`)
+        // Best-effort OR across common fields
+        query = query.or(
+          `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,city.ilike.%${search}%`
+        )
       }
 
       // Pagination
       const from = (page - 1) * PAGE_SIZE
       const to = from + PAGE_SIZE - 1
-      const { data, error, count } = await query.order('created_at', { ascending: false }).range(from, to)
+      const { data, error, count } = await query
+        .order('created_at', { ascending: false })
+        .range(from, to)
 
       if (error) throw error
 
-      const list = (data || []) as ClientRow[]
-      // (Optional) small client-side refine if needed (already OR-ed above)
-      setRows(list)
+      setRows((data || []) as ClientRow[])
       setTotal(count || 0)
     } catch (e: any) {
       console.error('[AssignAssessmentModal] fetchClients', e)
@@ -146,11 +145,16 @@ const AssignAssessmentModal: React.FC<Props> = ({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   // template options
-  const activeTemplates = useMemo(() => (templates || []).filter(t => t.is_active), [templates])
+  const activeTemplates = useMemo(
+    () => (templates || []).filter(t => t.is_active),
+    [templates]
+  )
 
   // selection helpers
+  const singleClient = !!initialClientId
+
   const toggleSelected = (id: string) => {
-    if (initialClientId) return // locked in single-client mode
+    if (singleClient) return // locked in single-client mode
     setSelectedClientIds(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -161,20 +165,14 @@ const AssignAssessmentModal: React.FC<Props> = ({
 
   const allOnPageSelected = rows.length > 0 && rows.every(r => selectedClientIds.has(r.id))
   const toggleSelectAllOnPage = () => {
-    if (initialClientId) return
+    if (singleClient) return
     setSelectedClientIds(prev => {
       const next = new Set(prev)
-      if (allOnPageSelected) {
-        rows.forEach(r => next.delete(r.id))
-      } else {
-        rows.forEach(r => next.add(r.id))
-      }
+      if (allOnPageSelected) rows.forEach(r => next.delete(r.id))
+      else rows.forEach(r => next.add(r.id))
       return next
     })
   }
-
-  // locked single-client mode hint
-  const singleClient = !!initialClientId
 
   // submit
   const canSubmit = templateId && selectedClientIds.size > 0 && !submitting
@@ -335,7 +333,6 @@ const AssignAssessmentModal: React.FC<Props> = ({
               </div>
             )}
 
-            {/* Single client info */}
             {singleClient && (
               <div className="mb-3 p-3 border rounded-lg bg-gray-50 text-sm text-gray-700">
                 Assigning to a specific client. Selection is locked.
