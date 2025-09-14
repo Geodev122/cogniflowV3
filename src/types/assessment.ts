@@ -38,7 +38,7 @@ export interface AssessmentInstance {
   metadata: Record<string, any>
   created_at: string
   updated_at: string
-  
+
   // Populated relations
   template?: AssessmentTemplate
   responses?: AssessmentResponse[]
@@ -50,18 +50,42 @@ export interface AssessmentInstance {
   }
 }
 
+/**
+ * NOTE on options:
+ * - You may store options as string[] or {label, value}[] in Supabase (JSONB).
+ * - Renderer will emit the item's 'value' if present, otherwise the zero-based index.
+ * - This is backward compatible with any scoring config expecting indices.
+ */
+export type AssessmentOption = string | { label: string; value: any }
+
 export interface AssessmentQuestion {
   id: string
   text: string
   type: QuestionType
+
+  // Scale / slider
   scale_min?: number
   scale_max?: number
+  min?: number
+  max?: number
+  step?: number
+
+  // Labels along a scale/likert
   labels?: string[]
-  options?: string[]
+
+  // Options for choice-based items (string or {label,value})
+  options?: AssessmentOption[]
+
+  // UX & validation
   reverse_scored?: boolean
   required?: boolean
   validation?: QuestionValidation
   conditional_logic?: ConditionalLogic
+
+  // UI helpers (optional)
+  help_text?: string
+  placeholder?: string
+  rows?: number
 }
 
 export interface AssessmentResponse {
@@ -172,66 +196,77 @@ export interface ClinicalAlert {
 }
 
 // Enums and Types
-export type AssessmentCategory = 
-  | 'anxiety' 
-  | 'depression' 
-  | 'trauma' 
-  | 'stress' 
-  | 'wellbeing' 
-  | 'personality' 
-  | 'substance' 
-  | 'eating' 
-  | 'sleep' 
+export type AssessmentCategory =
+  | 'anxiety'
+  | 'depression'
+  | 'trauma'
+  | 'stress'
+  | 'wellbeing'
+  | 'personality'
+  | 'substance'
+  | 'eating'
+  | 'sleep'
   | 'general'
 
-export type AssessmentStatus = 
-  | 'assigned' 
-  | 'in_progress' 
-  | 'completed' 
-  | 'expired' 
+export type AssessmentStatus =
+  | 'assigned'
+  | 'in_progress'
+  | 'completed'
+  | 'expired'
   | 'cancelled'
 
-export type QuestionType = 
-  | 'scale' 
-  | 'multiple_choice' 
-  | 'single_choice' 
-  | 'text' 
-  | 'textarea' 
-  | 'boolean' 
-  | 'date' 
+/**
+ * Question types supported by the renderer and forms.
+ * - 'multiple_choice' (existing) and 'multi_choice' (compat) both map to multi-select UI.
+ * - 'single_choice' maps to radio-like UI.
+ * - 'likert' behaves like evenly spaced choices; store as options or rely on defaults.
+ * - 'slider' behaves like a continuous scale; use min/max/step.
+ */
+export type QuestionType =
+  | 'scale'
+  | 'likert'
+  | 'slider'
+  | 'multiple_choice'
+  | 'multi_choice' // compatibility alias
+  | 'single_choice'
+  | 'text'
+  | 'textarea'
+  | 'boolean'
+  | 'date'
+  | 'time'
   | 'number'
 
-export type ScoringMethod = 
-  | 'sum' 
-  | 'average' 
-  | 'weighted_sum' 
+export type ScoringMethod =
+  | 'sum'
+  | 'average'
+  | 'weighted_sum'
   | 'custom'
 
-export type SeverityLevel = 
-  | 'minimal' 
-  | 'mild' 
-  | 'moderate' 
-  | 'moderately_severe' 
-  | 'severe' 
+export type SeverityLevel =
+  | 'minimal'
+  | 'mild'
+  | 'moderate'
+  | 'moderately_severe'
+  | 'severe'
   | 'very_severe'
 
-export type ClinicalSignificance = 
-  | 'subclinical' 
-  | 'mild' 
-  | 'moderate' 
-  | 'significant' 
-  | 'severe' 
+export type ClinicalSignificance =
+  | 'subclinical'
+  | 'mild'
+  | 'moderate'
+  | 'significant'
+  | 'severe'
   | 'critical'
 
-export type EvidenceLevel = 
-  | 'research_based' 
-  | 'clinical_consensus' 
+export type EvidenceLevel =
+  | 'research_based'
+  | 'clinical_consensus'
   | 'expert_opinion'
 
-export type ReminderFrequency = 
-  | 'none' 
-  | 'daily' 
-  | 'weekly' 
+export type ReminderFrequency =
+  | 'none'
+  | 'daily'
+  | 'weekly'
   | 'before_due'
 
 // Assessment Form Props
