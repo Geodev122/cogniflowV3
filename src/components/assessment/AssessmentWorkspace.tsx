@@ -17,7 +17,7 @@ import AssessmentInstancesList from './AssessmentInstancesList'
 import { AssessmentForm } from './AssessmentForm'
 
 type Props = {
-  /** Optional: preload and open this instance (e.g., from router) */
+  /** Optional: preload and open this instance (e.g., from router deep-link) */
   initialInstanceId?: string
   /** Optional: when user closes the workspace */
   onClose?: () => void
@@ -25,10 +25,10 @@ type Props = {
 
 /**
  * AssessmentWorkspace
- * - Left side: AssessmentInstancesList (filters/search/sort/pagination)
- * - Right side: Active Assessment (AssessmentForm)
- * - Supabase-wired: fetches/refreshes instances and templates as needed
- * - Reads ?clientId= to prefilter to a specific client and preselect in Assign flow
+ * - Left: AssessmentInstancesList (filters/search/sort/pagination)
+ * - Right: Active Assessment (AssessmentForm)
+ * - Supabase-wired: fetches/refreshes instances and related data
+ * - Reads ?clientId= to prefilter to a client and reflect in the UI chip
  */
 const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) => {
   const { instances, refetch } = useAssessments()
@@ -41,12 +41,12 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
   const [clientFilterId, setClientFilterId] = useState<string | null>(urlClientId)
   const [clientFilterName, setClientFilterName] = useState<string>('')
 
-  // Keep local state in sync with URL changes (e.g., navigation)
+  // Keep local state in sync with URL changes (e.g., back/forward navigation)
   useEffect(() => {
     setClientFilterId(urlClientId)
   }, [urlClientId])
 
-  // Load small client display name for the chip (non-fatal if RLS blocks)
+  // Fetch small client display name for the chip (non-fatal if RLS blocks)
   useEffect(() => {
     let cancel = false
     const loadClient = async () => {
@@ -67,18 +67,19 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
 
   const clearClientFilter = () => {
     setClientFilterId(null)
-    searchParams.delete('clientId')
-    setSearchParams(searchParams, { replace: true })
+    const sp = new URLSearchParams(searchParams)
+    sp.delete('clientId')
+    setSearchParams(sp, { replace: true })
   }
 
   // ────────────────────────────────────────────────────────────────────────────
-  // Active assessment on the right pane
+  // Active assessment (right pane)
   // ────────────────────────────────────────────────────────────────────────────
   const [active, setActive] = useState<AssessmentInstance | null>(null)
   const [loadingActive, setLoadingActive] = useState(false)
   const [activeError, setActiveError] = useState<string | null>(null)
 
-  /** When list refreshes, relink to latest copy of the active instance (status/progress freshness) */
+  /** When list refreshes, relink to freshest copy of the active instance */
   const latestActiveFromList = useMemo(() => {
     if (!active) return null
     return instances.find(i => i.id === active.id) || null
@@ -112,28 +113,23 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
 
   const ensureTemplateLoaded = useCallback(async (instance: AssessmentInstance) => {
     if (instance.template) return instance
-
     const { data: tmpl, error: tmplErr } = await supabase
       .from('assessment_templates')
       .select('*')
       .eq('id', instance.template_id)
       .single<AssessmentTemplate>()
-
     if (tmplErr) throw tmplErr
     return { ...instance, template: tmpl }
   }, [])
 
   const ensureClientLoaded = useCallback(async (instance: AssessmentInstance) => {
     if (instance.client && instance.client.first_name) return instance
-
     const { data: client, error: clientErr } = await supabase
       .from('profiles')
       .select('id, first_name, last_name, email')
       .eq('id', instance.client_id)
       .single()
-
-    // If RLS blocks, return as-is
-    if (clientErr || !client) return instance
+    if (clientErr || !client) return instance // Not fatal (RLS may hide)
     return { ...instance, client }
   }, [])
 
@@ -278,14 +274,14 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
         <AssessmentForm
           instance={active}
           onResponse={() => {
-            // no-op; AssessmentForm upserts each response
+            // no-op; AssessmentForm already upserts per response
           }}
           onSave={() => {
-            // Keep list in sync (progress/status might change)
+            // keep list in sync (progress/status might change)
             refetch()
           }}
           onComplete={async () => {
-            // After completion, refresh list and reload active to show results snapshot
+            // After completion, refresh list and reload active (to reflect completed state & results snapshot)
             await refetch()
             await openInstanceById(active.id)
           }}
@@ -343,7 +339,7 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
             onOpenInstance={handleOpenFromList}
             /** Provide initial client filter from URL so list narrows + preselects client in Assign modal */
             initialClientId={clientFilterId || undefined}
-            /** Let the list bubble up changes to its client filter (e.g., when user clears inside the list) */
+            /** Let the list bubble up client filter changes (for URL sync) */
             onClientFilterChange={(nextId) => {
               setClientFilterId(nextId || null)
               const sp = new URLSearchParams(searchParams)
