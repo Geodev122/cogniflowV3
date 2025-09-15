@@ -1,3 +1,4 @@
+//client home
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Calendar, ClipboardList, ChevronRight, Activity, ShieldCheck, AlertTriangle } from 'lucide-react'
