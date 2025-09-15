@@ -1,4 +1,4 @@
-// src/pages/TherapistDashboard.tsx
+// src/pages/therapist/TherapistDashboard.tsx
 import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -7,7 +7,7 @@ import { isRecursionError } from '../../utils/helpers'
 import {
   Users, FileText, Calendar, Library, CheckCircle, AlertTriangle, Menu, X, Target, ChevronLeft,
   User, CalendarDays, Brain, Shield, Headphones, Plus, Eye, LogOut, BarChart3, Building2,
-  ShieldCheck, Star, Bell, ClipboardList, Activity, ChevronRight
+  ShieldCheck, Star, ClipboardList, Activity, ChevronRight
 } from 'lucide-react'
 import { TherapistOnboarding } from '../../components/therapist/TherapistOnboarding'
 
@@ -28,7 +28,7 @@ const ResourceLibrary = React.lazy(() =>
   import('../../components/therapist/ResourceLibrary').then(m => ({ default: (m as any).default ?? m }))
 )
 
-// NEW split components (assuming these exist in your repo; otherwise create later)
+// NEW split components (rendered only when clicked)
 const Clienteles = React.lazy(() => import('../../components/therapist/Clienteles').then(m => ({ default: m.Clienteles })))
 const SessionBoard = React.lazy(() => import('../../components/therapist/SessionBoard').then(m => ({ default: m.SessionBoard })))
 const ClinicRentalPanel = React.lazy(() => import('../../components/therapist/ClinicRentalPanel').then(m => ({ default: m.ClinicRentalPanel })))
@@ -101,6 +101,7 @@ export default function TherapistDashboard() {
   const [recentAssessments, setRecentAssessments] = useState<RecentAssessmentItem[]>([])
 
   const [loading, setLoading] = useState(true)
+  const [dashboardError, setDashboardError] = useState<string | null>(null)
   const [profileLive, setProfileLive] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState<string | null>(null)
@@ -114,7 +115,6 @@ export default function TherapistDashboard() {
         { id: 'clienteles', name: 'Clienteles', icon: Users },
         { id: 'clients', name: 'Client Management', icon: Users },
         { id: 'cases', name: 'Case Management', icon: FileText },
-        // We keep Assessments as a ROUTE (button below), not a dashboard tab, to avoid loading the whole workspace here
         { id: 'resources', name: 'Resource Library', icon: Library },
       ]
     },
@@ -149,6 +149,7 @@ export default function TherapistDashboard() {
   const fetchDashboardData = useCallback(async () => {
     if (!profile) return
     try {
+      setDashboardError(null)
       setLoading(true)
 
       // Clients linked to therapist
@@ -167,7 +168,7 @@ export default function TherapistDashboard() {
         .eq('status', 'active')
       if (casesError) console.warn('dashboard: active cases error:', casesError)
 
-      // Today appointments
+      // Today appointments (NO embedded join —> separate profiles fetch)
       const todayISO = new Date()
       const yyyy = todayISO.getFullYear()
       const mm = String(todayISO.getMonth() + 1).padStart(2, '0')
@@ -177,17 +178,14 @@ export default function TherapistDashboard() {
 
       const { data: appts, error: appointmentsError } = await supabase
         .from('appointments')
-        .select(`
-          id, appointment_date, appointment_type, notes, client_id,
-          profiles:profiles!appointments_client_id_fkey(first_name,last_name)
-        `)
+        .select('id, appointment_date, appointment_type, notes, client_id')
         .eq('therapist_id', profile.id)
         .gte('appointment_date', dayStart)
         .lte('appointment_date', dayEnd)
 
       if (appointmentsError) console.warn('dashboard: today appts error:', appointmentsError)
 
-      // Assessments (last 3) + counts
+      // Assessments (last 12) + counts
       const { data: inst, error: instErr } = await supabase
         .from('assessment_instances')
         .select('id, template_id, client_id, title, status, assigned_at, completed_at')
@@ -199,24 +197,41 @@ export default function TherapistDashboard() {
 
       const inProgressCount = (inst || []).filter(i => i.status === 'in_progress').length
 
-      // resolve names: clients + templates (no complex joins to avoid RLS recursion)
+      // Resolve names (RLS-safe, no joins)
       const templateIds = Array.from(new Set((inst || []).map(i => i.template_id)))
-      const clientIds = Array.from(new Set((inst || []).map(i => i.client_id)))
+      const clientIdsFromInst = Array.from(new Set((inst || []).map(i => i.client_id)))
+      const clientIdsFromAppts = Array.from(new Set((appts || []).map(a => a.client_id)))
+      const allClientIds = Array.from(new Set([...clientIdsFromInst, ...clientIdsFromAppts])).filter(Boolean) as string[]
 
       const [{ data: tpls }, { data: clients }] = await Promise.all([
         templateIds.length
           ? supabase.from('assessment_templates').select('id, abbreviation, name').in('id', templateIds)
           : Promise.resolve({ data: [] as any[] }),
-        clientIds.length
-          ? supabase.from('profiles').select('id, first_name, last_name').in('id', clientIds)
+        allClientIds.length
+          ? supabase.from('profiles').select('id, first_name, last_name').in('id', allClientIds)
           : Promise.resolve({ data: [] as any[] })
       ])
 
+      const clientsById = new Map((clients || []).map((c: any) => [c.id, c]))
+
+      // Build sessions list
+      const sessions = (appts || []).map(apt => {
+        const c = clientsById.get(apt.client_id)
+        return {
+          id: apt.id,
+          client_name: `${c?.first_name || 'Unknown'} ${c?.last_name || 'Client'}`.trim(),
+          time: new Date(apt.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          type: apt.appointment_type,
+          notes: apt.notes || undefined
+        } as TodaySession
+      })
+
+      // Recent assessments w/ names
       const recent3: RecentAssessmentItem[] = (inst || [])
         .slice(0, 3)
         .map(i => {
-          const c = (clients || []).find(p => p.id === i.client_id)
-          const t = (tpls || []).find(tp => tp.id === i.template_id)
+          const c = clientsById.get(i.client_id)
+          const t = (tpls || []).find((tp: any) => tp.id === i.template_id)
           return {
             id: i.id,
             title: i.title || t?.name || 'Assessment',
@@ -228,7 +243,7 @@ export default function TherapistDashboard() {
           }
         })
 
-      // Insights from recent results w/ alerts (critical/warning)
+      // Insights from recent results (alerts)
       let insights: CaseInsight[] = []
       if (inst && inst.length) {
         const recentIds = inst.map(i => i.id)
@@ -275,33 +290,23 @@ export default function TherapistDashboard() {
       setStats({
         totalClients: clientRelations?.length || 0,
         activeCases: activeCases?.length || 0,
-        patientsToday: appts?.length || 0,
+        patientsToday: sessions.length,
         profileCompletion,
         assessmentsInProgress: inProgressCount
       })
       setOnboardingSteps(steps)
       setProfileLive(isProfileLive)
-
-      setTodaySessions(
-        (appts || []).map(apt => ({
-          id: apt.id,
-          client_name: `${apt.profiles?.first_name || 'Unknown'} ${apt.profiles?.last_name || 'Client'}`,
-          time: new Date(apt.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          type: apt.appointment_type,
-          notes: apt.notes
-        }))
-      )
-
+      setTodaySessions(sessions)
       setRecentAssessments(recent3)
 
-      // Lightweight activity feed from assessments & appointments
+      // Lightweight activity feed
       const activities: ActivityItem[] = []
-      if ((appts || []).length) {
+      if (sessions.length) {
         activities.push({
           id: 'act-appt',
           type: 'client',
           title: 'Today’s schedule ready',
-          description: `${appts?.length} appointment(s)`,
+          description: `${sessions.length} appointment(s)`,
           time: 'today',
           icon: 'Calendar'
         })
@@ -318,11 +323,12 @@ export default function TherapistDashboard() {
       }
       setRecentActivities(activities)
 
-      // If no alerts found, keep insights empty (no placeholders)
+      // Insights
       setCaseInsights(insights || [])
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error)
       if (isRecursionError(error)) console.error('RLS recursion detected in dashboard data fetch')
+      setDashboardError('Could not load dashboard data.')
     } finally {
       setLoading(false)
     }
@@ -364,6 +370,12 @@ export default function TherapistDashboard() {
           <button onClick={() => setShowOnboardingModal(true)} className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
             Continue Setup
           </button>
+        </div>
+      )}
+
+      {dashboardError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3">
+          {dashboardError}
         </div>
       )}
 
