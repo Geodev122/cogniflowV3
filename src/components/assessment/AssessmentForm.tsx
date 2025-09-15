@@ -5,26 +5,25 @@ import { AssessmentRenderer } from './AssessmentRenderer'
 import { AssessmentScoringEngine } from '../../lib/assessmentEngine'
 import { supabase } from '../../lib/supabase'
 import {
-  Save,
-  Send,
-  Clock,
-  CheckCircle,
-  AlertTriangle,
-  Brain,
-  BarChart3,
-  FileText,
+  Save, Send, Clock, CheckCircle, AlertTriangle, Brain, BarChart3, FileText,
 } from 'lucide-react'
 
-type DbResultRow = {
+type ScoreRow = {
   id: string
   instance_id: string
-  total_score: number | null
-  max_score: number | null
-  subscale_scores: any | null
-  interpretation: any | null
-  alerts: any | null
-  narrative_report: string | null
-  created_at: string
+  raw_score: number
+  scaled_score: number | null
+  percentile: number | null
+  t_score: number | null
+  z_score: number | null
+  interpretation_category: string
+  interpretation_description: string
+  clinical_significance: string | null
+  severity_level: string | null
+  recommendations: string | null
+  therapist_notes: string | null
+  auto_generated: boolean
+  calculated_at: string
 }
 
 export const AssessmentForm: React.FC<AssessmentFormProps> = ({
@@ -43,31 +42,30 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [showResults, setShowResults] = useState(false)
   const [calculatedScore, setCalculatedScore] = useState<{
-    score: number
-    maxScore: number
-    interpretation: any
-    alerts: any[]
-    narrativeReport: string
-    subscaleScores?: Record<string, number>
+    raw: number
+    percentOfMax?: number
+    interpretation?: {
+      category?: string
+      description?: string
+      recommendations?: string
+      clinical_significance?: string
+      severity_level?: string
+    }
   } | null>(null)
 
   const template = instance.template
   const debouncedTimer = useRef<number | null>(null)
 
-  /* ────────────────────────────────────────────────────────────────────────────
-     Load existing responses + saved result (if completed)
-  ─────────────────────────────────────────────────────────────────────────────*/
+  /* Load existing responses + saved score (if completed) */
   useEffect(() => {
     const load = async () => {
       try {
-        // Responses
         const { data, error } = await supabase
           .from('assessment_responses')
           .select('question_id, response_value')
           .eq('instance_id', instance.id)
 
         if (error) throw error
-
         const map: Record<string, any> = {}
         for (const r of data || []) map[r.question_id] = r.response_value
         setResponses(map)
@@ -75,34 +73,41 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
         console.error('[AssessmentForm] load responses error:', err)
       }
 
-      // Existing results (if completed)
       if (instance.status === 'completed') {
         try {
-          const { data: resRows, error: resErr } = await supabase
-            .from('assessment_results')
+          const { data: scores, error: resErr } = await supabase
+            .from('assessment_scores')
             .select(
-              'id, instance_id, total_score, max_score, interpretation, alerts, narrative_report, subscale_scores, created_at'
+              'id, instance_id, raw_score, scaled_score, percentile, t_score, z_score, interpretation_category, interpretation_description, clinical_significance, severity_level, recommendations, auto_generated, calculated_at'
             )
             .eq('instance_id', instance.id)
-            .order('created_at', { ascending: false })
+            .order('calculated_at', { ascending: false })
             .limit(1)
-            .returns<DbResultRow[]>()
+            .returns<ScoreRow[]>()
 
           if (resErr) throw resErr
 
-          if (resRows && resRows.length) {
-            const r = resRows[0]
+          const s = scores?.[0]
+          if (s) {
+            const percentOfMax =
+              template?.scoring_config?.max_score
+                ? Math.round((Number(s.raw_score) / Number(template.scoring_config.max_score)) * 100)
+                : undefined
+
             setCalculatedScore({
-              score: Number(r.total_score ?? 0),
-              maxScore: Number(r.max_score ?? (template?.scoring_config?.max_score ?? 0)),
-              interpretation: r.interpretation,
-              alerts: Array.isArray(r.alerts) ? r.alerts : [],
-              narrativeReport: r.narrative_report || '',
-              subscaleScores: r.subscale_scores || undefined,
+              raw: Number(s.raw_score),
+              percentOfMax,
+              interpretation: {
+                category: s.interpretation_category,
+                description: s.interpretation_description,
+                clinical_significance: s.clinical_significance ?? undefined,
+                severity_level: s.severity_level ?? undefined,
+                recommendations: s.recommendations ?? undefined,
+              },
             })
           }
         } catch (err) {
-          console.error('[AssessmentForm] load results error:', err)
+          console.error('[AssessmentForm] load scores error:', err)
         }
       }
     }
@@ -111,9 +116,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instance.id])
 
-  /* ────────────────────────────────────────────────────────────────────────────
-     Derived: progress %
-  ─────────────────────────────────────────────────────────────────────────────*/
+  /* Derived progress */
   const totalQuestions = template?.questions?.length ?? 0
   const answeredQuestions = useMemo(
     () =>
@@ -130,9 +133,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
       ?.filter((q: any) => q.required !== false)
       .every((q: any) => responses[q.id] !== undefined && responses[q.id] !== null && responses[q.id] !== '')
 
-  /* ────────────────────────────────────────────────────────────────────────────
-     Debounced progress update on instance
-  ─────────────────────────────────────────────────────────────────────────────*/
+  /* Debounced progress update — DISABLED (no column in DB)
   useEffect(() => {
     if (!showProgress) return
     if (debouncedTimer.current) window.clearTimeout(debouncedTimer.current)
@@ -146,12 +147,10 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
     return () => {
       if (debouncedTimer.current) window.clearTimeout(debouncedTimer.current)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progressPct, instance.id])
+  }, [progressPct, instance.id, showProgress])
+  */
 
-  /* ────────────────────────────────────────────────────────────────────────────
-     On single response change → upsert + move status to in_progress (once)
-  ─────────────────────────────────────────────────────────────────────────────*/
+  /* On single response change → upsert + move status to in_progress (once) */
   const handleResponse = async (questionId: string, value: any) => {
     const next = { ...responses, [questionId]: value }
     setResponses(next)
@@ -180,9 +179,6 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
     }
   }
 
-  /* ────────────────────────────────────────────────────────────────────────────
-     Manual save (marks NOT final)
-  ─────────────────────────────────────────────────────────────────────────────*/
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -205,9 +201,6 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
     }
   }
 
-  /* ────────────────────────────────────────────────────────────────────────────
-     Complete flow: validate → finalize → compute → persist → read back
-  ─────────────────────────────────────────────────────────────────────────────*/
   const handleComplete = async () => {
     if (!template) return
     setCompleting(true)
@@ -236,67 +229,65 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
       }
 
       // Update instance
-      {
-        const { error: instErr } = await supabase
-          .from('assessment_instances')
-          .update({
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-            progress: 100,
-          })
-          .eq('id', instance.id)
-        if (instErr) throw instErr
-      }
+      await supabase
+        .from('assessment_instances')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', instance.id)
 
-      // Compute result
-      const score = engine.calculateRawScore()
-      const maxScore =
-        template?.scoring_config?.max_score != null
-          ? Number(template.scoring_config.max_score)
-          : Number(score)
-      const interpretation = engine.getInterpretation(score)
-      const alerts = engine.checkClinicalAlerts(score)
-      const narrativeReport = engine.generateNarrativeReport(score, interpretation)
-      const subscaleScores = engine.calculateSubscaleScores?.() ?? undefined
+      // Compute score using engine
+      const raw = Number(engine.calculateRawScore() ?? 0)
+      const max = Number(template?.scoring_config?.max_score ?? 0)
+      const percentOfMax = max ? Math.round((raw / max) * 100) : undefined
+      const interpretation = engine.getInterpretation(raw) || {}
 
-      // Persist canonical result (idempotent upsert on unique(instance_id))
+      // Persist canonical score (idempotent on unique(instance_id) if you add a constraint)
       {
-        const { error: resErr } = await supabase.from('assessment_results').upsert(
-          {
-            instance_id: instance.id,
-            total_score: Number(score),
-            max_score: Number(maxScore),
-            interpretation,
-            alerts,
-            narrative_report: narrativeReport,
-            subscale_scores: subscaleScores ?? null,
-          },
-          { onConflict: 'instance_id' }
-        )
+        const payload = {
+          instance_id: instance.id,
+          raw_score: raw,
+          scaled_score: null,
+          percentile: null,
+          t_score: null,
+          z_score: null,
+          interpretation_category: interpretation.category ?? '',
+          interpretation_description: interpretation.description ?? '',
+          clinical_significance: interpretation.clinical_significance ?? null,
+          severity_level: interpretation.severity_level ?? null,
+          recommendations: interpretation.recommendations ?? null,
+          therapist_notes: null,
+          auto_generated: true,
+        }
+        const { error: resErr } = await supabase.from('assessment_scores').insert(payload)
         if (resErr) throw resErr
       }
 
-      // Read back the saved snapshot we’ll display
-      const { data: resRows, error: readErr } = await supabase
-        .from('assessment_results')
+      // Read back saved score
+      const { data: scores, error: readErr } = await supabase
+        .from('assessment_scores')
         .select(
-          'id, instance_id, total_score, max_score, interpretation, alerts, narrative_report, subscale_scores, created_at'
+          'id, instance_id, raw_score, interpretation_category, interpretation_description, clinical_significance, severity_level, recommendations, calculated_at'
         )
         .eq('instance_id', instance.id)
-        .order('created_at', { ascending: false })
+        .order('calculated_at', { ascending: false })
         .limit(1)
-        .returns<DbResultRow[]>()
+        .returns<ScoreRow[]>()
 
       if (readErr) throw readErr
+      const s = scores?.[0]
 
-      const saved = resRows?.[0]
       setCalculatedScore({
-        score: saved ? Number(saved.total_score ?? score) : Number(score),
-        maxScore: saved ? Number(saved.max_score ?? maxScore) : Number(maxScore),
-        interpretation: saved?.interpretation ?? interpretation,
-        alerts: (saved?.alerts as any[]) ?? alerts,
-        narrativeReport: saved?.narrative_report ?? narrativeReport,
-        subscaleScores: (saved?.subscale_scores as Record<string, number> | null) || undefined,
+        raw,
+        percentOfMax,
+        interpretation: {
+          category: s?.interpretation_category ?? interpretation.category,
+          description: s?.interpretation_description ?? interpretation.description,
+          clinical_significance: s?.clinical_significance ?? interpretation.clinical_significance,
+          severity_level: s?.severity_level ?? interpretation.severity_level,
+          recommendations: s?.recommendations ?? interpretation.recommendations,
+        },
       })
       setShowResults(true)
 
@@ -309,9 +300,6 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
     }
   }
 
-  /* ────────────────────────────────────────────────────────────────────────────
-     UI
-  ─────────────────────────────────────────────────────────────────────────────*/
   if (!template) {
     return (
       <div className="text-center py-8">
@@ -325,7 +313,6 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
   if (showResults && calculatedScore) {
     return (
       <div className="space-y-6">
-        {/* Results Header */}
         <div className="bg-green-50 border border-green-200 rounded-lg p-6">
           <div className="flex items-center space-x-3 mb-4">
             <CheckCircle className="w-8 h-8 text-green-600" />
@@ -337,15 +324,12 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">{calculatedScore.score}</div>
+              <div className="text-3xl font-bold text-green-600">{calculatedScore.raw}</div>
               <div className="text-sm text-green-700">Raw Score</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-blue-600">
-                {calculatedScore.maxScore
-                  ? Math.round((calculatedScore.score / calculatedScore.maxScore) * 100)
-                  : 0}
-                %
+                {calculatedScore.percentOfMax ?? 0}%
               </div>
               <div className="text-sm text-blue-700">Percent of Max</div>
             </div>
@@ -358,53 +342,6 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
           </div>
         </div>
 
-        {/* Clinical Alerts */}
-        {Array.isArray(calculatedScore.alerts) && calculatedScore.alerts.length > 0 && (
-          <div className="space-y-2">
-            {calculatedScore.alerts.map((alert: any, idx: number) => (
-              <div
-                key={idx}
-                className={`border rounded-lg p-4 ${
-                  alert.type === 'critical'
-                    ? 'bg-red-50 border-red-200'
-                    : alert.type === 'warning'
-                    ? 'bg-yellow-50 border-yellow-200'
-                    : 'bg-blue-50 border-blue-200'
-                }`}
-              >
-                <div className="flex items-start space-x-2">
-                  <AlertTriangle
-                    className={`w-5 h-5 mt-0.5 ${
-                      alert.type === 'critical'
-                        ? 'text-red-600'
-                        : alert.type === 'warning'
-                        ? 'text-yellow-600'
-                        : 'text-blue-600'
-                    }`}
-                  />
-                  <div>
-                    <p
-                      className={`font-medium ${
-                        alert.type === 'critical'
-                          ? 'text-red-900'
-                          : alert.type === 'warning'
-                          ? 'text-yellow-900'
-                          : 'text-blue-900'
-                      }`}
-                    >
-                      {alert.message}
-                    </p>
-                    {alert.action_required && (
-                      <p className="text-sm mt-1 text-gray-600">Action required by therapist</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Interpretation */}
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
             <Brain className="w-5 h-5 mr-2 text-purple-600" />
@@ -419,30 +356,35 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
               <span className="font-medium text-gray-700">Description: </span>
               <span className="text-gray-900">{calculatedScore.interpretation?.description}</span>
             </div>
-            <div>
-              <span className="font-medium text-gray-700">Recommendations: </span>
-              <span className="text-gray-900">{calculatedScore.interpretation?.recommendations}</span>
-            </div>
+            {calculatedScore.interpretation?.clinical_significance && (
+              <div>
+                <span className="font-medium text-gray-700">Clinical significance: </span>
+                <span className="text-gray-900">{calculatedScore.interpretation?.clinical_significance}</span>
+              </div>
+            )}
+            {calculatedScore.interpretation?.severity_level && (
+              <div>
+                <span className="font-medium text-gray-700">Severity: </span>
+                <span className="text-gray-900">{calculatedScore.interpretation?.severity_level}</span>
+              </div>
+            )}
+            {calculatedScore.interpretation?.recommendations && (
+              <div>
+                <span className="font-medium text-gray-700">Recommendations: </span>
+                <span className="text-gray-900">{calculatedScore.interpretation?.recommendations}</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Narrative Report */}
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
-          <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
-            <FileText className="w-5 h-5 mr-2 text-gray-600" />
-            Narrative Report
-          </h4>
-          <div className="text-sm text-gray-700 whitespace-pre-line font-mono bg-white p-4 rounded border">
-            {calculatedScore.narrativeReport}
-          </div>
-        </div>
+        {/* (No separate "alerts"/"narrative_report" in assessment_scores schema) */}
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      {/* Assessment Header */}
+      {/* Header */}
       <div className="bg-white border border-gray-200 rounded-lg p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -467,7 +409,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
           >
             <div className="flex items-center space-x-1">
               {instance.status === 'completed' ? <CheckCircle className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-              <span className="capitalize">{instance.status.replace('_', ' ')}</span>
+              <span className="capitalize">{String(instance.status).replace('_', ' ')}</span>
             </div>
           </div>
         </div>
@@ -488,8 +430,8 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
               <h4 className="font-medium text-red-900">Please complete all required questions</h4>
               <ul className="text-sm text-red-800 mt-1 list-disc list-inside">
                 {validationErrors.map((questionId) => {
-                  const question = template?.questions.find((q: any) => q.id === questionId)
-                  return <li key={questionId}>{question?.text || `Question ${questionId}`}</li>
+                  const q = template?.questions.find((qq: any) => qq.id === questionId)
+                  return <li key={questionId}>{q?.text || `Question ${questionId}`}</li>
                 })}
               </ul>
             </div>
@@ -497,7 +439,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
         </div>
       )}
 
-      {/* Assessment Renderer */}
+      {/* Renderer */}
       <AssessmentRenderer
         template={template}
         responses={responses}
@@ -551,7 +493,6 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
         </div>
       )}
 
-      {/* Completed actions */}
       {instance.status === 'completed' && (
         <div className="flex justify-center space-x-3 bg-white border border-gray-200 rounded-lg p-4">
           <button
