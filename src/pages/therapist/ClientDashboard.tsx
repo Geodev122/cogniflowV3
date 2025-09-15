@@ -1,7 +1,7 @@
 // src/pages/ClientDashboard.tsx
 import React, { useState, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth } from './hooks/useAuth'
 import { Layout } from '../components/Layout'
 import { PsychometricForm } from '../components/PsychometricForm'
 import { ProgressChart } from '../components/ProgressChart'
