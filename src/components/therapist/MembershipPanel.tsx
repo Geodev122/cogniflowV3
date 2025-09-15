@@ -1,188 +1,183 @@
 import React, { useEffect, useState } from 'react'
+import { AlertTriangle, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { CreditCard, Loader2 } from 'lucide-react'
+
+type SubscriptionRow = {
+  id: string
+  status: 'active' | 'past_due' | 'canceled' | 'trialing' | 'inactive'
+  plan_name: string | null
+  current_period_end: string | null
+  created_at: string
+}
+
+type InvoiceRow = {
+  id: string
+  number: string | null
+  amount_due: number | null
+  currency: string | null
+  status: 'paid' | 'open' | 'void' | 'uncollectible' | null
+  hosted_invoice_url: string | null
+  created_at: string
+}
 
 export const MembershipPanel: React.FC = () => {
-  const { profile } = useAuth()
-  const [sub, setSub] = useState<any | null>(null)
-  const [invoices, setInvoices] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const { user, profile, loading } = useAuth()
+  const [busy, setBusy] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [subs, setSubs] = useState<SubscriptionRow[]>([])
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([])
 
   useEffect(() => {
-    ;(async () => {
-      if (!profile?.id) return
-      setLoading(true)
-      const [{ data: s }, { data: inv }] = await Promise.all([
-        supabase.from('subscriptions').select('*').eq('therapist_id', profile.id).maybeSingle(),
-        supabase.from('invoices').select('*').eq('therapist_id', profile.id).order('created_at', { ascending: false }).limit(10),
-      ])
-      setSub(s || null)
-      setInvoices(inv || [])
-      setLoading(false)
-    })()
-  }, [profile?.id])
+    const run = async () => {
+      if (!user) return
+      setBusy(true); setErr(null)
+
+      try {
+        // Subscriptions (RLS should allow therapist to read own)
+        const { data: s, error: se } = await supabase
+          .from('subscriptions')
+          .select('id,status,plan_name,current_period_end,created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+        if (se) throw se
+
+        // Invoices (optional table; best-effort)
+        const { data: inv, error: ie } = await supabase
+          .from('invoices')
+          .select('id,number,amount_due,currency,status,hosted_invoice_url,created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+        if (ie) {
+          // Don’t fail the whole panel if invoices aren’t available due to RLS/absent table
+          console.warn('[MembershipPanel] invoices fetch warning:', ie.message)
+        }
+
+        setSubs((s || []) as SubscriptionRow[])
+        setInvoices((inv || []) as InvoiceRow[])
+      } catch (e: any) {
+        console.error('[MembershipPanel] load error:', e)
+        setErr('Could not load membership data.')
+      } finally {
+        setBusy(false)
+      }
+    }
+    if (user && profile?.role === 'therapist') run()
+  }, [user, profile?.role])
+
+  if (loading) {
+    return (
+      <div className="p-6 grid place-items-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
+  if (!user || profile?.role !== 'therapist') {
+    return (
+      <div className="p-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
+          <AlertTriangle className="w-8 h-8 text-amber-600 mx-auto mb-2" />
+          <h3 className="text-gray-900 font-semibold">Therapist access only</h3>
+          <p className="text-sm text-gray-600 mt-1">Please sign in as a therapist.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-4">
-      <div className="flex items-center gap-2">
-        <CreditCard className="w-6 h-6 text-blue-600" />
-        <h2 className="text-2xl font-bold text-gray-900">Membership</h2>
-      </div>
-
-      <div className="bg-white border rounded-lg shadow-sm p-4">
-        {loading ? (
-          <div className="py-8 grid place-items-center"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
-        ) : !sub ? (
-          <div className="text-sm text-gray-700">No active subscription. Please contact admin to activate your membership.</div>
-        ) : (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="text-sm">
-              <div><span className="text-gray-600">Status:</span> <span className="font-medium">{sub.status}</span></div>
-              <div><span className="text-gray-600">Renews on:</span> <span className="font-medium">{sub.renewal_on || '—'}</span></div>
-            </div>
-            <div className="text-xs text-gray-500">For upgrades/renewal changes, contact support.</div>
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200">
-          <div className="font-semibold text-sm text-gray-900">Invoices</div>
+    <div className="p-6 space-y-6">
+      <div className="bg-white border border-gray-200 rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Membership</h2>
+          {busy && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
         </div>
-        {loading ? (
-          <div className="py-8 grid place-items-center"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
-        ) : invoices.length === 0 ? (
-          <div className="py-10 text-center text-sm text-gray-600">No invoices yet.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
-                <tr>
-                  <th className="text-left px-4 py-3">Date</th>
-                  <th className="text-left px-4 py-3">Amount</th>
-                  <th className="text-left px-4 py-3">Status</th>
-                  <th className="text-right px-4 py-3">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y text-sm">
-                {invoices.map(inv => (
-                  <tr key={inv.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">{new Date(inv.created_at).toLocaleDateString()}</td>
-                    <td className="px-4 py-3">${(inv.amount_cents / 100).toFixed(2)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        inv.status === 'paid' ? 'bg-green-100 text-green-700'
-                          : inv.status === 'void' ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'
-                      }`}>{inv.status}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {inv.invoice_url ? (
-                        <a href={inv.invoice_url} target="_blank" rel="noreferrer" className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">View</a>
-                      ) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+        {err && (
+          <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
+            {err}
           </div>
         )}
+
+        {/* Subscriptions */}
+        <div className="space-y-3">
+          <div className="text-sm text-gray-700 font-medium">Your subscription</div>
+          {subs.length === 0 ? (
+            <div className="text-sm text-gray-600">No active subscription found.</div>
+          ) : (
+            <div className="grid gap-3">
+              {subs.map(s => (
+                <div key={s.id} className="p-4 border rounded-lg bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-gray-900">
+                        {s.plan_name || 'Thera-PY Plan'}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        Status: <span className="font-medium capitalize">{s.status}</span>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      Since {new Date(s.created_at).toLocaleDateString()}
+                      {s.current_period_end && (
+                        <div>Renews {new Date(s.current_period_end).toLocaleDateString()}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Invoices */}
+        <div className="mt-6 space-y-3">
+          <div className="text-sm text-gray-700 font-medium">Invoices</div>
+          {invoices.length === 0 ? (
+            <div className="text-sm text-gray-600">No invoices available.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-600">
+                    <th className="py-2 pr-3">Date</th>
+                    <th className="py-2 pr-3">Number</th>
+                    <th className="py-2 pr-3">Amount</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3">Link</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.map(inv => (
+                    <tr key={inv.id} className="border-t">
+                      <td className="py-2 pr-3">{new Date(inv.created_at).toLocaleDateString()}</td>
+                      <td className="py-2 pr-3">{inv.number || '—'}</td>
+                      <td className="py-2 pr-3">
+                        {typeof inv.amount_due === 'number'
+                          ? `${(inv.amount_due / 100).toFixed(2)} ${inv.currency?.toUpperCase() || ''}`
+                          : '—'}
+                      </td>
+                      <td className="py-2 pr-3 capitalize">{inv.status || '—'}</td>
+                      <td className="py-2 pr-3">
+                        {inv.hosted_invoice_url ? (
+                          <a
+                            href={inv.hosted_invoice_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            View
+                          </a>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
 }
-export default import React, { useEffect, useState } from 'react'
-import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../hooks/useAuth'
-import { CreditCard, Loader2 } from 'lucide-react'
-
-export const MembershipPanel: React.FC = () => {
-  const { profile } = useAuth()
-  const [sub, setSub] = useState<any | null>(null)
-  const [invoices, setInvoices] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    ;(async () => {
-      if (!profile?.id) return
-      setLoading(true)
-      const [{ data: s }, { data: inv }] = await Promise.all([
-        supabase.from('subscriptions').select('*').eq('therapist_id', profile.id).maybeSingle(),
-        supabase.from('invoices').select('*').eq('therapist_id', profile.id).order('created_at', { ascending: false }).limit(10),
-      ])
-      setSub(s || null)
-      setInvoices(inv || [])
-      setLoading(false)
-    })()
-  }, [profile?.id])
-
-  return (
-    <div className="p-6 max-w-5xl mx-auto space-y-4">
-      <div className="flex items-center gap-2">
-        <CreditCard className="w-6 h-6 text-blue-600" />
-        <h2 className="text-2xl font-bold text-gray-900">Membership</h2>
-      </div>
-
-      <div className="bg-white border rounded-lg shadow-sm p-4">
-        {loading ? (
-          <div className="py-8 grid place-items-center"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
-        ) : !sub ? (
-          <div className="text-sm text-gray-700">No active subscription. Please contact admin to activate your membership.</div>
-        ) : (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="text-sm">
-              <div><span className="text-gray-600">Status:</span> <span className="font-medium">{sub.status}</span></div>
-              <div><span className="text-gray-600">Renews on:</span> <span className="font-medium">{sub.renewal_on || '—'}</span></div>
-            </div>
-            <div className="text-xs text-gray-500">For upgrades/renewal changes, contact support.</div>
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200">
-          <div className="font-semibold text-sm text-gray-900">Invoices</div>
-        </div>
-        {loading ? (
-          <div className="py-8 grid place-items-center"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
-        ) : invoices.length === 0 ? (
-          <div className="py-10 text-center text-sm text-gray-600">No invoices yet.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
-                <tr>
-                  <th className="text-left px-4 py-3">Date</th>
-                  <th className="text-left px-4 py-3">Amount</th>
-                  <th className="text-left px-4 py-3">Status</th>
-                  <th className="text-right px-4 py-3">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y text-sm">
-                {invoices.map(inv => (
-                  <tr key={inv.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">{new Date(inv.created_at).toLocaleDateString()}</td>
-                    <td className="px-4 py-3">${(inv.amount_cents / 100).toFixed(2)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        inv.status === 'paid' ? 'bg-green-100 text-green-700'
-                          : inv.status === 'void' ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'
-                      }`}>{inv.status}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {inv.invoice_url ? (
-                        <a href={inv.invoice_url} target="_blank" rel="noreferrer" className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">View</a>
-                      ) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-export default MembershipPanel
-
