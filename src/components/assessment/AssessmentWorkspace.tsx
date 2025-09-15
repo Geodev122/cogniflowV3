@@ -8,6 +8,8 @@ import {
   X,
   AlertTriangle,
   Filter,
+  BarChart3,
+  Printer
 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -23,13 +25,24 @@ type Props = {
   onClose?: () => void
 }
 
-/**
- * AssessmentWorkspace
- * - Left: AssessmentInstancesList (filters/search/sort/pagination)
- * - Right: Active Assessment (AssessmentForm)
- * - Supabase-wired: fetches/refreshes instances and related data
- * - Reads ?clientId= to prefilter to a client and reflect in the UI chip
- */
+type LatestScore = {
+  id: string
+  instance_id: string
+  raw_score: number
+  scaled_score: number | null
+  percentile: number | null
+  t_score: number | null
+  z_score: number | null
+  interpretation_category: string | null
+  interpretation_description: string | null
+  clinical_significance: string | null
+  severity_level: string | null
+  recommendations: string | null
+  therapist_notes: string | null
+  auto_generated: boolean
+  calculated_at: string
+}
+
 const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) => {
   const { instances, refetch } = useAssessments()
 
@@ -41,12 +54,10 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
   const [clientFilterId, setClientFilterId] = useState<string | null>(urlClientId)
   const [clientFilterName, setClientFilterName] = useState<string>('')
 
-  // Keep local state in sync with URL changes (e.g., back/forward navigation)
   useEffect(() => {
     setClientFilterId(urlClientId)
   }, [urlClientId])
 
-  // Fetch small client display name for the chip (non-fatal if RLS blocks)
   useEffect(() => {
     let cancel = false
     const loadClient = async () => {
@@ -79,6 +90,11 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
   const [loadingActive, setLoadingActive] = useState(false)
   const [activeError, setActiveError] = useState<string | null>(null)
 
+  /** Latest score for the active instance (Phase 3 addition) */
+  const [latestScore, setLatestScore] = useState<LatestScore | null>(null)
+  const [loadingScore, setLoadingScore] = useState(false)
+  const [scoreError, setScoreError] = useState<string | null>(null)
+
   /** When list refreshes, relink to freshest copy of the active instance */
   const latestActiveFromList = useMemo(() => {
     if (!active) return null
@@ -87,7 +103,6 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
 
   useEffect(() => {
     if (latestActiveFromList) {
-      // Preserve local relations if list version lacks them
       setActive(prev => {
         if (!prev) return latestActiveFromList
         return {
@@ -180,7 +195,51 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
     [ensureClientLoaded, ensureTemplateLoaded]
   )
 
-  const clearActive = () => setActive(null)
+  const clearActive = () => {
+    setActive(null)
+    setLatestScore(null)
+    setScoreError(null)
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Phase 3: fetch latest score when active completed or changes
+  // ────────────────────────────────────────────────────────────────────────────
+  const fetchLatestScore = useCallback(
+    async (instanceId: string) => {
+      setLoadingScore(true)
+      setScoreError(null)
+      try {
+        const { data, error } = await supabase
+          .from('assessment_scores')
+          .select(
+            'id,instance_id,raw_score,scaled_score,percentile,t_score,z_score,interpretation_category,interpretation_description,clinical_significance,severity_level,recommendations,therapist_notes,auto_generated,calculated_at'
+          )
+          .eq('instance_id', instanceId)
+          .order('calculated_at', { ascending: false })
+          .limit(1)
+
+        if (error) throw error
+        setLatestScore((data && data.length ? data[0] : null) as LatestScore | null)
+      } catch (e: any) {
+        console.error('[AssessmentWorkspace] fetchLatestScore error:', e)
+        setLatestScore(null)
+        setScoreError('Could not load latest score.')
+      } finally {
+        setLoadingScore(false)
+      }
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (!active?.id) return
+    if (active.status === 'completed') {
+      fetchLatestScore(active.id)
+    } else {
+      setLatestScore(null)
+      setScoreError(null)
+    }
+  }, [active?.id, active?.status, fetchLatestScore])
 
   // ────────────────────────────────────────────────────────────────────────────
   // Right pane pieces
@@ -239,6 +298,90 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
     )
   }
 
+  const ResultsCard = () => {
+    if (active?.status !== 'completed') return null
+
+    const max = Number(
+      (active?.template as any)?.scoring_config?.max_score ?? (active?.template as any)?.schema?.scoring?.max_score ?? 0
+    )
+    const raw = latestScore?.raw_score ?? null
+    const pct = raw != null && max ? Math.round((Number(raw) / max) * 100) : null
+
+    return (
+      <div className="mt-4 bg-white border border-gray-200 rounded-lg p-4">
+        <div className="flex items-start justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-gray-500 text-xs">
+              <BarChart3 className="w-4 h-4" />
+              <span>Results</span>
+            </div>
+            <h4 className="text-base font-semibold text-gray-900">
+              {active?.title || active?.template?.name}
+            </h4>
+            {latestScore?.calculated_at && (
+              <div className="text-xs text-gray-500">
+                Scored: {new Date(latestScore.calculated_at).toLocaleString()}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded border text-sm hover:bg-gray-50"
+            title="Export (print to PDF)"
+          >
+            <Printer className="w-4 h-4" />
+            Export
+          </button>
+        </div>
+
+        {/* States */}
+        {loadingScore && (
+          <div className="mt-3 text-sm text-gray-600">Loading latest score…</div>
+        )}
+        {scoreError && (
+          <div className="mt-3 bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            {scoreError}
+          </div>
+        )}
+
+        {!loadingScore && !scoreError && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+              <div className="text-center border rounded-lg p-3">
+                <div className="text-2xl font-bold">{raw ?? '—'}</div>
+                <div className="text-xs text-gray-500">Raw Score</div>
+              </div>
+              <div className="text-center border rounded-lg p-3">
+                <div className="text-2xl font-bold">{pct != null ? `${pct}%` : '—'}</div>
+                <div className="text-xs text-gray-500">Percent of Max</div>
+              </div>
+              <div className="text-center border rounded-lg p-3">
+                <div className="text-lg font-semibold">
+                  {latestScore?.interpretation_category || '—'}
+                </div>
+                <div className="text-xs text-gray-500">Interpretation</div>
+              </div>
+            </div>
+
+            {latestScore?.interpretation_description && (
+              <div className="mt-3 text-sm text-gray-700">
+                <span className="font-medium text-gray-800">Summary: </span>
+                {latestScore.interpretation_description}
+              </div>
+            )}
+            {latestScore?.recommendations && (
+              <div className="mt-2 text-sm text-gray-700">
+                <span className="font-medium text-gray-800">Recommendations: </span>
+                {latestScore.recommendations}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+
   const RightPaneBody = () => {
     if (loadingActive) {
       return (
@@ -273,22 +416,22 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
       <div className="p-4">
         <AssessmentForm
           instance={active}
-          onResponse={() => {
-            // no-op; AssessmentForm already upserts per response
-          }}
+          onResponse={() => { /* no-op; AssessmentForm already upserts per response */ }}
           onSave={() => {
-            // keep list in sync (progress/status might change)
-            refetch()
+            refetch() // keep list in sync (progress/status might change)
           }}
           onComplete={async () => {
-            // After completion, refresh list and reload active (to reflect completed state & results snapshot)
             await refetch()
             await openInstanceById(active.id)
+            await fetchLatestScore(active.id) // ensure results panel populates immediately
           }}
           readonly={false}
           showNavigation={true}
           showProgress={true}
         />
+
+        {/* Phase 3: Results panel for completed assessments */}
+        <ResultsCard />
       </div>
     )
   }
@@ -337,9 +480,7 @@ const AssessmentWorkspace: React.FC<Props> = ({ initialInstanceId, onClose }) =>
         <div className="xl:col-span-5 border-r border-gray-200 min-h-0">
           <AssessmentInstancesList
             onOpenInstance={handleOpenFromList}
-            /** Provide initial client filter from URL so list narrows + preselects client in Assign modal */
             initialClientId={clientFilterId || undefined}
-            /** Let the list bubble up client filter changes (for URL sync) */
             onClientFilterChange={(nextId) => {
               setClientFilterId(nextId || null)
               const sp = new URLSearchParams(searchParams)
