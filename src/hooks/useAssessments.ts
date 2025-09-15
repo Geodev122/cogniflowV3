@@ -5,17 +5,24 @@ import { useAuth } from './useAuth'
 import { isRecursionError } from '../utils/helpers'
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Types (DB-aligned)
+   Types (DB-aligned + UI-normalized)
 ──────────────────────────────────────────────────────────────────────────── */
 export interface AssessmentTemplate {
   id: string
   name: string
   abbreviation: string | null
   version: string | null
-  schema: any | null          // JSONB
-  scoring: any | null         // JSONB
+  schema: any | null          // JSONB (DB)
+  scoring: any | null         // JSONB (DB)
   is_active: boolean
   created_at: string
+
+  // UI-normalized fields (derived from schema/scoring for back-compat)
+  questions?: any[]
+  description?: string | null
+  interpretation_rules?: any | null
+  estimated_duration_minutes?: number | null
+  category?: string | null
 }
 
 export interface AssessmentInstance {
@@ -56,6 +63,35 @@ const INSTANCE_COLS =
 const PROFILE_COLS = 'id,first_name,last_name,email'
 
 /* ────────────────────────────────────────────────────────────────────────────
+   Helpers
+──────────────────────────────────────────────────────────────────────────── */
+function normalizeTemplate<T extends Partial<AssessmentTemplate>>(t: T): AssessmentTemplate {
+  const schema = (t.schema ?? {}) as any
+  const meta = (schema.meta ?? {}) as any
+
+  return {
+    id: t.id as string,
+    name: t.name as string,
+    abbreviation: t.abbreviation ?? null,
+    version: t.version ?? null,
+    schema: t.schema ?? null,
+    scoring: t.scoring ?? null,
+    is_active: Boolean(t.is_active),
+    created_at: t.created_at as string,
+
+    // Back-compat surface expected by UI
+    questions: Array.isArray(schema.questions) ? schema.questions : [],
+    description: (schema.description ?? meta.description ?? null) as string | null,
+    interpretation_rules: schema.interpretation_rules ?? null,
+    estimated_duration_minutes:
+      typeof meta.estimated_duration_minutes === 'number'
+        ? meta.estimated_duration_minutes
+        : null,
+    category: (meta.category ?? null) as string | null,
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
    Hook
 ──────────────────────────────────────────────────────────────────────────── */
 export const useAssessments = () => {
@@ -87,7 +123,8 @@ export const useAssessments = () => {
         return
       }
 
-      setTemplates((data || []) as AssessmentTemplate[])
+      const norm = (data || []).map((t: any) => normalizeTemplate(t))
+      setTemplates(norm)
     } catch (err) {
       console.error('[useAssessments] templates crash:', err)
       setError('Failed to load assessment templates.')
@@ -112,7 +149,11 @@ export const useAssessments = () => {
         .order('assigned_at', { ascending: false })
 
       if (!error && data) {
-        setInstances(data as AssessmentInstance[])
+        const withNorm = (data as any[]).map(row => ({
+          ...row,
+          template: row.template ? normalizeTemplate(row.template) : null,
+        }))
+        setInstances(withNorm as AssessmentInstance[])
         return
       }
 
@@ -158,7 +199,7 @@ export const useAssessments = () => {
       ])
 
       const templatesById = new Map<string, AssessmentTemplate>()
-      ;(tRows || []).forEach((t: any) => templatesById.set(t.id, t))
+      ;(tRows || []).forEach((t: any) => templatesById.set(t.id, normalizeTemplate(t)))
 
       const clientsById = new Map<string, AssessmentInstance['client']>()
       ;(cRows || []).forEach((c: any) =>
@@ -333,8 +374,9 @@ export const useAssessments = () => {
     deleteInstance,
     getInstancesByClient,
     getInstancesByStatus,
-    // kept for parity with your usage
-    getTemplatesByCategory: (_category: string) => templates, // no category in DB; return all or filter by tag in future
+    // now derived from schema.meta.category if present
+    getTemplatesByCategory: (category: string) =>
+      templates.filter(t => (t.category || '').toLowerCase() === (category || '').toLowerCase()),
     refetch: async () => {
       await Promise.all([fetchTemplates(), fetchInstances()])
     },
