@@ -1,7 +1,9 @@
-//client home
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Calendar, ClipboardList, ChevronRight, Activity, ShieldCheck, AlertTriangle } from 'lucide-react'
+import {
+  Calendar, ClipboardList, ChevronRight, Activity, ShieldCheck, MapPin,
+  Users, Search, HeartHandshake
+} from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { MobileShell } from '../../components/client/MobileShell'
@@ -24,7 +26,7 @@ export default function ClientHome() {
       if (!profile) return
       setLoading(true); setError(null)
       try {
-        // Next appointment today→future
+        // Next appointment today → future
         const nowIso = new Date().toISOString()
         const { data: appts, error: apptErr } = await supabase
           .from('appointments')
@@ -36,6 +38,7 @@ export default function ClientHome() {
           .gte('appointment_date', nowIso)
           .order('appointment_date', { ascending: true })
           .limit(1)
+
         if (apptErr) throw apptErr
         if (!cancel) {
           const a = appts?.[0]
@@ -43,14 +46,14 @@ export default function ClientHome() {
             id: a.id,
             when: new Date(a.appointment_date).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }),
             type: a.appointment_type,
-            therapist_name: `${a.therapist?.first_name || ''} ${a.therapist?.last_name || ''}`.trim() || undefined
+            therapist_name: `${a?.therapist?.first_name || ''} ${a?.therapist?.last_name || ''}`.trim() || undefined
           } : null)
         }
 
         // Top assessments (assigned/in_progress first)
         const { data: inst, error: instErr } = await supabase
           .from('assessment_instances')
-          .select('id, title, status, due_date, template_id')
+          .select('id, title, status, due_date, template_id, assigned_at')
           .eq('client_id', profile.id)
           .order('assigned_at', { ascending: false })
           .limit(8)
@@ -67,23 +70,21 @@ export default function ClientHome() {
         }
 
         const sorted = (inst || []).sort((a, b) => {
-          const s = (v: string) => v === 'assigned' ? 0 : v === 'in_progress' ? 1 : 2
-          return s(a.status) - s(b.status)
+          const score = (v: string) => v === 'assigned' ? 0 : v === 'in_progress' ? 1 : 2
+          return score(a.status) - score(b.status)
         })
 
         if (!cancel) {
-          setAssess(
-            sorted.map(i => ({
-              id: i.id,
-              title: i.title || 'Assessment',
-              status: i.status,
-              due_date: i.due_date,
-              abbrev: abbrevMap.get(i.template_id) || null
-            }))
-          )
+          setAssess(sorted.map(i => ({
+            id: i.id,
+            title: i.title || 'Assessment',
+            status: i.status,
+            due_date: i.due_date,
+            abbrev: abbrevMap.get(i.template_id) || null
+          })))
         }
 
-        // optional: alerts based on latest results
+        // Optional: count alerts from latest results
         const ids = (inst || []).map(i => i.id)
         if (ids.length) {
           const { data: results } = await supabase
@@ -92,11 +93,12 @@ export default function ClientHome() {
             .in('instance_id', ids)
             .order('created_at', { ascending: false })
             .limit(20)
-          const count = (results || []).reduce((acc, r:any) => acc + (Array.isArray(r.alerts) ? r.alerts.length : 0), 0)
+          const count = (results || []).reduce((acc, r: any) => acc + (Array.isArray(r.alerts) ? r.alerts.length : 0), 0)
           if (!cancel) setAlertsCount(count)
         }
-      } catch (e:any) {
-        console.error('[ClientHome] load error', e); if (!cancel) setError('Could not load your dashboard.')
+      } catch (e: any) {
+        console.error('[ClientHome] load error', e)
+        if (!cancel) setError('Could not load your dashboard.')
       } finally {
         if (!cancel) setLoading(false)
       }
@@ -116,45 +118,44 @@ export default function ClientHome() {
           <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">{error}</div>
         </div>
       ) : (
-        <div className="p-3 space-y-4">
-          {/* Welcome */}
-          <div className="rounded-xl p-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-            <div className="text-sm opacity-80">Welcome back</div>
-            <div className="text-xl font-semibold mt-0.5">{profile?.first_name}</div>
-            <div className="mt-3 text-xs text-blue-100">
-              Track your progress, complete assigned activities, and manage your sessions — all here.
+        <div className="p-3 space-y-4 max-w-screen-sm mx-auto">
+          {/* Hero */}
+          <div className="rounded-2xl p-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow">
+            <div className="text-sm/5 opacity-90">Welcome back</div>
+            <div className="text-2xl font-semibold mt-0.5">{profile?.first_name}</div>
+            <div className="mt-3 text-[13px] text-blue-100">
+              Track progress, complete activities, and manage your sessions—all in one place.
             </div>
           </div>
 
-          {/* KPI cards (mobile) */}
+          {/* KPIs */}
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => navigate('/client/assessments')}
-              className="bg-white border border-gray-200 rounded-xl p-3 text-left active:scale-[0.99]"
+              className="bg-white border border-gray-200 rounded-xl p-3 text-left active:scale-[0.99] shadow-sm"
             >
               <div className="flex items-center justify-between">
-                <div className="text-xs text-gray-500">Assessments</div>
+                <div className="text-[12px] text-gray-500">Assignments</div>
                 <ClipboardList className="w-4 h-4 text-blue-600" />
               </div>
-              <div className="mt-1 text-lg font-semibold">{assess.filter(a => a.status !== 'completed').length}</div>
+              <div className="mt-1 text-xl font-semibold">{assess.filter(a => a.status !== 'completed').length}</div>
               <div className="text-[11px] text-gray-500">to complete</div>
             </button>
-
             <button
               onClick={() => navigate('/client/cases')}
-              className="bg-white border border-gray-200 rounded-xl p-3 text-left active:scale-[0.99]"
+              className="bg-white border border-gray-200 rounded-xl p-3 text-left active:scale-[0.99] shadow-sm"
             >
               <div className="flex items-center justify-between">
-                <div className="text-xs text-gray-500">Alerts</div>
+                <div className="text-[12px] text-gray-500">Alerts</div>
                 <Activity className="w-4 h-4 text-amber-600" />
               </div>
-              <div className="mt-1 text-lg font-semibold">{alertsCount}</div>
+              <div className="mt-1 text-xl font-semibold">{alertsCount}</div>
               <div className="text-[11px] text-gray-500">latest from results</div>
             </button>
           </div>
 
           {/* Next appointment */}
-          <div className="bg-white border border-gray-200 rounded-xl">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-purple-600" />
@@ -166,13 +167,12 @@ export default function ClientHome() {
               {!nextAppt ? (
                 <div className="text-sm text-gray-600">No upcoming appointments.</div>
               ) : (
-                <button
-                  onClick={() => navigate('/client/appointments')}
-                  className="w-full flex items-center justify-between text-left"
-                >
+                <button onClick={() => navigate('/client/appointments')} className="w-full flex items-center justify-between text-left">
                   <div>
                     <div className="font-medium text-gray-900">{nextAppt.when}</div>
-                    <div className="text-xs text-gray-600">{nextAppt.type || 'Session'} {nextAppt.therapist_name ? `• with ${nextAppt.therapist_name}` : ''}</div>
+                    <div className="text-xs text-gray-600">
+                      {nextAppt.type || 'Session'}{nextAppt.therapist_name ? ` • with ${nextAppt.therapist_name}` : ''}
+                    </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
                 </button>
@@ -181,7 +181,7 @@ export default function ClientHome() {
           </div>
 
           {/* Quick actions */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
             <div className="text-sm font-medium text-gray-900 mb-3">Quick actions</div>
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -200,26 +200,54 @@ export default function ClientHome() {
                 <div className="mt-1 text-sm font-medium">Assignments</div>
                 <div className="text-[11px] text-gray-500">Fill now</div>
               </button>
+              {/* Therapist Finder entry points (list/map/swipe to be built in Phase 2) */}
+              <button
+                onClick={() => navigate('/client/find-therapist?mode=list')}
+                className="border border-gray-200 rounded-lg p-3 text-left active:scale-[0.99]"
+              >
+                <Users className="w-5 h-5 text-indigo-600" />
+                <div className="mt-1 text-sm font-medium">Find Therapist</div>
+                <div className="text-[11px] text-gray-500">List mode</div>
+              </button>
+              <button
+                onClick={() => navigate('/client/find-therapist?mode=map')}
+                className="border border-gray-200 rounded-lg p-3 text-left active:scale-[0.99]"
+              >
+                <MapPin className="w-5 h-5 text-rose-600" />
+                <div className="mt-1 text-sm font-medium">Nearby</div>
+                <div className="text-[11px] text-gray-500">Map mode</div>
+              </button>
             </div>
+
+            {/* Single prominent CTA for swipe matchmaking */}
+            <button
+              onClick={() => navigate('/client/find-therapist?mode=swipe')}
+              className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 text-white py-3 font-medium active:scale-[0.99]"
+            >
+              <HeartHandshake className="w-5 h-5" />
+              Smart Match (Swipe)
+            </button>
           </div>
 
-          {/* Recently assigned assessments */}
-          <div className="bg-white border border-gray-200 rounded-xl">
+          {/* Recent assignments */}
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
             <div className="px-4 py-3 border-b border-gray-100 text-sm font-medium text-gray-900">Recent assignments</div>
             <div className="divide-y">
               {assess.length === 0 && (
                 <div className="p-4 text-sm text-gray-600">No recent assignments.</div>
               )}
-              {assess.slice(0,4).map(a => (
+              {assess.slice(0, 4).map(a => (
                 <button
                   key={a.id}
-                  onClick={() => navigate(`/client/assessments/${a.id}`)}
+                  onClick={() => navigate(`/client/assessments?instanceId=${a.id}`)}
                   className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center justify-between"
                 >
                   <div>
                     <div className="text-sm font-medium text-gray-900">{a.title}</div>
                     <div className="text-[11px] text-gray-600">
-                      {(a.abbrev ? `${a.abbrev} • ` : '') + (a.status === 'completed' ? 'Completed' : (a.due_date ? `Due ${new Date(a.due_date).toLocaleDateString()}` : 'Assigned'))}
+                      {(a.abbrev ? `${a.abbrev} • ` : '') + (a.status === 'completed'
+                        ? 'Completed'
+                        : (a.due_date ? `Due ${new Date(a.due_date).toLocaleDateString()}` : 'Assigned'))}
                     </div>
                   </div>
                   {a.status === 'completed'
@@ -231,9 +259,9 @@ export default function ClientHome() {
             </div>
           </div>
 
-          {/* Info / safety */}
+          {/* Safety */}
           <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-3 text-xs flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" />
+            <Search className="w-4 h-4 opacity-70" />
             If this is an emergency, call your local emergency number.
           </div>
         </div>
