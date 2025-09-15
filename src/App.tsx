@@ -4,20 +4,19 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useAuth } from './hooks/useAuth'
 import { ProtectedRoute } from './components/therapist/ProtectedRoute'
 
-// Auth pages (therapist-facing auth screens)
+// Auth (therapist-facing auth screens)
 import { Login } from './pages/therapist/Login'
 import { Register } from './pages/therapist/Register'
 
-// Lazy stacks
+// Therapist stack
 const TherapistDashboard = React.lazy(() => import('./pages/therapist/TherapistDashboard'))
+const AssessmentsPage = React.lazy(() => import('./pages/therapist/AssessmentsPage'))
 
-// Client portal pages (new)
+// Patient stack (mobile-first)
 const ClientHome = React.lazy(() => import('./pages/client/ClientHome'))
 const ClientAssessments = React.lazy(() => import('./pages/client/Assessments'))
+const ClientAssessmentPlayer = React.lazy(() => import('./pages/client/AssessmentPlayer'))
 const ClientProfile = React.lazy(() => import('./pages/client/Profile'))
-
-// Therapist assessments page
-const AssessmentsPage = React.lazy(() => import('./pages/therapist/AssessmentsPage'))
 
 const LoadingSpinner = ({ message = 'Loading...' }: { message?: string }) => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -37,7 +36,9 @@ class ErrorBoundary extends React.Component<
     this.state = { hasError: false }
   }
   static getDerivedStateFromError(error: Error) { return { hasError: true, error } }
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) { console.error('App Error:', error, errorInfo) }
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('App Error:', error, errorInfo)
+  }
   render() {
     if (this.state.hasError) {
       return (
@@ -51,8 +52,10 @@ class ErrorBoundary extends React.Component<
             </div>
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Something went wrong</h2>
             <p className="text-gray-600 mb-4">Please refresh the page to try again.</p>
-            <button onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
               Refresh Page
             </button>
           </div>
@@ -63,7 +66,7 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-function App() {
+export default function App() {
   const { user, profile, loading, error } = useAuth()
 
   if (loading) return <LoadingSpinner message="Initializing Thera-PY..." />
@@ -80,8 +83,10 @@ function App() {
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Connection Error</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
             Retry
           </button>
         </div>
@@ -98,7 +103,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
 
-            {/* Therapist area */}
+            {/* Therapist stack */}
             <Route
               path="/therapist"
               element={
@@ -124,7 +129,7 @@ function App() {
               }
             />
 
-            {/* Client area */}
+            {/* Patient stack */}
             <Route
               path="/client"
               element={
@@ -138,6 +143,14 @@ function App() {
               element={
                 <ProtectedRoute role="client">
                   <ClientAssessments />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/assessments/:instanceId"
+              element={
+                <ProtectedRoute role="client">
+                  <ClientAssessmentPlayer />
                 </ProtectedRoute>
               }
             />
@@ -170,5 +183,3 @@ function App() {
     </ErrorBoundary>
   )
 }
-
-export default App
