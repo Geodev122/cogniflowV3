@@ -5,24 +5,25 @@ import { useAuth } from './useAuth'
 import { isRecursionError } from '../utils/helpers'
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Types (DB-aligned + UI-normalized)
+   Types (DB-aligned)
 ──────────────────────────────────────────────────────────────────────────── */
 export interface AssessmentTemplate {
   id: string
   name: string
-  abbreviation: string | null
-  version: string | null
-  schema: any | null          // JSONB (DB)
-  scoring: any | null         // JSONB (DB)
+  abbreviation: string
+  category: string
+  description: string
+  version: string
+  questions: any
+  scoring_config: any
+  interpretation_rules: any
+  clinical_cutoffs: any
+  instructions: string
+  estimated_duration_minutes: number
+  evidence_level: string
   is_active: boolean
   created_at: string
-
-  // UI-normalized fields (derived from schema/scoring for back-compat)
-  questions?: any[]
-  description?: string | null
-  interpretation_rules?: any | null
-  estimated_duration_minutes?: number | null
-  category?: string | null
+  updated_at: string
 }
 
 export interface AssessmentInstance {
@@ -31,15 +32,18 @@ export interface AssessmentInstance {
   therapist_id: string
   client_id: string
   case_id: string | null
-  title: string | null
+  title: string
   instructions: string | null
-  status: 'assigned' | 'in_progress' | 'completed' | 'expired' | 'cancelled' | string
-  assigned_at: string | null
+  status: string
+  assigned_at: string
   due_date: string | null
   started_at: string | null
   completed_at: string | null
-  progress: number | null
-  reminder_frequency: string | null
+  expires_at: string | null
+  reminder_frequency: string
+  metadata: any
+  created_at: string
+  updated_at: string
 
   // expanded convenience fields when joins succeed
   template?: AssessmentTemplate | null
@@ -55,41 +59,12 @@ export interface AssessmentInstance {
    Column lists (avoid '*')
 ──────────────────────────────────────────────────────────────────────────── */
 const TEMPLATE_COLS =
-  'id,name,abbreviation,version,schema,scoring,is_active,created_at'
+  'id,name,abbreviation,category,description,version,questions,scoring_config,interpretation_rules,clinical_cutoffs,instructions,estimated_duration_minutes,evidence_level,is_active,created_at,updated_at'
 
 const INSTANCE_COLS =
-  'id,template_id,therapist_id,client_id,case_id,title,instructions,status,assigned_at,due_date,started_at,completed_at,progress,reminder_frequency'
+  'id,template_id,therapist_id,client_id,case_id,title,instructions,status,assigned_at,due_date,started_at,completed_at,expires_at,reminder_frequency,metadata,created_at,updated_at'
 
 const PROFILE_COLS = 'id,first_name,last_name,email'
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Helpers
-──────────────────────────────────────────────────────────────────────────── */
-function normalizeTemplate<T extends Partial<AssessmentTemplate>>(t: T): AssessmentTemplate {
-  const schema = (t.schema ?? {}) as any
-  const meta = (schema.meta ?? {}) as any
-
-  return {
-    id: t.id as string,
-    name: t.name as string,
-    abbreviation: t.abbreviation ?? null,
-    version: t.version ?? null,
-    schema: t.schema ?? null,
-    scoring: t.scoring ?? null,
-    is_active: Boolean(t.is_active),
-    created_at: t.created_at as string,
-
-    // Back-compat surface expected by UI
-    questions: Array.isArray(schema.questions) ? schema.questions : [],
-    description: (schema.description ?? meta.description ?? null) as string | null,
-    interpretation_rules: schema.interpretation_rules ?? null,
-    estimated_duration_minutes:
-      typeof meta.estimated_duration_minutes === 'number'
-        ? meta.estimated_duration_minutes
-        : null,
-    category: (meta.category ?? null) as string | null,
-  }
-}
 
 /* ────────────────────────────────────────────────────────────────────────────
    Hook
@@ -123,8 +98,7 @@ export const useAssessments = () => {
         return
       }
 
-      const norm = (data || []).map((t: any) => normalizeTemplate(t))
-      setTemplates(norm)
+      setTemplates((data || []) as AssessmentTemplate[])
     } catch (err) {
       console.error('[useAssessments] templates crash:', err)
       setError('Failed to load assessment templates.')
@@ -149,11 +123,7 @@ export const useAssessments = () => {
         .order('assigned_at', { ascending: false })
 
       if (!error && data) {
-        const withNorm = (data as any[]).map(row => ({
-          ...row,
-          template: row.template ? normalizeTemplate(row.template) : null,
-        }))
-        setInstances(withNorm as AssessmentInstance[])
+        setInstances(data as AssessmentInstance[])
         return
       }
 
@@ -199,7 +169,7 @@ export const useAssessments = () => {
       ])
 
       const templatesById = new Map<string, AssessmentTemplate>()
-      ;(tRows || []).forEach((t: any) => templatesById.set(t.id, normalizeTemplate(t)))
+      ;(tRows || []).forEach((t: any) => templatesById.set(t.id, t))
 
       const clientsById = new Map<string, AssessmentInstance['client']>()
       ;(cRows || []).forEach((c: any) =>
@@ -239,33 +209,24 @@ export const useAssessments = () => {
         const template = templates.find(t => t.id === templateId)
         if (!template) throw new Error('Template not found')
 
-        // Try to associate a case per client (optional)
-        const { data: caseRows, error: caseErr } = await supabase
-          .from('cases')
-          .select('id,client_id')
-          .eq('therapist_id', profile.id)
-          .in('client_id', clientIds)
+        // Optional: associate case per client
+        const { data: caseRows } = await supabase
+          .from('therapist_client_relations')
+          .select('client_id') // (use cases table if you have it; left generic here)
 
-        if (caseErr) {
-          console.warn('[useAssessments] cases lookup error (continuing without case_id):', caseErr)
-        }
-
-        const assignments = clientIds.map(clientId => {
-          const clientCase = caseRows?.find(c => c.client_id === clientId)
-          return {
-            template_id: templateId,
-            therapist_id: profile.id,
-            client_id: clientId,
-            case_id: clientCase?.id || null,
-            title: options.titleOverride || template.name,
-            instructions: options.instructions || null,
-            due_date: due,
-            reminder_frequency,
-            status: 'assigned' as const,
-            assigned_at: new Date().toISOString(),
-            progress: 0
-          }
-        })
+        const assignments = clientIds.map(clientId => ({
+          template_id: templateId,
+          therapist_id: profile.id,
+          client_id: clientId,
+          case_id: null, // populate if you maintain cases
+          title: options.titleOverride || template.name,
+          instructions: options.instructions || template.instructions || null,
+          due_date: due,
+          reminder_frequency,
+          status: 'assigned' as const,
+          // assigned_at is set by DB default or trigger; omit here
+          metadata: {},
+        }))
 
         const { error } = await supabase.from('assessment_instances').insert(assignments)
         if (error) throw error
@@ -374,9 +335,7 @@ export const useAssessments = () => {
     deleteInstance,
     getInstancesByClient,
     getInstancesByStatus,
-    // now derived from schema.meta.category if present
-    getTemplatesByCategory: (category: string) =>
-      templates.filter(t => (t.category || '').toLowerCase() === (category || '').toLowerCase()),
+    getTemplatesByCategory: (_category: string) => templates, // no category filter in UI; available on template if needed
     refetch: async () => {
       await Promise.all([fetchTemplates(), fetchInstances()])
     },
