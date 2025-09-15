@@ -1,8 +1,13 @@
 // src/components/assessment/AssessmentReport.tsx
 import React, { useMemo, useRef } from 'react'
-import { FileText, Printer, Download, User, Calendar, Activity } from 'lucide-react'
+import { FileText, Printer, User, Calendar, Activity, CheckCircle } from 'lucide-react'
 
 type Props = {
+  /** Branding */
+  brandName: string
+  logoUrl?: string | null
+  therapistName?: string | null
+
   /** Template meta used for headings/limits */
   template: {
     name: string
@@ -12,15 +17,16 @@ type Props = {
     scoring_config?: { max_score?: number | null }
     category?: string | null
   }
+
   /** Instance meta for context */
   instance: {
     id: string
     title?: string | null
     assigned_at?: string | null
     completed_at?: string | null
-    therapist_id?: string
     client?: { first_name?: string | null; last_name?: string | null; email?: string | null } | null
   }
+
   /** Score payload to display */
   score: {
     raw: number
@@ -44,7 +50,7 @@ type Props = {
  * - Renders a clean summary suitable for printing to PDF
  * - No external deps; uses window.open + window.print
  */
-const AssessmentReport: React.FC<Props> = ({ template, instance, score }) => {
+const AssessmentReport: React.FC<Props> = ({ brandName, logoUrl, therapistName, template, instance, score }) => {
   const ref = useRef<HTMLDivElement | null>(null)
 
   const maxScore = template.scoring_config?.max_score ?? null
@@ -64,17 +70,20 @@ const AssessmentReport: React.FC<Props> = ({ template, instance, score }) => {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>${template.abbreviation || template.name} — Report</title>
+    <title>${brandName} — ${template.abbreviation || template.name} Report</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       @media print {
-        @page { margin: 16mm; }
+        @page { margin: 14mm 16mm; }
+        .footer { position: fixed; bottom: 8mm; left: 0; right: 0; }
+        .header-fixed { position: fixed; top: 8mm; left: 0; right: 0; }
+        .page { padding-top: 72px; padding-bottom: 54px; }
       }
       :root {
         --ink: #0f172a;      /* slate-900 */
         --muted: #475569;    /* slate-600 */
         --line: #e2e8f0;     /* slate-200 */
-        --brand: #2563eb;    /* blue-600 */
+        --brand: #1e3a8a;    /* navy-ish for brand */
         --chip: #eef2ff;     /* indigo-50 */
         --chip-text: #3730a3;/* indigo-700 */
         --good: #16a34a;     /* green-600 */
@@ -83,37 +92,60 @@ const AssessmentReport: React.FC<Props> = ({ template, instance, score }) => {
       }
       * { box-sizing: border-box; }
       body {
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji';
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans";
         color: var(--ink);
         margin: 0;
         padding: 0;
       }
       .page {
-        padding: 24px;
+        padding: 24px 24px 20px;
         max-width: 880px;
         margin: 0 auto;
       }
+      /* ======= HEADER ======= */
       .hdr {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: 180px 1fr 220px;
         gap: 16px;
-        align-items: start;
+        align-items: center;
         border-bottom: 1px solid var(--line);
-        padding-bottom: 12px;
+        padding-bottom: 10px;
       }
-      .title {
+      .brand {
+        text-align: center;
+      }
+      .brand .brand-name {
         font-weight: 800;
-        font-size: 20px;
-        margin: 2px 0 4px;
+        font-size: 22px;
+        letter-spacing: .3px;
+        color: var(--brand);
+        margin: 0;
       }
-      .sub { color: var(--muted); font-size: 13px; }
-      .chip { display:inline-block; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--chip-text); font-size: 12px; font-weight: 600; }
-      .blk { margin-top: 18px; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+      .brand .brand-sub {
+        margin-top: 3px;
+        font-style: italic;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .logo {
+        display: flex; align-items: center; gap: 10px;
+      }
+      .logo img {
+        max-height: 44px; max-width: 160px; object-fit: contain;
+      }
+      .passed {
+        text-align: right; font-size: 13px; color: var(--muted);
+      }
+      .passed .who {
+        display: inline-block; margin-top: 3px; font-weight: 700; color: var(--ink);
+      }
+      /* ======= BODY BLOCKS ======= */
+      .blk { margin-top: 18px; border: 1px solid var(--line); border-radius: 12px; padding: 14px; background:#fff;}
       .blk h3 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
       .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
       .row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
       .label { color: var(--muted); min-width: 140px; }
-      .metric { text-align:center; padding: 10px 8px; border-radius: 10px; border:1px solid var(--line);}
+      .metric { text-align:center; padding: 10px 8px; border-radius: 10px; border:1px solid var(--line); background:#f8fafc;}
       .metric .big { font-size: 28px; font-weight: 800; }
       .metric .subt { color: var(--muted); font-size: 12px; }
       .pill { display:inline-block; padding: 4px 10px; border-radius: 999px; border:1px solid var(--line); font-weight:600; }
@@ -121,18 +153,49 @@ const AssessmentReport: React.FC<Props> = ({ template, instance, score }) => {
       .pill.warn { color: var(--warn); border-color: #fed7aa; background:#fff7ed; }
       .pill.bad  { color: var(--bad);  border-color: #fecaca; background:#fef2f2; }
       .mono { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; padding: 10px; background: #fff; border-radius: 8px; border:1px solid var(--line); }
-      .footer { margin-top: 16px; font-size: 12px; color: var(--muted); text-align:center; }
       .muted { color: var(--muted); }
       .table { width:100%; border-collapse: collapse; }
       .table th, .table td { border:1px solid var(--line); padding: 8px 10px; font-size: 13px; }
       .table th { text-align:left; background:#f8fafc; color: var(--muted); }
+      /* ======= FOOTER ======= */
+      .footer {
+        font-size: 11px; color: var(--muted); text-align:center;
+        border-top: 1px solid var(--line);
+        margin: 16px auto 0;
+        max-width: 880px; padding-top: 6px;
+      }
+      .chip { display:inline-block; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--chip-text); font-size: 12px; font-weight: 600; }
+      .top-spacer { height: 8px; }
     </style>
   </head>
   <body>
-    <div class="page">
-      ${ref.current.innerHTML}
-      <div class="footer">Generated ${new Date().toLocaleString()}</div>
+    <div class="header-fixed">
+      <div class="page">
+        <div class="hdr">
+          <div class="logo">
+            ${logoUrl ? `<img src="${logoUrl}" alt="Logo" />` : ''}
+          </div>
+          <div class="brand">
+            <h1 class="brand-name">${brandName}</h1>
+            <div class="brand-sub">${(template.abbreviation || template.name)} Report</div>
+          </div>
+          <div class="passed">
+            <div>Passed by</div>
+            <div class="who">${therapistName || '—'}</div>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <div class="page">
+      <div class="top-spacer"></div>
+      ${ref.current!.innerHTML}
+    </div>
+
+    <div class="footer">
+      Generated on ${new Date().toLocaleString()} • ${brandName} • Confidential — For clinical use only
+    </div>
+
     <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); }</script>
   </body>
 </html>`
@@ -155,7 +218,9 @@ const AssessmentReport: React.FC<Props> = ({ template, instance, score }) => {
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-blue-600" />
           <div className="font-semibold text-gray-900">Printable Report</div>
-          <span className="text-xs chip">{template.abbreviation || 'Assessment'}</span>
+          <span className="text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <CheckCircle className="w-3.5 h-3.5" /> Ready
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -169,26 +234,8 @@ const AssessmentReport: React.FC<Props> = ({ template, instance, score }) => {
         </div>
       </div>
 
-      {/* Report Body (this exact HTML gets cloned into the print window) */}
+      {/* Report Body (cloned for print) */}
       <div ref={ref} className="bg-white">
-        {/* Header */}
-        <div className="p-5 border-b">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-xs text-gray-500">Assessment Report</div>
-              <div className="text-xl font-extrabold text-gray-900">
-                {template.name}{' '}
-                {template.abbreviation ? <span className="text-gray-400 font-medium">({template.abbreviation})</span> : null}
-              </div>
-              {template.description ? <div className="text-sm text-gray-600 mt-1">{template.description}</div> : null}
-            </div>
-            <div className="text-right">
-              <div className="text-xs text-gray-500">Instance ID</div>
-              <div className="font-mono text-sm text-gray-800">{instance.id}</div>
-            </div>
-          </div>
-        </div>
-
         {/* Meta */}
         <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="border rounded-lg p-3">
