@@ -1,4 +1,3 @@
-//Assessments
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Brain, AlertTriangle, Calendar, Play, Eye } from 'lucide-react'
@@ -22,13 +21,12 @@ export default function ClientAssessments() {
   const [err, setErr] = useState<string | null>(null)
 
   const [active, setActive] = useState<Row | null>(null)
-  const [loadingActive, setLoadingActive] = useState(false)
 
   const instanceIdFromUrl = searchParams.get('instanceId')
   const isClient = profile?.role === 'client'
 
-  // simple responsive check (no SSR)
-  const [isXL, setIsXL] = useState<boolean>(window.matchMedia('(min-width: 1280px)').matches)
+  // responsive: show split view only on xl
+  const [isXL, setIsXL] = useState<boolean>(() => window.matchMedia('(min-width: 1280px)').matches)
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1280px)')
     const onChange = () => setIsXL(mq.matches)
@@ -69,7 +67,7 @@ export default function ClientAssessments() {
 
   useEffect(() => { if (user && isClient) load() }, [user, isClient])
 
-  // auto-open by ?instanceId= (desktop xl only)
+  // auto-open by ?instanceId= (xl only)
   useEffect(() => {
     if (!instanceIdFromUrl || !rows.length) return
     const hit = rows.find(r => r.id === instanceIdFromUrl)
@@ -90,7 +88,6 @@ export default function ClientAssessments() {
     sp.set('instanceId', r.id)
     setSearchParams(sp, { replace: true })
   }
-
   const closeDesktop = () => {
     setActive(null)
     const sp = new URLSearchParams(searchParams)
@@ -98,10 +95,10 @@ export default function ClientAssessments() {
     setSearchParams(sp, { replace: true })
   }
 
-  // unified open: on xl open inline; on mobile navigate to player route
+  // unified open: xl inline; mobile navigates to dedicated player route (same page using ?instanceId)
   const open = (r: Row) => {
     if (isXL) openDesktop(r)
-    else navigate(`/client/assessments/${r.id}`)
+    else setSearchParams({ instanceId: r.id }, { replace: false })
   }
 
   if (loading) {
@@ -130,7 +127,6 @@ export default function ClientAssessments() {
 
   return (
     <MobileShell title="Assignments">
-      {/* On mobile/sm/md/lg we render a single-column list. On xl we show your split view. */}
       <div className={`min-h-screen ${isXL ? 'p-4 sm:p-6 lg:p-8 bg-gray-50' : 'p-3'}`}>
         <div className={`${isXL ? 'max-w-6xl mx-auto grid grid-cols-1 xl:grid-cols-12 gap-4' : ''}`}>
           {/* Left: list */}
