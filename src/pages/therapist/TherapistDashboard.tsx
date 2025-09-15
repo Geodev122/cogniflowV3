@@ -142,7 +142,7 @@ export default function TherapistDashboard() {
     {
       title: 'Profession Management',
       items: [
-        { id: 'licensing', name: 'Licensing & Compliance', icon: ShieldCheck },
+        { id: 'licensing', name: 'Compliance', icon: ShieldCheck },
         { id: 'clinic', name: 'Clinic Rentals', icon: Building2 }, // moved here
         { id: 'supervision', name: 'Supervision', icon: Headphones },
         { id: 'vip', name: 'VIP Opportunities', icon: Star },
