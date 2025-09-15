@@ -1,32 +1,17 @@
 // src/components/assessment/AssessmentInstancesList.tsx
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  Search,
-  Filter,
-  RefreshCw,
-  MoreVertical,
-  Eye,
-  Play,
-  CheckCircle,
-  Trash2,
-  Clock,
-  AlertTriangle,
-  User,
-  FileText,
-  Calendar,
-  ListChecks,
-  Plus,
+  Search, Filter, RefreshCw, MoreVertical, Eye, Play, CheckCircle, Trash2,
+  Clock, AlertTriangle, User, FileText, Calendar, ListChecks, Plus,
 } from 'lucide-react'
 import { useAssessments } from '../../hooks/useAssessments'
-import { AssessmentInstance } from '../../types/assessment'
+import type { AssessmentInstance } from '../../hooks/useAssessments'
 import { supabase } from '../../lib/supabase'
 import AssignAssessmentModal from './AssignAssessmentModal'
 
 type Props = {
   onOpenInstance?: (instance: AssessmentInstance) => void
-  /** Optional: prefilter to a client (e.g., from ?clientId=) */
   initialClientId?: string
-  /** Optional: bubble client filter changes up (to sync URL chip) */
   onClientFilterChange?: (id: string | null) => void
 }
 
@@ -34,18 +19,12 @@ type SortKey = 'assigned_at' | 'due_date' | 'status' | 'client' | 'template'
 
 const statusColor = (status: string) => {
   switch (status) {
-    case 'completed':
-      return 'text-green-700 bg-green-100 border-green-200'
-    case 'in_progress':
-      return 'text-blue-700 bg-blue-100 border-blue-200'
-    case 'assigned':
-      return 'text-gray-700 bg-gray-100 border-gray-200'
-    case 'expired':
-      return 'text-orange-700 bg-orange-100 border-orange-200'
-    case 'cancelled':
-      return 'text-red-700 bg-red-100 border-red-200'
-    default:
-      return 'text-gray-700 bg-gray-100 border-gray-200'
+    case 'completed': return 'text-green-700 bg-green-100 border-green-200'
+    case 'in_progress': return 'text-blue-700 bg-blue-100 border-blue-200'
+    case 'assigned': return 'text-gray-700 bg-gray-100 border-gray-200'
+    case 'expired': return 'text-orange-700 bg-orange-100 border-orange-200'
+    case 'cancelled': return 'text-red-700 bg-red-100 border-red-200'
+    default: return 'text-gray-700 bg-gray-100 border-gray-200'
   }
 }
 
@@ -55,8 +34,9 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => (
   </span>
 )
 
-const ProgressBar: React.FC<{ value?: number }> = ({ value }) => {
-  const pct = Math.max(0, Math.min(100, Number.isFinite(value as number) ? (value as number) : 0))
+const ProgressBar: React.FC<{ value?: number | null }> = ({ value }) => {
+  const n = typeof value === 'number' ? value : 0
+  const pct = Math.max(0, Math.min(100, n))
   return (
     <div className="w-28">
       <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -71,10 +51,10 @@ const Dot = ({ className = '' }: { className?: string }) => (
   <span className={`inline-block w-1.5 h-1.5 rounded-full ${className}`} />
 )
 
-const formatDate = (iso?: string) =>
+const formatDate = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleDateString() : '—'
 
-const isOverdue = (due?: string, status?: string) => {
+const isOverdue = (due?: string | null, status?: string) => {
   if (!due) return false
   if (status === 'completed' || status === 'cancelled') return false
   return new Date(due).getTime() < Date.now()
@@ -105,9 +85,9 @@ const ErrorBanner = ({ message }: { message: string }) => (
 )
 
 const sortFns: Record<SortKey, (a: AssessmentInstance, b: AssessmentInstance) => number> = {
-  assigned_at: (a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime(),
+  assigned_at: (a, b) => new Date(b.assigned_at || 0).getTime() - new Date(a.assigned_at || 0).getTime(),
   due_date: (a, b) => (new Date(a.due_date || '2100-01-01').getTime() - new Date(b.due_date || '2100-01-01').getTime()),
-  status: (a, b) => a.status.localeCompare(b.status),
+  status: (a, b) => (a.status || '').localeCompare(b.status || ''),
   client: (a, b) =>
     `${a.client?.last_name || ''}${a.client?.first_name || ''}`.localeCompare(
       `${b.client?.last_name || ''}${b.client?.first_name || ''}`
@@ -133,7 +113,6 @@ const AssessmentInstancesList: React.FC<Props> = ({
 }) => {
   const { instances, loading, error, refetch, updateInstanceStatus, deleteInstance } = useAssessments()
 
-  // UI state
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [clientFilter, setClientFilter] = useState('all')
@@ -143,10 +122,8 @@ const AssessmentInstancesList: React.FC<Props> = ({
   const [page, setPage] = useState(1)
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
 
-  // Assign modal
   const [showAssign, setShowAssign] = useState(false)
 
-  // If we were given an initial client filter, apply it (and keep in sync if prop changes)
   useEffect(() => {
     if (initialClientId) {
       setClientFilter(initialClientId)
@@ -157,19 +134,16 @@ const AssessmentInstancesList: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialClientId])
 
-  // Derived filter options from list data
   const clientMap = useMemo(() => {
     const m = new Map<string, string>()
     instances.forEach(i => {
-      if (i.client) m.set(i.client_id, `${i.client.first_name} ${i.client.last_name}`)
+      if (i.client) m.set(i.client_id, `${i.client.first_name ?? ''} ${i.client.last_name ?? ''}`.trim())
     })
     return m
   }, [instances])
 
   const [extraClientOption, setExtraClientOption] = useState<{ id: string; name: string } | null>(null)
 
-  // If initialClientId isn't present in current instances (e.g., no assignments yet),
-  // fetch a display name so the select shows a friendly label.
   useEffect(() => {
     let cancel = false
     const hydrate = async () => {
@@ -202,7 +176,6 @@ const AssessmentInstancesList: React.FC<Props> = ({
     return [{ id: 'all', name: 'All templates' }, ...Array.from(uniq).map(([id, name]) => ({ id, name }))]
   }, [instances])
 
-  // Filter + search
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return instances.filter(i => {
@@ -210,19 +183,17 @@ const AssessmentInstancesList: React.FC<Props> = ({
       const clientOk = clientFilter === 'all' || i.client_id === clientFilter
       const templateOk = templateFilter === 'all' || i.template_id === templateFilter
       const hay =
-        `${i.title} ${i.template?.name || ''} ${i.client?.first_name || ''} ${i.client?.last_name || ''} ${i.client?.email || ''}`.toLowerCase()
+        `${i.title ?? ''} ${i.template?.name ?? ''} ${i.client?.first_name ?? ''} ${i.client?.last_name ?? ''} ${i.client?.email ?? ''}`.toLowerCase()
       const searchOk = !q || hay.includes(q)
       return statusOk && clientOk && templateOk && searchOk
     })
   }, [instances, status, clientFilter, templateFilter, search])
 
-  // Sort
   const sorted = useMemo(() => {
     const next = [...filtered].sort(sortFns[sortKey])
     return sortAsc ? next.reverse() : next
   }, [filtered, sortKey, sortAsc])
 
-  // Pagination
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE
@@ -230,32 +201,20 @@ const AssessmentInstancesList: React.FC<Props> = ({
   }, [sorted, page])
 
   useEffect(() => {
-    // reset page when filters change
     setPage(1)
   }, [search, status, clientFilter, templateFilter])
 
-  // bubble filter changes up (for URL chip sync)
   useEffect(() => {
     onClientFilterChange?.(clientFilter === 'all' ? null : clientFilter)
   }, [clientFilter, onClientFilterChange])
 
   const toggleSort = (key: SortKey) => {
-    if (key === sortKey) {
-      setSortAsc(!sortAsc)
-    } else {
-      setSortKey(key)
-      setSortAsc(false)
-    }
+    if (key === sortKey) setSortAsc(!sortAsc)
+    else { setSortKey(key); setSortAsc(false) }
   }
 
-  const handleOpen = (i: AssessmentInstance) => {
-    onOpenInstance?.(i)
-  }
-
-  const handleMarkComplete = async (i: AssessmentInstance) => {
-    await updateInstanceStatus(i.id, 'completed')
-  }
-
+  const handleOpen = (i: AssessmentInstance) => onOpenInstance?.(i)
+  const handleMarkComplete = async (i: AssessmentInstance) => { await updateInstanceStatus(i.id, 'completed') }
   const handleDelete = async (i: AssessmentInstance) => {
     if (!confirm('Delete this assessment instance? This cannot be undone.')) return
     await deleteInstance(i.id)
@@ -263,7 +222,6 @@ const AssessmentInstancesList: React.FC<Props> = ({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header / Filters */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-gray-200">
         <div className="p-3 flex flex-col gap-3">
           <div className="flex items-center justify-between">
@@ -292,7 +250,6 @@ const AssessmentInstancesList: React.FC<Props> = ({
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-5 gap-2">
-            {/* Search */}
             <div className="xl:col-span-2 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
@@ -303,7 +260,6 @@ const AssessmentInstancesList: React.FC<Props> = ({
               />
             </div>
 
-            {/* Status */}
             <div className="relative">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <select
@@ -317,7 +273,6 @@ const AssessmentInstancesList: React.FC<Props> = ({
               </select>
             </div>
 
-            {/* Client */}
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <select
@@ -331,7 +286,6 @@ const AssessmentInstancesList: React.FC<Props> = ({
               </select>
             </div>
 
-            {/* Template */}
             <div className="relative">
               <BookIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <select
@@ -346,63 +300,39 @@ const AssessmentInstancesList: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Sort Row */}
           <div className="flex items-center gap-2 text-xs text-gray-600">
             <span>Sort by:</span>
-            <button
-              onClick={() => toggleSort('assigned_at')}
-              className={`px-2 py-1 rounded ${sortKey === 'assigned_at' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}
-            >
+            <button onClick={() => toggleSort('assigned_at')} className={`px-2 py-1 rounded ${sortKey === 'assigned_at' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}>
               Assigned {sortKey === 'assigned_at' && (sortAsc ? '↑' : '↓')}
             </button>
-            <button
-              onClick={() => toggleSort('due_date')}
-              className={`px-2 py-1 rounded ${sortKey === 'due_date' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}
-            >
+            <button onClick={() => toggleSort('due_date')} className={`px-2 py-1 rounded ${sortKey === 'due_date' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}>
               Due date {sortKey === 'due_date' && (sortAsc ? '↑' : '↓')}
             </button>
-            <button
-              onClick={() => toggleSort('status')}
-              className={`px-2 py-1 rounded ${sortKey === 'status' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}
-            >
+            <button onClick={() => toggleSort('status')} className={`px-2 py-1 rounded ${sortKey === 'status' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}>
               Status {sortKey === 'status' && (sortAsc ? '↑' : '↓')}
             </button>
-            <button
-              onClick={() => toggleSort('client')}
-              className={`px-2 py-1 rounded ${sortKey === 'client' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}
-            >
+            <button onClick={() => toggleSort('client')} className={`px-2 py-1 rounded ${sortKey === 'client' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}>
               Client {sortKey === 'client' && (sortAsc ? '↑' : '↓')}
             </button>
-            <button
-              onClick={() => toggleSort('template')}
-              className={`px-2 py-1 rounded ${sortKey === 'template' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}
-            >
+            <button onClick={() => toggleSort('template')} className={`px-2 py-1 rounded ${sortKey === 'template' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}>
               Template {sortKey === 'template' && (sortAsc ? '↑' : '↓')}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto p-3">
         {loading && <Loading />}
         {!loading && error && <ErrorBanner message={error} />}
 
         {!loading && !paged.length && (
-          <EmptyState
-            title="No assessments to show"
-            subtitle="Try adjusting search or filters."
-          />
+          <EmptyState title="No assessments to show" subtitle="Try adjusting search or filters." />
         )}
 
         {!loading && !!paged.length && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
             {paged.map(i => (
-              <div
-                key={i.id}
-                className={`bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition ${rowShadow(i)}`}
-              >
-                {/* Top */}
+              <div key={i.id} className={`bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition ${rowShadow(i)}`}>
                 <div className="flex items-start justify-between">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -414,9 +344,7 @@ const AssessmentInstancesList: React.FC<Props> = ({
                         </span>
                       )}
                     </div>
-                    <h3 className="mt-2 font-semibold text-gray-900 truncate">
-                      {i.title}
-                    </h3>
+                    <h3 className="mt-2 font-semibold text-gray-900 truncate">{i.title}</h3>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600">
                       <span className="inline-flex items-center gap-1">
                         <FileText className="w-3.5 h-3.5" />
@@ -424,7 +352,7 @@ const AssessmentInstancesList: React.FC<Props> = ({
                       </span>
                       <span className="inline-flex items-center gap-1">
                         <User className="w-3.5 h-3.5" />
-                        {i.client ? `${i.client.first_name} ${i.client.last_name}` : '—'}
+                        {i.client ? `${i.client.first_name ?? ''} ${i.client.last_name ?? ''}`.trim() : '—'}
                       </span>
                       <span className="inline-flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5" />
@@ -437,7 +365,6 @@ const AssessmentInstancesList: React.FC<Props> = ({
                     </div>
                   </div>
 
-                  {/* Row menu */}
                   <div className="relative">
                     <button
                       onClick={() => setMenuOpenId(v => (v === i.id ? null : i.id))}
@@ -448,26 +375,17 @@ const AssessmentInstancesList: React.FC<Props> = ({
                     </button>
                     {menuOpenId === i.id && (
                       <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                        <button
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                          onClick={() => { setMenuOpenId(null); handleOpen(i) }}
-                        >
+                        <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" onClick={() => { setMenuOpenId(null); handleOpen(i) }}>
                           <Eye className="w-4 h-4 inline mr-2" />
                           Open
                         </button>
                         {i.status !== 'completed' && (
-                          <button
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                            onClick={() => { setMenuOpenId(null); handleMarkComplete(i) }}
-                          >
+                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" onClick={() => { setMenuOpenId(null); handleMarkComplete(i) }}>
                             <CheckCircle className="w-4 h-4 inline mr-2" />
                             Mark complete
                           </button>
                         )}
-                        <button
-                          className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                          onClick={() => { setMenuOpenId(null); handleDelete(i) }}
-                        >
+                        <button className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50" onClick={() => { setMenuOpenId(null); handleDelete(i) }}>
                           <Trash2 className="w-4 h-4 inline mr-2" />
                           Delete
                         </button>
@@ -476,7 +394,6 @@ const AssessmentInstancesList: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Bottom */}
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <Dot className={i.status === 'completed' ? 'bg-green-500' : i.status === 'in_progress' ? 'bg-blue-500' : 'bg-gray-400'} />
@@ -484,31 +401,22 @@ const AssessmentInstancesList: React.FC<Props> = ({
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {'progress' in i ? <ProgressBar value={(i as any).progress} /> : <div className="text-xs text-gray-400 w-28 text-right"> </div>}
+                    {'progress' in i ? <ProgressBar value={i.progress} /> : <div className="text-xs text-gray-400 w-28 text-right" />}
 
                     {i.status === 'assigned' && (
-                      <button
-                        onClick={() => handleOpen(i)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700"
-                      >
+                      <button onClick={() => handleOpen(i)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700">
                         <Play className="w-4 h-4" />
                         Start
                       </button>
                     )}
                     {i.status === 'in_progress' && (
-                      <button
-                        onClick={() => handleOpen(i)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700"
-                      >
+                      <button onClick={() => handleOpen(i)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700">
                         <Play className="w-4 h-4" />
                         Resume
                       </button>
                     )}
                     {i.status === 'completed' && (
-                      <button
-                        onClick={() => handleOpen(i)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border text-sm hover:bg-gray-50"
-                      >
+                      <button onClick={() => handleOpen(i)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border text-sm hover:bg-gray-50">
                         <Eye className="w-4 h-4" />
                         View
                       </button>
@@ -520,40 +428,25 @@ const AssessmentInstancesList: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Pagination */}
         {!loading && totalPages > 1 && (
           <div className="mt-4 flex items-center justify-center gap-2">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-3 py-1.5 rounded border text-sm disabled:opacity-50"
-            >
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1.5 rounded border text-sm disabled:opacity-50">
               Prev
             </button>
-            <div className="text-sm text-gray-600">
-              Page {page} of {totalPages}
-            </div>
-            <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="px-3 py-1.5 rounded border text-sm disabled:opacity-50"
-            >
+            <div className="text-sm text-gray-600">Page {page} of {totalPages}</div>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="px-3 py-1.5 rounded border text-sm disabled:opacity-50">
               Next
             </button>
           </div>
         )}
       </div>
 
-      {/* Assign modal */}
       {showAssign && (
         <AssignAssessmentModal
           open={showAssign}
           onClose={() => setShowAssign(false)}
           initialClientId={clientFilter !== 'all' ? clientFilter : initialClientId}
-          onAssigned={() => {
-            setShowAssign(false)
-            refetch()
-          }}
+          onAssigned={() => { setShowAssign(false); refetch() }}
         />
       )}
     </div>
@@ -562,7 +455,6 @@ const AssessmentInstancesList: React.FC<Props> = ({
 
 export default AssessmentInstancesList
 
-// Tiny inline icon to keep inputs consistent with others above
 function BookIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
