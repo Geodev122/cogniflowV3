@@ -1,288 +1,242 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { Calendar, Brain, FileText, AlertTriangle, User } from 'lucide-react'
-import { useAuth } from '../../hooks/useAuth'
+import { useNavigate } from 'react-router-dom'
+import { Calendar, ClipboardList, ChevronRight, Activity, ShieldCheck, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../hooks/useAuth'
+import { MobileShell } from '../../components/client/MobileShell'
 
-type TodaySession = {
-  id: string
-  time: string
-  therapistName: string
-  appointment_type: string | null
-}
-
-type RecentAssessment = {
-  id: string
-  title: string
-  status: 'assigned' | 'in_progress' | 'completed' | 'expired' | 'cancelled'
-  assigned_at?: string | null
-  completed_at?: string | null
-  template_abbrev?: string | null
-}
-
-const SectionCard: React.FC<{ title: string; children: React.ReactNode; right?: React.ReactNode }> = ({ title, children, right }) => (
-  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-      {right}
-    </div>
-    {children}
-  </div>
-)
-
-const Chip = ({ text, tone }: { text: string; tone?: 'green'|'blue'|'amber'|'gray'|'red' }) => {
-  const map = {
-    green:'bg-green-100 text-green-700',
-    blue:'bg-blue-100 text-blue-700',
-    amber:'bg-amber-100 text-amber-700',
-    red:'bg-red-100 text-red-700',
-    gray:'bg-gray-100 text-gray-700',
-  } as const
-  return <span className={`text-xs px-2 py-1 rounded-full ${map[tone||'gray']}`}>{text}</span>
-}
+type NextAppt = { id: string; when: string; type?: string | null; therapist_name?: string }
+type MiniAssessment = { id: string; title: string; status: string; due_date?: string | null; abbrev?: string | null }
 
 export default function ClientHome() {
-  const { user, profile, loading } = useAuth()
   const navigate = useNavigate()
-
-  const [busy, setBusy] = useState(true)
-  const [err, setErr] = useState<string | null>(null)
-  const [todaySessions, setTodaySessions] = useState<TodaySession[]>([])
-  const [assessments, setAssessments] = useState<RecentAssessment[]>([])
-
-  const isClient = profile?.role === 'client'
+  const { profile } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [nextAppt, setNextAppt] = useState<NextAppt | null>(null)
+  const [assess, setAssess] = useState<MiniAssessment[]>([])
+  const [alertsCount, setAlertsCount] = useState(0)
 
   useEffect(() => {
-    const run = async () => {
-      if (!user || !isClient) return
-      setBusy(true); setErr(null)
+    let cancel = false
+    const load = async () => {
+      if (!profile) return
+      setLoading(true); setError(null)
       try {
-        // Today range
-        const now = new Date()
-        const yyyy = now.getFullYear()
-        const mm = String(now.getMonth() + 1).padStart(2, '0')
-        const dd = String(now.getDate()).padStart(2, '0')
-        const start = `${yyyy}-${mm}-${dd}T00:00:00`
-        const end   = `${yyyy}-${mm}-${dd}T23:59:59`
-
-        // Appointments for the client
+        // Next appointment today→future
+        const nowIso = new Date().toISOString()
         const { data: appts, error: apptErr } = await supabase
           .from('appointments')
           .select(`
             id, appointment_date, appointment_type, therapist_id,
             therapist:profiles!appointments_therapist_id_fkey(first_name,last_name)
           `)
-          .eq('client_id', user.id)
-          .gte('appointment_date', start)
-          .lte('appointment_date', end)
-
+          .eq('client_id', profile.id)
+          .gte('appointment_date', nowIso)
+          .order('appointment_date', { ascending: true })
+          .limit(1)
         if (apptErr) throw apptErr
+        if (!cancel) {
+          const a = appts?.[0]
+          setNextAppt(a ? {
+            id: a.id,
+            when: new Date(a.appointment_date).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }),
+            type: a.appointment_type,
+            therapist_name: `${a.therapist?.first_name || ''} ${a.therapist?.last_name || ''}`.trim() || undefined
+          } : null)
+        }
 
-        setTodaySessions((appts || []).map(a => ({
-          id: a.id as string,
-          time: new Date(a.appointment_date as string).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          therapistName: `${(a as any).therapist?.first_name || 'Therapist'} ${(a as any).therapist?.last_name || ''}`.trim(),
-          appointment_type: (a as any).appointment_type ?? null,
-        })))
-
-        // Client's assessment instances (recent)
+        // Top assessments (assigned/in_progress first)
         const { data: inst, error: instErr } = await supabase
           .from('assessment_instances')
-          .select('id, title, status, template_id, assigned_at, completed_at')
-          .eq('client_id', user.id)
+          .select('id, title, status, due_date, template_id')
+          .eq('client_id', profile.id)
           .order('assigned_at', { ascending: false })
-          .limit(10)
-
+          .limit(8)
         if (instErr) throw instErr
 
-        const templateIds = Array.from(new Set((inst || []).map(i => i.template_id)))
-        const { data: tpls } = templateIds.length
-          ? await supabase.from('assessment_templates').select('id, abbreviation').in('id', templateIds)
-          : { data: [] as any[] }
+        let abbrevMap = new Map<string, string>()
+        const tplIds = Array.from(new Set((inst || []).map(r => r.template_id))).filter(Boolean) as string[]
+        if (tplIds.length) {
+          const { data: tpls } = await supabase
+            .from('assessment_templates')
+            .select('id, abbreviation')
+            .in('id', tplIds)
+          tpls?.forEach(t => abbrevMap.set(t.id, t.abbreviation || ''))
+        }
 
-        setAssessments((inst || []).map(i => ({
-          id: i.id as string,
-          title: (i as any).title || 'Assessment',
-          status: i.status as any,
-          assigned_at: i.assigned_at,
-          completed_at: i.completed_at,
-          template_abbrev: (tpls || []).find(t => t.id === i.template_id)?.abbreviation ?? null,
-        })))
-      } catch (e: any) {
-        console.error('[ClientHome] load error', e)
-        setErr('Could not load your dashboard data.')
+        const sorted = (inst || []).sort((a, b) => {
+          const s = (v: string) => v === 'assigned' ? 0 : v === 'in_progress' ? 1 : 2
+          return s(a.status) - s(b.status)
+        })
+
+        if (!cancel) {
+          setAssess(
+            sorted.map(i => ({
+              id: i.id,
+              title: i.title || 'Assessment',
+              status: i.status,
+              due_date: i.due_date,
+              abbrev: abbrevMap.get(i.template_id) || null
+            }))
+          )
+        }
+
+        // optional: alerts based on latest results
+        const ids = (inst || []).map(i => i.id)
+        if (ids.length) {
+          const { data: results } = await supabase
+            .from('assessment_results')
+            .select('alerts')
+            .in('instance_id', ids)
+            .order('created_at', { ascending: false })
+            .limit(20)
+          const count = (results || []).reduce((acc, r:any) => acc + (Array.isArray(r.alerts) ? r.alerts.length : 0), 0)
+          if (!cancel) setAlertsCount(count)
+        }
+      } catch (e:any) {
+        console.error('[ClientHome] load error', e); if (!cancel) setError('Could not load your dashboard.')
       } finally {
-        setBusy(false)
+        if (!cancel) setLoading(false)
       }
     }
-    if (user && isClient) run()
-  }, [user, isClient])
-
-  const statusTone = useMemo(() => ({
-    completed: 'green',
-    in_progress: 'blue',
-    assigned: 'gray',
-    expired: 'amber',
-    cancelled: 'red',
-  } as const), [])
-
-  if (loading) {
-    return (
-      <div className="min-h-[60vh] grid place-items-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
-      </div>
-    )
-  }
-
-  if (!user || !isClient) {
-    return (
-      <div className="max-w-lg mx-auto mt-16">
-        <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
-          <AlertTriangle className="w-8 h-8 text-amber-600 mx-auto mb-2" />
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Client access only</h2>
-          <p className="text-sm text-gray-600">Please sign in as a client or contact your therapist.</p>
-          <Link to="/login" className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 mt-3">
-            Go to sign in
-          </Link>
-        </div>
-      </div>
-    )
-  }
+    load()
+    return () => { cancel = true }
+  }, [profile])
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Greeting */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-xl shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold mb-1">Hi {profile?.first_name}!</h2>
-              <p className="text-blue-100">Here’s what’s on your plate.</p>
+    <MobileShell title="Your Care">
+      {loading ? (
+        <div className="h-[70vh] grid place-items-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </div>
+      ) : error ? (
+        <div className="p-4">
+          <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">{error}</div>
+        </div>
+      ) : (
+        <div className="p-3 space-y-4">
+          {/* Welcome */}
+          <div className="rounded-xl p-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+            <div className="text-sm opacity-80">Welcome back</div>
+            <div className="text-xl font-semibold mt-0.5">{profile?.first_name}</div>
+            <div className="mt-3 text-xs text-blue-100">
+              Track your progress, complete assigned activities, and manage your sessions — all here.
             </div>
+          </div>
+
+          {/* KPI cards (mobile) */}
+          <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={() => navigate('/client/profile')}
-              className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 px-3 py-2 rounded-lg text-sm"
+              onClick={() => navigate('/client/assessments')}
+              className="bg-white border border-gray-200 rounded-xl p-3 text-left active:scale-[0.99]"
             >
-              <User className="w-4 h-4" /> Profile
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-gray-500">Assessments</div>
+                <ClipboardList className="w-4 h-4 text-blue-600" />
+              </div>
+              <div className="mt-1 text-lg font-semibold">{assess.filter(a => a.status !== 'completed').length}</div>
+              <div className="text-[11px] text-gray-500">to complete</div>
+            </button>
+
+            <button
+              onClick={() => navigate('/client/cases')}
+              className="bg-white border border-gray-200 rounded-xl p-3 text-left active:scale-[0.99]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-gray-500">Alerts</div>
+                <Activity className="w-4 h-4 text-amber-600" />
+              </div>
+              <div className="mt-1 text-lg font-semibold">{alertsCount}</div>
+              <div className="text-[11px] text-gray-500">latest from results</div>
             </button>
           </div>
-        </div>
 
-        {err && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3">
-            {err}
-          </div>
-        )}
-
-        {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-gray-200">
-            <div className="text-sm text-gray-600">Today’s Sessions</div>
-            <div className="text-3xl font-semibold text-blue-600">{busy ? '—' : todaySessions.length}</div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-gray-200">
-            <div className="text-sm text-gray-600">Assessments</div>
-            <div className="text-3xl font-semibold text-amber-600">{busy ? '—' : assessments.length}</div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-gray-200">
-            <div className="text-sm text-gray-600">Pending</div>
-            <div className="text-3xl font-semibold text-purple-600">
-              {busy ? '—' : assessments.filter(a => a.status === 'assigned' || a.status === 'in_progress').length}
+          {/* Next appointment */}
+          <div className="bg-white border border-gray-200 rounded-xl">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-purple-600" />
+                <div className="text-sm font-medium text-gray-900">Your next session</div>
+              </div>
+              <button className="text-xs text-blue-700" onClick={() => navigate('/client/appointments')}>See all</button>
             </div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-gray-200">
-            <div className="text-sm text-gray-600">Completed</div>
-            <div className="text-3xl font-semibold text-green-600">
-              {busy ? '—' : assessments.filter(a => a.status === 'completed').length}
-            </div>
-          </div>
-        </div>
-
-        {/* Today */}
-        <SectionCard
-          title="Today’s Schedule"
-          right={<button onClick={() => navigate('/client/profile')} className="text-sm text-blue-700 hover:text-blue-900">View profile</button>}
-        >
-          {busy ? (
-            <div className="py-10 grid place-items-center">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-            </div>
-          ) : todaySessions.length === 0 ? (
-            <div className="text-center py-10 text-gray-600">
-              <Calendar className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-              Nothing scheduled for today
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {todaySessions.map(s => (
-                <div key={s.id} className="flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 grid place-items-center">
-                      <Calendar className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900">{s.time}</div>
-                      <div className="text-sm text-gray-600">with {s.therapistName}</div>
-                    </div>
-                  </div>
-                  {s.appointment_type && <Chip text={s.appointment_type} tone="blue" />}
-                </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
-
-        {/* Assessments */}
-        <SectionCard
-          title="Your Assessments"
-          right={<button onClick={() => navigate('/client/assessments')} className="text-sm text-blue-700 hover:text-blue-900">Open all</button>}
-        >
-          {busy ? (
-            <div className="py-10 grid place-items-center">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-            </div>
-          ) : assessments.length === 0 ? (
-            <div className="text-center py-10 text-gray-600">
-              <Brain className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-              No assessments yet
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {assessments.slice(0, 6).map(a => (
+            <div className="p-4">
+              {!nextAppt ? (
+                <div className="text-sm text-gray-600">No upcoming appointments.</div>
+              ) : (
                 <button
-                  key={a.id}
-                  onClick={() => navigate(`/client/assessments?instanceId=${a.id}`)}
-                  className="w-full text-left p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-between"
+                  onClick={() => navigate('/client/appointments')}
+                  className="w-full flex items-center justify-between text-left"
                 >
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-900">{a.title}</span>
-                      {a.template_abbrev && <Chip text={a.template_abbrev} tone="blue" />}
-                    </div>
-                    <div className="text-xs text-gray-600 mt-1">
-                      Assigned {a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : '—'}
+                    <div className="font-medium text-gray-900">{nextAppt.when}</div>
+                    <div className="text-xs text-gray-600">{nextAppt.type || 'Session'} {nextAppt.therapist_name ? `• with ${nextAppt.therapist_name}` : ''}</div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Quick actions */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <div className="text-sm font-medium text-gray-900 mb-3">Quick actions</div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => navigate('/client/consents')}
+                className="border border-gray-200 rounded-lg p-3 text-left active:scale-[0.99]"
+              >
+                <ShieldCheck className="w-5 h-5 text-green-600" />
+                <div className="mt-1 text-sm font-medium">Consents</div>
+                <div className="text-[11px] text-gray-500">Review & sign</div>
+              </button>
+              <button
+                onClick={() => navigate('/client/assessments')}
+                className="border border-gray-200 rounded-lg p-3 text-left active:scale-[0.99]"
+              >
+                <ClipboardList className="w-5 h-5 text-blue-600" />
+                <div className="mt-1 text-sm font-medium">Assignments</div>
+                <div className="text-[11px] text-gray-500">Fill now</div>
+              </button>
+            </div>
+          </div>
+
+          {/* Recently assigned assessments */}
+          <div className="bg-white border border-gray-200 rounded-xl">
+            <div className="px-4 py-3 border-b border-gray-100 text-sm font-medium text-gray-900">Recent assignments</div>
+            <div className="divide-y">
+              {assess.length === 0 && (
+                <div className="p-4 text-sm text-gray-600">No recent assignments.</div>
+              )}
+              {assess.slice(0,4).map(a => (
+                <button
+                  key={a.id}
+                  onClick={() => navigate(`/client/assessments/${a.id}`)}
+                  className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center justify-between"
+                >
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{a.title}</div>
+                    <div className="text-[11px] text-gray-600">
+                      {(a.abbrev ? `${a.abbrev} • ` : '') + (a.status === 'completed' ? 'Completed' : (a.due_date ? `Due ${new Date(a.due_date).toLocaleDateString()}` : 'Assigned'))}
                     </div>
                   </div>
-                  <Chip
-                    text={a.status.replace('_',' ')}
-                    tone={statusTone[a.status] as any}
-                  />
+                  {a.status === 'completed'
+                    ? <span className="text-xs bg-green-100 text-green-700 rounded-full px-2 py-0.5">done</span>
+                    : <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">open</span>
+                  }
                 </button>
               ))}
             </div>
-          )}
-        </SectionCard>
-
-        {/* Docs */}
-        <SectionCard title="Shared Documents">
-          <div className="text-sm text-gray-600">
-            Your therapist may share files and results here in the future.
-            <div className="mt-2 inline-flex items-center gap-1 text-gray-500">
-              <FileText className="w-4 h-4" /> Coming soon
-            </div>
           </div>
-        </SectionCard>
-      </div>
-    </div>
+
+          {/* Info / safety */}
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-3 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            If this is an emergency, call your local emergency number.
+          </div>
+        </div>
+      )}
+    </MobileShell>
   )
 }
