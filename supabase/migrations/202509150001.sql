@@ -92,3 +92,39 @@ create table if not exists audit_events (
   diff jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+
+
+-- enable RLS
+alter table treatment_plans enable row level security;
+alter table session_notes enable row level security;
+alter table client_activities enable row level security;
+alter table assigned_resources enable row level security;
+alter table supervision_flags enable row level security;
+alter table supervision_feedback enable row level security;
+alter table case_summaries enable row level security;
+alter table audit_events enable row level security;
+
+-- therapist can read/write their cases
+create policy tp_select on treatment_plans for select using (
+  exists (select 1 from cases c where c.id = case_id and c.therapist_id = auth.uid())
+);
+create policy tp_modify on treatment_plans for all using (
+  exists (select 1 from cases c where c.id = case_id and c.therapist_id = auth.uid())
+);
+
+-- replicate for the other tables with the same pattern, e.g. session_notes:
+create policy sn_select on session_notes for select using (
+  exists (select 1 from cases c where c.id = case_id and c.therapist_id = auth.uid())
+);
+create policy sn_modify on session_notes for all using (
+  exists (select 1 from cases c where c.id = case_id and c.therapist_id = auth.uid())
+);
+
+-- supervisors (if you use a role/claim) can read:
+create policy sn_supervisor_read on session_notes for select using (
+  current_setting('request.jwt.claims', true)::jsonb ? 'role'
+  and (current_setting('request.jwt.claims', true)::jsonb ->> 'role') = 'supervisor'
+);
+
+-- clients: read activities assigned to them (optional)
+create policy ca_client_read on client_activities for select using (client_id = auth.uid());
