@@ -10,11 +10,8 @@ type ReminderFreq = 'none' | 'daily' | 'weekly' | 'before_due'
 type Props = {
   open: boolean
   onClose: () => void
-  /** Prefill a client and lock selection to only this client */
   initialClientId?: string
-  /** Optionally preselect a template */
   initialTemplateId?: string
-  /** Called after a successful assignment (count of clients assigned) */
   onAssigned?: (count: number) => void
 }
 
@@ -23,7 +20,6 @@ type ClientRow = {
   first_name: string | null
   last_name: string | null
   email: string | null
-  city: string | null
   created_at: string
 }
 
@@ -39,14 +35,12 @@ const AssignAssessmentModal: React.FC<Props> = ({
   const { profile } = useAuth()
   const { templates, assignAssessment } = useAssessments()
 
-  // form state
   const [templateId, setTemplateId] = useState<string>(initialTemplateId || '')
   const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set())
   const [instructions, setInstructions] = useState('')
   const [dueDate, setDueDate] = useState<string>('') // ISO yyyy-mm-dd
   const [reminderFrequency, setReminderFrequency] = useState<ReminderFreq>('none')
 
-  // clients list state
   const [scope, setScope] = useState<'mine' | 'all'>('mine')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
@@ -55,11 +49,9 @@ const AssignAssessmentModal: React.FC<Props> = ({
   const [loadingRows, setLoadingRows] = useState(false)
   const [errorRows, setErrorRows] = useState<string | null>(null)
 
-  // assignment state
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  // When modal opens, apply defaults
   useEffect(() => {
     if (!open) return
     setTemplateId(initialTemplateId || '')
@@ -73,19 +65,17 @@ const AssignAssessmentModal: React.FC<Props> = ({
     setSubmitError(null)
   }, [open, initialClientId, initialTemplateId])
 
-  // ---- Fetch clients (paginated) ----
+  // Fetch clients (paginated)
   const fetchClients = useCallback(async () => {
     if (!open) return
     setLoadingRows(true)
     setErrorRows(null)
     try {
-      // Base query: clients
       let query = supabase
         .from('profiles')
-        .select('id, first_name, last_name, email, city, created_at', { count: 'exact' })
+        .select('id, first_name, last_name, email, created_at', { count: 'exact' })
         .eq('role', 'client')
 
-      // Scope "mine" means restrict by therapist_client_relations
       if (scope === 'mine' && profile?.id) {
         const { data: relations, error: relErr } = await supabase
           .from('therapist_client_relations')
@@ -94,32 +84,21 @@ const AssignAssessmentModal: React.FC<Props> = ({
 
         if (relErr) {
           console.warn('[AssignAssessmentModal] relations error', relErr)
-          // If relations fail, fall back to empty list to be safe with RLS
-          setRows([])
-          setTotal(0)
-          setLoadingRows(false)
+          setRows([]); setTotal(0); setLoadingRows(false)
           return
         }
         const ids = (relations || []).map(r => r.client_id)
-        if (ids.length === 0) {
-          setRows([])
-          setTotal(0)
-          setLoadingRows(false)
-          return
-        }
+        if (!ids.length) { setRows([]); setTotal(0); setLoadingRows(false); return }
         query = query.in('id', ids)
       }
 
-      // Search (first/last/email/city)
       const search = q.trim()
       if (search) {
-        // Best-effort OR across common fields
         query = query.or(
-          `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,city.ilike.%${search}%`
+          `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
         )
       }
 
-      // Pagination
       const from = (page - 1) * PAGE_SIZE
       const to = from + PAGE_SIZE - 1
       const { data, error, count } = await query
@@ -127,14 +106,12 @@ const AssignAssessmentModal: React.FC<Props> = ({
         .range(from, to)
 
       if (error) throw error
-
       setRows((data || []) as ClientRow[])
       setTotal(count || 0)
     } catch (e: any) {
       console.error('[AssignAssessmentModal] fetchClients', e)
       setErrorRows('Could not load clients.')
-      setRows([])
-      setTotal(0)
+      setRows([]); setTotal(0)
     } finally {
       setLoadingRows(false)
     }
@@ -143,22 +120,14 @@ const AssignAssessmentModal: React.FC<Props> = ({
   useEffect(() => { fetchClients() }, [fetchClients])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const activeTemplates = useMemo(() => (templates || []).filter(t => t.is_active), [templates])
 
-  // template options
-  const activeTemplates = useMemo(
-    () => (templates || []).filter(t => t.is_active),
-    [templates]
-  )
-
-  // selection helpers
   const singleClient = !!initialClientId
-
   const toggleSelected = (id: string) => {
-    if (singleClient) return // locked in single-client mode
+    if (singleClient) return
     setSelectedClientIds(prev => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
   }
@@ -174,7 +143,6 @@ const AssignAssessmentModal: React.FC<Props> = ({
     })
   }
 
-  // submit
   const canSubmit = templateId && selectedClientIds.size > 0 && !submitting
 
   const handleAssign = async () => {
@@ -201,9 +169,7 @@ const AssignAssessmentModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50">
-      {/* backdrop */}
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      {/* dialog */}
       <div className="absolute inset-x-0 top-10 mx-auto w-full max-w-5xl bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
         {/* header */}
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
@@ -219,23 +185,20 @@ const AssignAssessmentModal: React.FC<Props> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12">
           {/* Left: selection form */}
           <div className="lg:col-span-5 border-r border-gray-200 p-4 space-y-4">
-            {/* Template */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Template</label>
-              <div className="relative">
-                <select
-                  value={templateId}
-                  onChange={(e) => setTemplateId(e.target.value)}
-                  className="w-full pr-8 pl-3 py-2 border rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="" disabled>Select a template…</option>
-                  {activeTemplates.map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.abbreviation ? `${t.abbreviation} — ${t.name}` : t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <select
+                value={templateId}
+                onChange={(e) => setTemplateId(e.target.value)}
+                className="w-full pr-8 pl-3 py-2 border rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="" disabled>Select a template…</option>
+                {activeTemplates.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.abbreviation ? `${t.abbreviation} — ${t.name}` : t.name}
+                  </option>
+                ))}
+              </select>
               {!!templateId && (
                 <p className="mt-1 text-xs text-gray-500">
                   {activeTemplates.find(t => t.id === templateId)?.description || ''}
@@ -243,7 +206,6 @@ const AssignAssessmentModal: React.FC<Props> = ({
               )}
             </div>
 
-            {/* Client scope / search */}
             {!singleClient && (
               <>
                 <div className="flex items-center justify-between">
@@ -263,14 +225,13 @@ const AssignAssessmentModal: React.FC<Props> = ({
                   <input
                     value={q}
                     onChange={(e) => { setQ(e.target.value); setPage(1) }}
-                    placeholder="Search by name, email, or city…"
+                    placeholder="Search by name or email…"
                     className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm"
                   />
                 </div>
               </>
             )}
 
-            {/* Due date */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Due date</label>
               <div className="relative">
@@ -284,7 +245,6 @@ const AssignAssessmentModal: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* Reminder frequency */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Reminders</label>
               <select
@@ -299,11 +259,8 @@ const AssignAssessmentModal: React.FC<Props> = ({
               </select>
             </div>
 
-            {/* Instructions */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Instructions (optional)
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Instructions (optional)</label>
               <textarea
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
@@ -320,9 +277,7 @@ const AssignAssessmentModal: React.FC<Props> = ({
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <Users className="w-4 h-4" />
-                  <span>
-                    {total} client{total === 1 ? '' : 's'} found
-                  </span>
+                  <span>{total} client{total === 1 ? '' : 's'} found</span>
                 </div>
                 <button
                   onClick={toggleSelectAllOnPage}
@@ -340,16 +295,13 @@ const AssignAssessmentModal: React.FC<Props> = ({
             )}
 
             <div className="border rounded-lg overflow-hidden">
-              {/* header row */}
               <div className="hidden md:grid grid-cols-12 bg-gray-50 text-xs uppercase text-gray-600 px-3 py-2">
                 {!singleClient && <div className="col-span-1">Select</div>}
-                <div className={`${singleClient ? 'col-span-6' : 'col-span-5'}`}>Name</div>
-                <div className="col-span-3">Email</div>
-                <div className="col-span-2">City</div>
+                <div className={`${singleClient ? 'col-span-6' : 'col-span-6'}`}>Name</div>
+                <div className="col-span-4">Email</div>
                 <div className="col-span-2">Created</div>
               </div>
 
-              {/* body */}
               {loadingRows ? (
                 <div className="py-10 grid place-items-center">
                   <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
@@ -375,11 +327,10 @@ const AssignAssessmentModal: React.FC<Props> = ({
                             />
                           </div>
                         )}
-                        <div className={`${singleClient ? 'col-span-6' : 'col-span-5'}`}>
+                        <div className={`${singleClient ? 'col-span-6' : 'col-span-6'}`}>
                           <div className="font-medium text-gray-900">{name}</div>
                         </div>
-                        <div className="col-span-3 text-sm text-gray-700 truncate">{r.email || '—'}</div>
-                        <div className="col-span-2 text-sm text-gray-700">{r.city || '—'}</div>
+                        <div className="col-span-4 text-sm text-gray-700 truncate">{r.email || '—'}</div>
                         <div className="col-span-2 text-xs text-gray-500">
                           {new Date(r.created_at).toLocaleDateString()}
                         </div>
@@ -416,14 +367,10 @@ const AssignAssessmentModal: React.FC<Props> = ({
 
         {/* footer */}
         <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-between">
-          <div className="text-xs text-gray-500">
-            Select a template and at least one client to enable assignment.
-          </div>
+          <div className="text-xs text-gray-500">Select a template and at least one client to enable assignment.</div>
           <div className="flex items-center gap-2">
             {submitError && <span className="text-sm text-red-600 mr-2">{submitError}</span>}
-            <button onClick={onClose} className="px-4 py-2 rounded border text-sm hover:bg-gray-50">
-              Cancel
-            </button>
+            <button onClick={onClose} className="px-4 py-2 rounded border text-sm hover:bg-gray-50">Cancel</button>
             <button
               onClick={handleAssign}
               disabled={!canSubmit}
