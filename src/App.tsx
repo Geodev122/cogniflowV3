@@ -8,11 +8,11 @@ import { ProtectedRoute } from './components/therapist/ProtectedRoute'
 import { Login } from './pages/therapist/Login'
 import { Register } from './pages/therapist/Register'
 
-// Therapist stack
+// Therapist stack (lazy to speed TTI)
 const TherapistDashboard = React.lazy(() => import('./pages/therapist/TherapistDashboard'))
 const AssessmentsPage = React.lazy(() => import('./pages/therapist/AssessmentsPage'))
 
-// Patient stack (mobile-first)
+// Client stack (mobile-first)
 const ClientHome = React.lazy(() => import('./pages/client/ClientHome'))
 const ClientAssessments = React.lazy(() => import('./pages/client/Assessments'))
 const ClientAssessmentPlayer = React.lazy(() => import('./pages/client/AssessmentPlayer'))
@@ -120,6 +120,7 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            {/* Deep link to a specific instance (AssessmentsPage reads :instanceId) */}
             <Route
               path="/therapist/assessments/:instanceId"
               element={
@@ -129,7 +130,7 @@ export default function App() {
               }
             />
 
-            {/* Patient stack */}
+            {/* Client stack */}
             <Route
               path="/client"
               element={
@@ -167,11 +168,9 @@ export default function App() {
             <Route
               path="/"
               element={
-                user && profile ? (
-                  <Navigate to={profile.role === 'therapist' ? '/therapist' : '/client'} replace />
-                ) : (
-                  <Navigate to="/login" replace />
-                )
+                user && profile
+                  ? <Navigate to={profile.role === 'therapist' ? '/therapist' : '/client'} replace />
+                  : <Navigate to="/login" replace />
               }
             />
 
