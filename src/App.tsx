@@ -6,15 +6,18 @@ import { Register } from './pages/therapist/Register'
 import { ProtectedRoute } from './components/therapist/ProtectedRoute'
 import { useAuth } from './hooks/useAuth'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Lazy pages (Therapist)
-// ─────────────────────────────────────────────────────────────────────────────
+// --- Lazy pages (top-level) ---
 const TherapistDashboard = React.lazy(() =>
   import('./pages/therapist/TherapistDashboard').then(m => ({ default: m.default ?? m }))
+)
+const ClientDashboard = React.lazy(() =>
+  import('./pages/therapist/ClientDashboard').then(m => ({ default: m.default ?? m }))
 )
 const ProgressMetrics = React.lazy(() =>
   import('./pages/therapist/ProgressMetrics').then(m => ({ default: m.default ?? m }))
 )
+
+// --- Lazy therapist tools (component pages) ---
 const ClientManagement = React.lazy(() =>
   import('./components/therapist/ClientManagement').then(m => ({ default: (m as any).ClientManagement ?? m.default }))
 )
@@ -27,26 +30,13 @@ const CaseManagement = React.lazy(() =>
 const CommunicationTools = React.lazy(() =>
   import('./components/therapist/CommunicationTools').then(m => ({ default: (m as any).default ?? m }))
 )
+
+// --- Therapist Assessments page (default export) ---
 const AssessmentsPage = React.lazy(() =>
   import('./pages/therapist/AssessmentsPage').then(m => ({ default: m.default ?? m }))
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Lazy pages (Client)
-// ─────────────────────────────────────────────────────────────────────────────
-const ClientHome = React.lazy(() =>
-  import('./pages/client/ClientHome').then(m => ({ default: m.default ?? m }))
-)
-const ClientAssessments = React.lazy(() =>
-  import('./pages/client/Assessments').then(m => ({ default: m.default ?? m }))
-)
-const ClientProfile = React.lazy(() =>
-  import('./pages/client/Profile').then(m => ({ default: m.default ?? m }))
-)
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Loading state
-// ─────────────────────────────────────────────────────────────────────────────
+// --- Loading states ---
 const LoadingSpinner = ({ message = 'Loading...' }: { message?: string }) => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
     <div className="text-center">
@@ -56,9 +46,7 @@ const LoadingSpinner = ({ message = 'Loading...' }: { message?: string }) => (
   </div>
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Error boundary
-// ─────────────────────────────────────────────────────────────────────────────
+// --- Error boundary (unchanged) ---
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error?: Error }
@@ -99,15 +87,12 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// App
-// ─────────────────────────────────────────────────────────────────────────────
 function App() {
   const { user, profile, loading, error } = useAuth()
 
-  // Optional preloading by role
   React.useEffect(() => {
     if (!user || !profile) return
+    // preloading is optional; keeping your originals
     if (profile.role === 'therapist') {
       import('./pages/therapist/TherapistDashboard')
       import('./pages/therapist/ProgressMetrics')
@@ -118,9 +103,7 @@ function App() {
       import('./components/therapist/CommunicationTools')
     }
     if (profile.role === 'client') {
-      import('./pages/client/ClientHome')
-      import('./pages/client/Assessments')
-      import('./pages/client/Profile')
+      import('./pages/therapist/ClientDashboard')
     }
   }, [user, profile])
 
@@ -198,6 +181,8 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
+            {/* Assessments routes */}
             <Route
               path="/therapist/assessments"
               element={
@@ -214,6 +199,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/metrics"
               element={
@@ -223,19 +209,12 @@ function App() {
               }
             />
 
-            {/* Client area (nested) */}
+            {/* Client area (temporarily here; in Phase 2 we’ll split to /client/* shell) */}
             <Route
-              path="/client/*"
+              path="/client"
               element={
                 <ProtectedRoute role="client">
-                  <React.Suspense fallback={<LoadingSpinner message="Loading client area..." />}>
-                    <Routes>
-                      <Route index element={<ClientHome />} />
-                      <Route path="assessments" element={<ClientAssessments />} />
-                      <Route path="profile" element={<ClientProfile />} />
-                      <Route path="*" element={<Navigate to="/client" replace />} />
-                    </Routes>
-                  </React.Suspense>
+                  <ClientDashboard />
                 </ProtectedRoute>
               }
             />
