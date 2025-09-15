@@ -5,21 +5,15 @@ import { useAuth } from './useAuth'
 import { isRecursionError } from '../utils/helpers'
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Types
+   Types (DB-aligned)
 ──────────────────────────────────────────────────────────────────────────── */
 export interface AssessmentTemplate {
   id: string
   name: string
-  abbreviation: string
-  category: string
-  description: string | null
-  questions: any[] | null
-  scoring_config: any | null
-  interpretation_rules: any | null
-  clinical_cutoffs: any | null
-  instructions: string | null
-  estimated_duration_minutes: number | null
-  evidence_level: string | null
+  abbreviation: string | null
+  version: string | null
+  schema: any | null          // JSONB
+  scoring: any | null         // JSONB
   is_active: boolean
   created_at: string
 }
@@ -29,15 +23,18 @@ export interface AssessmentInstance {
   template_id: string
   therapist_id: string
   client_id: string
-  case_id?: string | null
-  title: string
-  instructions?: string | null
-  status: 'assigned' | 'in_progress' | 'completed' | string
-  assigned_at: string
-  due_date?: string | null
-  started_at?: string | null
-  completed_at?: string | null
-  // expanded (when join works)
+  case_id: string | null
+  title: string | null
+  instructions: string | null
+  status: 'assigned' | 'in_progress' | 'completed' | 'expired' | 'cancelled' | string
+  assigned_at: string | null
+  due_date: string | null
+  started_at: string | null
+  completed_at: string | null
+  progress: number | null
+  reminder_frequency: string | null
+
+  // expanded convenience fields when joins succeed
   template?: AssessmentTemplate | null
   client?: {
     id: string
@@ -51,10 +48,10 @@ export interface AssessmentInstance {
    Column lists (avoid '*')
 ──────────────────────────────────────────────────────────────────────────── */
 const TEMPLATE_COLS =
-  'id,name,abbreviation,category,description,questions,scoring_config,interpretation_rules,clinical_cutoffs,instructions,estimated_duration_minutes,evidence_level,is_active,created_at'
+  'id,name,abbreviation,version,schema,scoring,is_active,created_at'
 
 const INSTANCE_COLS =
-  'id,template_id,therapist_id,client_id,case_id,title,instructions,status,assigned_at,due_date,started_at,completed_at'
+  'id,template_id,therapist_id,client_id,case_id,title,instructions,status,assigned_at,due_date,started_at,completed_at,progress,reminder_frequency'
 
 const PROFILE_COLS = 'id,first_name,last_name,email'
 
@@ -76,12 +73,12 @@ export const useAssessments = () => {
         .from('assessment_templates')
         .select(TEMPLATE_COLS)
         .eq('is_active', true)
-        .order('category', { ascending: true })
+        .order('name', { ascending: true })
 
       if (error) {
         if (isRecursionError(error)) {
           console.error('[useAssessments] RLS recursion in templates:', error)
-          setError('Assessment templates are temporarily unavailable (RLS).')
+          setError('Assessment templates are temporarily unavailable.')
         } else {
           console.error('[useAssessments] templates error:', error)
           setError('Failed to load assessment templates.')
@@ -119,7 +116,7 @@ export const useAssessments = () => {
         return
       }
 
-      // If join blocked by RLS/permissions, fall back to multi-fetch
+      // Fallback: multi-fetch to avoid RLS recursion on joins
       if (error) {
         console.warn('[useAssessments] join failed for instances, falling back:', error)
       }
@@ -133,7 +130,7 @@ export const useAssessments = () => {
       if (baseErr) {
         if (isRecursionError(baseErr)) {
           console.error('[useAssessments] RLS recursion in instances:', baseErr)
-          setError('Assessment instances are temporarily unavailable (RLS).')
+          setError('Assessment instances are temporarily unavailable.')
         } else {
           console.error('[useAssessments] instances error:', baseErr)
           setError('Failed to load assessment instances.')
@@ -186,10 +183,14 @@ export const useAssessments = () => {
     async (
       templateId: string,
       clientIds: string[],
-      options: { dueDate?: string; instructions?: string; reminderFrequency?: 'none' | 'daily' | 'weekly' | 'before_due' } = {}
+      options: {
+        dueDate?: string
+        instructions?: string
+        reminderFrequency?: 'none' | 'daily' | 'weekly' | 'before_due'
+        titleOverride?: string
+      } = {}
     ) => {
       if (!profile?.id) return
-      // normalize date to YYYY-MM-DD (or null)
       const due = options.dueDate?.trim() ? options.dueDate : null
       const reminder_frequency = (options.reminderFrequency || 'none') as string
 
@@ -197,7 +198,7 @@ export const useAssessments = () => {
         const template = templates.find(t => t.id === templateId)
         if (!template) throw new Error('Template not found')
 
-        // Map case ids for each client (optional)
+        // Try to associate a case per client (optional)
         const { data: caseRows, error: caseErr } = await supabase
           .from('cases')
           .select('id,client_id')
@@ -215,12 +216,13 @@ export const useAssessments = () => {
             therapist_id: profile.id,
             client_id: clientId,
             case_id: clientCase?.id || null,
-            title: template.name,
-            instructions: options.instructions || template.instructions || null,
+            title: options.titleOverride || template.name,
+            instructions: options.instructions || null,
             due_date: due,
             reminder_frequency,
             status: 'assigned' as const,
             assigned_at: new Date().toISOString(),
+            progress: 0
           }
         })
 
@@ -238,7 +240,7 @@ export const useAssessments = () => {
   )
 
   const updateInstanceStatus = useCallback(
-    async (instanceId: string, status: 'assigned' | 'in_progress' | 'completed' | string) => {
+    async (instanceId: string, status: AssessmentInstance['status']) => {
       try {
         const updates: Record<string, any> = { status }
         if (status === 'completed') updates.completed_at = new Date().toISOString()
@@ -278,10 +280,6 @@ export const useAssessments = () => {
     (status: string) => instances.filter(i => i.status === status),
     [instances]
   )
-  const getTemplatesByCategory = useCallback(
-    (category: string) => templates.filter(t => t.category === category),
-    [templates]
-  )
 
   // Initial load
   useEffect(() => {
@@ -304,7 +302,6 @@ export const useAssessments = () => {
   // Realtime: keep therapist's instances in sync
   useEffect(() => {
     if (!profile?.id) return
-    // clean any old channel
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current)
       channelRef.current = null
@@ -315,7 +312,6 @@ export const useAssessments = () => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'assessment_instances', filter: `therapist_id=eq.${profile.id}` },
         () => {
-          // lightweight refetch (instances only)
           fetchInstances()
         }
       )
@@ -337,7 +333,8 @@ export const useAssessments = () => {
     deleteInstance,
     getInstancesByClient,
     getInstancesByStatus,
-    getTemplatesByCategory,
+    // kept for parity with your usage
+    getTemplatesByCategory: (_category: string) => templates, // no category in DB; return all or filter by tag in future
     refetch: async () => {
       await Promise.all([fetchTemplates(), fetchInstances()])
     },
