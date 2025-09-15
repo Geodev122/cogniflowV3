@@ -1,15 +1,7 @@
 // src/components/assessment/AssessmentPreviewModal.tsx
 import React from 'react'
-import { AssessmentTemplate } from '../../types/assessment'
-import {
-  X,
-  BookOpen,
-  Clock,
-  ListChecks,
-  Info,
-  Layers,
-  CheckCircle2,
-} from 'lucide-react'
+import type { AssessmentTemplate } from '../../hooks/useAssessments'
+import { X, BookOpen, Clock, ListChecks, Info, Layers, CheckCircle2 } from 'lucide-react'
 
 type Props = {
   template: AssessmentTemplate
@@ -26,8 +18,28 @@ export const AssessmentPreviewModal: React.FC<Props> = ({
 }) => {
   if (!open) return null
 
-  const previewQuestions = template.questions.slice(0, 5)
-  const remaining = Math.max(0, template.questions.length - previewQuestions.length)
+  // New schema-safe access
+  const questions = Array.isArray((template as any)?.schema?.questions)
+    ? (template as any).schema.questions
+    : []
+
+  const estimatedDuration: number | null =
+    (template as any)?.schema?.meta?.estimated_duration_minutes ??
+    (template as any)?.schema?.estimated_duration_minutes ??
+    null
+
+  const scoringMethod: string | null =
+    (template as any)?.scoring?.method ??
+    (template as any)?.schema?.scoring_config?.method ??
+    null
+
+  const category: string | null =
+    (template as any)?.schema?.meta?.category ??
+    (template as any)?.schema?.category ??
+    null
+
+  const previewQuestions = questions.slice(0, 5)
+  const remaining = Math.max(0, questions.length - previewQuestions.length)
 
   return (
     <div className="fixed inset-0 z-50">
@@ -37,15 +49,21 @@ export const AssessmentPreviewModal: React.FC<Props> = ({
           {/* Header */}
           <div className="p-5 border-b border-gray-200 flex items-start justify-between">
             <div className="pr-6">
-              <div className="flex items-center gap-2 text-gray-700 mb-1">
-                <BookOpen className="w-5 h-5 text-blue-600" />
-                <span className="text-xs uppercase tracking-wide font-semibold">
-                  {template.category}
-                </span>
-              </div>
+              {(category || template.abbreviation) && (
+                <div className="flex items-center gap-2 text-gray-700 mb-1">
+                  <BookOpen className="w-5 h-5 text-blue-600" />
+                  {category && (
+                    <span className="text-xs uppercase tracking-wide font-semibold">{category}</span>
+                  )}
+                </div>
+              )}
               <h3 className="text-xl font-bold text-gray-900 leading-tight">
                 {template.name}{' '}
-                <span className="text-gray-400 font-medium text-base">({template.abbreviation})</span>
+                {template.abbreviation && (
+                  <span className="text-gray-400 font-medium text-base">
+                    ({template.abbreviation})
+                  </span>
+                )}
               </h3>
               {template.version && (
                 <p className="text-xs text-gray-500 mt-0.5">Version {template.version}</p>
@@ -69,7 +87,7 @@ export const AssessmentPreviewModal: React.FC<Props> = ({
                 <div className="text-sm">
                   <div className="text-gray-700 font-medium">Duration</div>
                   <div className="text-gray-500">
-                    ~{template.estimated_duration_minutes} min
+                    {estimatedDuration ? `~${estimatedDuration} min` : '—'}
                   </div>
                 </div>
               </div>
@@ -77,7 +95,7 @@ export const AssessmentPreviewModal: React.FC<Props> = ({
                 <ListChecks className="w-4 h-4 text-emerald-600" />
                 <div className="text-sm">
                   <div className="text-gray-700 font-medium">Questions</div>
-                  <div className="text-gray-500">{template.questions.length} items</div>
+                  <div className="text-gray-500">{questions.length} items</div>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-3 rounded-lg border bg-white">
@@ -85,18 +103,20 @@ export const AssessmentPreviewModal: React.FC<Props> = ({
                 <div className="text-sm">
                   <div className="text-gray-700 font-medium">Scoring</div>
                   <div className="text-gray-500 capitalize">
-                    {template.scoring_config?.method?.replace('_', ' ') || '—'}
+                    {scoringMethod ? scoringMethod.replace('_', ' ') : '—'}
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Description */}
-            {template.description && (
+            {(template as any)?.schema?.description && (
               <div className="p-4 rounded-lg border bg-gray-50">
                 <div className="flex items-start gap-2">
                   <Info className="w-4 h-4 text-gray-600 mt-0.5" />
-                  <p className="text-sm text-gray-700">{template.description}</p>
+                  <p className="text-sm text-gray-700">
+                    {(template as any).schema.description}
+                  </p>
                 </div>
               </div>
             )}
@@ -105,74 +125,67 @@ export const AssessmentPreviewModal: React.FC<Props> = ({
             <div className="space-y-3">
               <h4 className="font-semibold text-gray-900">Sample Questions</h4>
               <div className="space-y-2">
-                {previewQuestions.map((q, idx) => (
-                  <div
-                    key={q.id}
-                    className="p-3 border rounded-lg bg-white"
-                  >
+                {previewQuestions.map((q: any, idx: number) => (
+                  <div key={q.id ?? idx} className="p-3 border rounded-lg bg-white">
                     <div className="text-xs text-gray-500 mb-1">
                       {idx + 1}. <span className="uppercase">{q.type}</span>
                     </div>
                     <div className="text-sm text-gray-900">{q.text}</div>
+
                     {q.type === 'scale' && (
                       <div className="mt-2">
                         <div className="text-xs text-gray-500">
-                          Scale: {q.scale_min ?? 0}–{q.scale_max ?? 10}
+                          Scale: {(q.scale_min ?? q.min ?? 0)}–{(q.scale_max ?? q.max ?? 10)}
                         </div>
-                        {q.labels?.length ? (
+                        {Array.isArray(q.labels) && q.labels.length > 0 && (
                           <div className="text-xs text-gray-400">
-                            Labels: {q.labels.join(' · ')}
+                            Labels: {q.labels.slice(0, 5).join(' · ')}
+                            {q.labels.length > 5 ? ' …' : ''}
                           </div>
-                        ) : null}
+                        )}
                       </div>
                     )}
-                    {(q.type === 'single_choice' || q.type === 'multiple_choice') && q.options?.length ? (
+
+                    {(q.type === 'single_choice' || q.type === 'multiple_choice' || q.type === 'multi_choice') &&
+                     Array.isArray(q.options) && q.options.length > 0 && (
                       <div className="mt-2 text-xs text-gray-500">
-                        Options: {q.options.slice(0, 5).join(' · ')}
+                        Options: {q.options.slice(0, 5).map((o: any) => (typeof o === 'string' ? o : o?.label)).join(' · ')}
                         {q.options.length > 5 ? ' …' : ''}
                       </div>
-                    ) : null}
+                    )}
                   </div>
                 ))}
                 {remaining > 0 && (
-                  <div className="text-xs text-gray-500 pl-1">
-                    + {remaining} more…
-                  </div>
+                  <div className="text-xs text-gray-500 pl-1">+ {remaining} more…</div>
                 )}
               </div>
             </div>
 
-            {/* Interpretation Overview */}
-            {template.interpretation_rules?.ranges?.length ? (
+            {/* Interpretation Overview (if provided in schema/scoring) */}
+            {Array.isArray((template as any)?.schema?.interpretation_rules?.ranges) &&
+              (template as any).schema.interpretation_rules.ranges.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-semibold text-gray-900">Interpretation Ranges</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {template.interpretation_rules.ranges
-                    .slice(0, 6)
-                    .map((r, i) => (
-                      <div key={i} className="p-3 border rounded-lg bg-white">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          <div className="text-sm font-medium text-gray-900">
-                            {r.label} ({r.min}–{r.max})
-                          </div>
-                        </div>
-                        <div className="text-xs text-gray-600 mt-1">
-                          {r.description}
+                  {(template as any).schema.interpretation_rules.ranges.slice(0, 6).map((r: any, i: number) => (
+                    <div key={i} className="p-3 border rounded-lg bg-white">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <div className="text-sm font-medium text-gray-900">
+                          {r.label} ({r.min}–{r.max})
                         </div>
                       </div>
-                    ))}
+                      <div className="text-xs text-gray-600 mt-1">{r.description}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ) : null}
+            )}
           </div>
 
           {/* Footer */}
           <div className="p-4 border-t border-gray-200 flex items-center justify-end gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-            >
+            <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
               Close
             </button>
             {onAssignClick && (
