@@ -6,41 +6,26 @@ import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
 import AssessmentWorkspace from '../../components/assessment/AssessmentWorkspace'
 
-/**
- * Therapist Assessments Page
- * - Route-friendly wrapper around AssessmentWorkspace
- * - Deep linking: /therapist/assessments/:instanceId?
- * - Access guard: therapist-only (best-effort via profile.role)
- * - Supabase-wired: records last-seen analytics (non-blocking, no hard-coded IDs)
- */
 const AssessmentsPage: React.FC = () => {
   const navigate = useNavigate()
   const { instanceId } = useParams<{ instanceId?: string }>()
   const { profile, loading: authLoading } = useAuth()
 
-  // Best-effort role guard (relies on your profiles schema; RLS should still enforce server-side)
   const isTherapist = useMemo(() => {
-    // If your "profiles" table has role, keep this check aligned with your RLS.
-    // This intentionally errs on the side of allowing access during setup to avoid false-negatives in dev.
     return profile?.role ? profile.role === 'therapist' : !!profile
   }, [profile])
 
-  // Lightweight analytics / last-seen persistence (ignore errors; no hard-coding)
   useEffect(() => {
     if (!profile) return
     const writeLastSeen = async () => {
       try {
-        // Table "user_last_seen" is optional; write if present.
         await supabase.from('user_last_seen').upsert({
           user_id: profile.id,
           page: 'therapist_assessments',
-          // store the instance if deep-linked (handy for "continue where you left off")
           context: instanceId ? { instanceId } : null,
           seen_at: new Date().toISOString(),
         })
-      } catch {
-        // Non-blocking analytics; intentionally ignore.
-      }
+      } catch {}
     }
     writeLastSeen()
   }, [profile, instanceId])
@@ -59,9 +44,7 @@ const AssessmentsPage: React.FC = () => {
         <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
           <AlertTriangle className="w-8 h-8 text-amber-600 mx-auto mb-2" />
           <h2 className="text-lg font-semibold text-gray-900 mb-1">You’re not signed in</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Please sign in to access assessments.
-          </p>
+          <p className="text-sm text-gray-600 mb-4">Please sign in to access assessments.</p>
           <button
             onClick={() => navigate('/login')}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
@@ -79,9 +62,7 @@ const AssessmentsPage: React.FC = () => {
         <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
           <AlertTriangle className="w-8 h-8 text-red-600 mx-auto mb-2" />
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Access restricted</h2>
-          <p className="text-sm text-gray-600">
-            This area is for therapists only.
-          </p>
+          <p className="text-sm text-gray-600">This area is for therapists only.</p>
         </div>
       </div>
     )
@@ -89,7 +70,6 @@ const AssessmentsPage: React.FC = () => {
 
   return (
     <div className="h-full grid grid-rows-[auto_1fr]">
-      {/* Page header & breadcrumbs */}
       <div className="border-b border-gray-200 bg-white/80 backdrop-blur">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -120,7 +100,6 @@ const AssessmentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Main content: AssessmentWorkspace owns all Supabase I/O for instances/templates */}
       <div className="min-h-0">
         <AssessmentWorkspace
           initialInstanceId={instanceId}
