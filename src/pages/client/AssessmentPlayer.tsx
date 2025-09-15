@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { MobileShell } from '../../components/client/MobileShell'
@@ -7,10 +7,10 @@ import { AssessmentForm } from '../../components/assessment/AssessmentForm'
 import type { AssessmentInstance, AssessmentTemplate } from '../../types/assessment'
 
 export default function AssessmentPlayer() {
-  const navigate = useNavigate()
   const { instanceId } = useParams<{ instanceId: string }>()
   const { profile } = useAuth()
-  const [instance, setInstance] = useState<AssessmentInstance | null>(null)
+  const navigate = useNavigate()
+  const [instance, setInstance] = useState<(AssessmentInstance & { template?: AssessmentTemplate }) | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -20,30 +20,25 @@ export default function AssessmentPlayer() {
       if (!profile || !instanceId) return
       setLoading(true); setError(null)
       try {
-        const { data: base, error: err } = await supabase
+        const { data: inst, error: err } = await supabase
           .from('assessment_instances')
           .select('*')
           .eq('id', instanceId)
-          .eq('client_id', profile.id) // ensure owner
+          .eq('client_id', profile.id)
           .single<AssessmentInstance>()
         if (err) throw err
-        if (!base) throw new Error('Not found')
 
-        // hydrate template
-        if (!cancel) {
-          const { data: tmpl, error: tErr } = await supabase
-            .from('assessment_templates')
-            .select('*')
-            .eq('id', base.template_id)
-            .single<AssessmentTemplate>()
-          if (tErr) throw tErr
-          setInstance({ ...base, template: tmpl })
-        }
+        const { data: tpl, error: tErr } = await supabase
+          .from('assessment_templates')
+          .select('*')
+          .eq('id', inst.template_id)
+          .single<AssessmentTemplate>()
+        if (tErr) throw tErr
+
+        if (!cancel) setInstance({ ...inst, template: tpl })
       } catch (e:any) {
         console.error('[AssessmentPlayer]', e); if (!cancel) setError('Could not open assessment.')
-      } finally {
-        if (!cancel) setLoading(false)
-      }
+      } finally { if (!cancel) setLoading(false) }
     }
     load()
     return () => { cancel = true }
@@ -71,17 +66,8 @@ export default function AssessmentPlayer() {
             showNavigation
             showProgress
             onResponse={() => {}}
-            onSave={()=>{}}
-            onComplete={async () => {
-              // refresh instance and return to list
-              const { data } = await supabase
-                .from('assessment_instances')
-                .select('*')
-                .eq('id', instance.id)
-                .single<AssessmentInstance>()
-              if (data) setInstance({ ...data, template: instance.template })
-              navigate('/client/assessments')
-            }}
+            onSave={() => {}}
+            onComplete={() => navigate('/client/assessments')}
           />
         </div>
       )}
