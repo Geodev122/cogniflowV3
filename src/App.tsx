@@ -1,42 +1,24 @@
 // src/App.tsx
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { useAuth } from './hooks/useAuth'
+import { ProtectedRoute } from './components/therapist/ProtectedRoute'
+
+// Auth pages (therapist-facing auth screens)
 import { Login } from './pages/therapist/Login'
 import { Register } from './pages/therapist/Register'
-import { ProtectedRoute } from './components/therapist/ProtectedRoute'
-import { useAuth } from './hooks/useAuth'
 
-// --- Lazy pages (top-level) ---
-const TherapistDashboard = React.lazy(() =>
-  import('./pages/therapist/TherapistDashboard').then(m => ({ default: m.default ?? m }))
-)
-const ClientDashboard = React.lazy(() =>
-  import('./pages/therapist/ClientDashboard').then(m => ({ default: m.default ?? m }))
-)
-const ProgressMetrics = React.lazy(() =>
-  import('./pages/therapist/ProgressMetrics').then(m => ({ default: m.default ?? m }))
-)
+// Lazy stacks
+const TherapistDashboard = React.lazy(() => import('./pages/therapist/TherapistDashboard'))
 
-// --- Lazy therapist tools (component pages) ---
-const ClientManagement = React.lazy(() =>
-  import('./components/therapist/ClientManagement').then(m => ({ default: (m as any).ClientManagement ?? m.default }))
-)
-const SessionManagement = React.lazy(() =>
-  import('./components/therapist/SessionManagement').then(m => ({ default: (m as any).SessionManagement ?? m.default }))
-)
-const CaseManagement = React.lazy(() =>
-  import('./components/therapist/CaseManagement').then(m => ({ default: (m as any).CaseManagement ?? m.default }))
-)
-const CommunicationTools = React.lazy(() =>
-  import('./components/therapist/CommunicationTools').then(m => ({ default: (m as any).default ?? m }))
-)
+// Client portal pages (new)
+const ClientHome = React.lazy(() => import('./pages/client/ClientHome'))
+const ClientAssessments = React.lazy(() => import('./pages/client/Assessments'))
+const ClientProfile = React.lazy(() => import('./pages/client/Profile'))
 
-// --- Therapist Assessments page (default export) ---
-const AssessmentsPage = React.lazy(() =>
-  import('./pages/therapist/AssessmentsPage').then(m => ({ default: m.default ?? m }))
-)
+// Therapist assessments page
+const AssessmentsPage = React.lazy(() => import('./pages/therapist/AssessmentsPage'))
 
-// --- Loading states ---
 const LoadingSpinner = ({ message = 'Loading...' }: { message?: string }) => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
     <div className="text-center">
@@ -46,7 +28,6 @@ const LoadingSpinner = ({ message = 'Loading...' }: { message?: string }) => (
   </div>
 )
 
-// --- Error boundary (unchanged) ---
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error?: Error }
@@ -55,12 +36,8 @@ class ErrorBoundary extends React.Component<
     super(props)
     this.state = { hasError: false }
   }
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error }
-  }
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('App Error:', error, errorInfo)
-  }
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error } }
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) { console.error('App Error:', error, errorInfo) }
   render() {
     if (this.state.hasError) {
       return (
@@ -68,15 +45,14 @@ class ErrorBoundary extends React.Component<
           <div className="text-center max-w-md mx-auto p-6">
             <div className="text-red-600 mb-4">
               <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"/>
               </svg>
             </div>
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Something went wrong</h2>
             <p className="text-gray-600 mb-4">Please refresh the page to try again.</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
+            <button onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
               Refresh Page
             </button>
           </div>
@@ -90,23 +66,6 @@ class ErrorBoundary extends React.Component<
 function App() {
   const { user, profile, loading, error } = useAuth()
 
-  React.useEffect(() => {
-    if (!user || !profile) return
-    // preloading is optional; keeping your originals
-    if (profile.role === 'therapist') {
-      import('./pages/therapist/TherapistDashboard')
-      import('./pages/therapist/ProgressMetrics')
-      import('./pages/therapist/AssessmentsPage')
-      import('./components/therapist/ClientManagement')
-      import('./components/therapist/SessionManagement')
-      import('./components/therapist/CaseManagement')
-      import('./components/therapist/CommunicationTools')
-    }
-    if (profile.role === 'client') {
-      import('./pages/therapist/ClientDashboard')
-    }
-  }, [user, profile])
-
   if (loading) return <LoadingSpinner message="Initializing Thera-PY..." />
 
   if (error) {
@@ -115,15 +74,14 @@ function App() {
         <div className="text-center max-w-md mx-auto p-6">
           <div className="text-red-600 mb-4">
             <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"/>
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Connection Error</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
+          <button onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
             Retry
           </button>
         </div>
@@ -150,40 +108,6 @@ function App() {
               }
             />
             <Route
-              path="/therapist/clients"
-              element={
-                <ProtectedRoute role="therapist">
-                  <ClientManagement />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/therapist/sessions"
-              element={
-                <ProtectedRoute role="therapist">
-                  <SessionManagement />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/therapist/cases"
-              element={
-                <ProtectedRoute role="therapist">
-                  <CaseManagement />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/therapist/comms"
-              element={
-                <ProtectedRoute role="therapist">
-                  <CommunicationTools />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Assessments routes */}
-            <Route
               path="/therapist/assessments"
               element={
                 <ProtectedRoute role="therapist">
@@ -200,21 +124,28 @@ function App() {
               }
             />
 
-            <Route
-              path="/metrics"
-              element={
-                <ProtectedRoute role="therapist">
-                  <ProgressMetrics />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Client area (temporarily here; in Phase 2 we’ll split to /client/* shell) */}
+            {/* Client area */}
             <Route
               path="/client"
               element={
                 <ProtectedRoute role="client">
-                  <ClientDashboard />
+                  <ClientHome />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/assessments"
+              element={
+                <ProtectedRoute role="client">
+                  <ClientAssessments />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/client/profile"
+              element={
+                <ProtectedRoute role="client">
+                  <ClientProfile />
                 </ProtectedRoute>
               }
             />
