@@ -1,3 +1,4 @@
+//profile
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
@@ -15,15 +16,7 @@ export default function ClientProfile() {
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
 
-  import { MobileTopBar } from '../../components/client/MobileTopBar'
-
-return (
-  <>
-    <MobileTopBar title="Profile" />
-    {/* existing Profile content */}
-  </>
-)
-
+  
   useEffect(() => {
     if (profile?.role === 'client') {
       setFirstName(profile.first_name || '')
