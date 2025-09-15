@@ -1,17 +1,335 @@
-iption: interpretation.description ?? null,
+// src/components/assessment/AssessmentForm.tsx
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { AssessmentFormProps } from '../../types/assessment'
+import { AssessmentRenderer } from './AssessmentRenderer'
+import { AssessmentScoringEngine } from '../../lib/assessmentEngine'
+import { supabase } from '../../lib/supabase'
+import {
+  Save, Send, Clock, CheckCircle, AlertTriangle, Brain, BarChart3,
+} from 'lucide-react'
+import AssessmentReport from './AssessmentReport'
+
+type ScoreRow = {
+  id: string
+  instance_id: string
+  raw_score: number
+  scaled_score: number | null
+  percentile: number | null
+  t_score: number | null
+  z_score: number | null
+  interpretation_category: string | null
+  interpretation_description: string | null
+  clinical_significance: string | null
+  severity_level: string | null
+  recommendations: string | null
+  therapist_notes: string | null
+  auto_generated: boolean
+  calculated_at: string
+}
+
+export const AssessmentForm: React.FC<AssessmentFormProps> = ({
+  instance,
+  onResponse,
+  onComplete,
+  onSave,
+  readonly = false,
+  showProgress = true,    // kept for future column/trigger
+  showNavigation = true,
+}) => {
+  const [responses, setResponses] = useState<Record<string, any>>({})
+  const [currentQuestion, setCurrentQuestion] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [completing, setCompleting] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [showResults, setShowResults] = useState(false)
+  const [therapistName, setTherapistName] = useState<string | null>(null)
+
+  const [calculatedScore, setCalculatedScore] = useState<{
+    raw: number
+    percentOfMax?: number
+    interpretation?: {
+      category?: string
+      description?: string
+      recommendations?: string
+      clinical_significance?: string
+      severity_level?: string
+    }
+    subscales?: Record<string, number>
+    narrative?: string
+  } | null>(null)
+
+  const template = instance.template
+  const debouncedTimer = useRef<number | null>(null)
+
+  /* ────────────────────────────────────────────────────────────────────────────
+     Load therapist display name (for “Passed by” in PDF header)
+  ─────────────────────────────────────────────────────────────────────────────*/
+  useEffect(() => {
+    let cancel = false
+    const run = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('first_name,last_name')
+          .eq('id', instance.therapist_id)
+          .single()
+        if (!cancel) {
+          if (error || !data) setTherapistName(null)
+          else setTherapistName(`${data.first_name || ''} ${data.last_name || ''}`.trim())
+        }
+      } catch {
+        if (!cancel) setTherapistName(null)
+      }
+    }
+    run()
+    return () => { cancel = true }
+  }, [instance.therapist_id])
+
+  /* ────────────────────────────────────────────────────────────────────────────
+     Load existing responses + saved score (if completed)
+     - Use the same in-memory map for subscale/narrative to avoid races.
+  ─────────────────────────────────────────────────────────────────────────────*/
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        // 1) Responses
+        const { data, error } = await supabase
+          .from('assessment_responses')
+          .select('question_id, response_value')
+          .eq('instance_id', instance.id)
+
+        if (error) throw error
+        const map: Record<string, any> = {}
+        for (const r of data || []) map[r.question_id] = r.response_value
+        if (!cancelled) setResponses(map)
+
+        // 2) If already completed, load the most recent score and regenerate extras
+        if (instance.status === 'completed' && template) {
+          const { data: scores, error: resErr } = await supabase
+            .from('assessment_scores')
+            .select(
+              'id, instance_id, raw_score, scaled_score, percentile, t_score, z_score, interpretation_category, interpretation_description, clinical_significance, severity_level, recommendations, auto_generated, calculated_at'
+            )
+            .eq('instance_id', instance.id)
+            .order('calculated_at', { ascending: false })
+            .limit(1)
+            .returns<ScoreRow[]>()
+
+          if (resErr) throw resErr
+
+          const s = scores?.[0]
+          if (s && !cancelled) {
+            const percentOfMax =
+              template.scoring_config?.max_score
+                ? Math.round((Number(s.raw_score) / Number(template.scoring_config.max_score)) * 100)
+                : undefined
+
+            const engine = new AssessmentScoringEngine(template, map)
+            const subs = engine.calculateSubscaleScores?.() ?? undefined
+            const narrative = engine.generateNarrativeReport(Number(s.raw_score), {
+              category: s.interpretation_category ?? undefined,
+              description: s.interpretation_description ?? undefined,
+              recommendations: s.recommendations ?? undefined,
+              clinical_significance: s.clinical_significance ?? undefined,
+              severity_level: s.severity_level ?? undefined,
+            })
+
+            setCalculatedScore({
+              raw: Number(s.raw_score),
+              percentOfMax,
+              interpretation: {
+                category: s.interpretation_category ?? undefined,
+                description: s.interpretation_description ?? undefined,
+                clinical_significance: s.clinical_significance ?? undefined,
+                severity_level: s.severity_level ?? undefined,
+                recommendations: s.recommendations ?? undefined,
+              },
+              subscales: subs,
+              narrative,
+            })
+          }
+        }
+      } catch (err) {
+        console.error('[AssessmentForm] load error:', err)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instance.id])
+
+  /* ────────────────────────────────────────────────────────────────────────────
+     Derived progress
+  ─────────────────────────────────────────────────────────────────────────────*/
+  const totalQuestions = template?.questions?.length ?? 0
+  const answeredQuestions = useMemo(
+    () =>
+      Object.keys(responses).filter(
+        (k) => responses[k] !== undefined && responses[k] !== null && responses[k] !== ''
+      ).length,
+    [responses]
+  )
+  const progressPct = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0
+
+  // Only required questions must be answered to complete
+  const isFormComplete =
+    !!template?.questions
+      ?.filter((q: any) => q.required !== false)
+      .every((q: any) => responses[q.id] !== undefined && responses[q.id] !== null && responses[q.id] !== '')
+
+  /* ────────────────────────────────────────────────────────────────────────────
+     Debounced progress update — (disabled: no column in DB)
+     Keep the structure so it’s easy to re-enable after adding column/trigger.
+  ─────────────────────────────────────────────────────────────────────────────*/
+  // useEffect(() => {
+  //   if (!showProgress) return
+  //   if (debouncedTimer.current) window.clearTimeout(debouncedTimer.current)
+  //   debouncedTimer.current = window.setTimeout(async () => {
+  //     try {
+  //       await supabase.from('assessment_instances').update({ progress: progressPct }).eq('id', instance.id)
+  //     } catch (e) {
+  //       console.warn('[AssessmentForm] progress update failed:', e)
+  //     }
+  //   }, 400)
+  //   return () => {
+  //     if (debouncedTimer.current) window.clearTimeout(debouncedTimer.current)
+  //   }
+  // }, [progressPct, instance.id, showProgress])
+
+  /* ────────────────────────────────────────────────────────────────────────────
+     On single response change → upsert + move status to in_progress (once)
+     Requires unique key on (instance_id, question_id) to avoid dup rows.
+  ─────────────────────────────────────────────────────────────────────────────*/
+  const handleResponse = async (questionId: string, value: any) => {
+    const next = { ...responses, [questionId]: value }
+    setResponses(next)
+    onResponse?.(questionId, value)
+
+    try {
+      const { error: upErr } = await supabase.from('assessment_responses').upsert({
+        instance_id: instance.id,
+        question_id: questionId,
+        response_value: value,
+        is_final: false,
+      })
+      if (upErr) throw upErr
+
+      if (instance.status === 'assigned') {
+        await supabase
+          .from('assessment_instances')
+          .update({
+            status: 'in_progress',
+            started_at: new Date().toISOString(),
+          })
+          .eq('id', instance.id)
+      }
+    } catch (e) {
+      console.error('[AssessmentForm] save response error:', e)
+    }
+  }
+
+  /* ────────────────────────────────────────────────────────────────────────────
+     Manual save (marks NOT final)
+  ─────────────────────────────────────────────────────────────────────────────*/
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const rows = Object.entries(responses).map(([qid, val]) => ({
+        instance_id: instance.id,
+        question_id: qid,
+        response_value: val,
+        is_final: false,
+      }))
+      if (rows.length) {
+        const { error } = await supabase.from('assessment_responses').upsert(rows)
+        if (error) throw error
+      }
+      onSave?.()
+    } catch (e) {
+      console.error('[AssessmentForm] save error:', e)
+      alert('Error saving assessment. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /* ────────────────────────────────────────────────────────────────────────────
+     Complete flow: validate → finalize → compute → persist → read back
+  ─────────────────────────────────────────────────────────────────────────────*/
+  const handleComplete = async () => {
+    if (!template) return
+    setCompleting(true)
+
+    try {
+      // Validate
+      const engine = new AssessmentScoringEngine(template, responses)
+      const validation = engine.validateResponses()
+      if (!validation.isComplete) {
+        setValidationErrors(validation.missingQuestions)
+        setCompleting(false)
+        return
+      }
+
+      // Finalize responses (idempotent upsert)
+      const rows = Object.entries(responses).map(([qid, val]) => ({
+        instance_id: instance.id,
+        question_id: qid,
+        response_value: val,
+        is_final: true,
+        response_timestamp: new Date().toISOString(),
+      }))
+      if (rows.length) {
+        const { error: respErr } = await supabase.from('assessment_responses').upsert(rows)
+        if (respErr) throw respErr
+      }
+
+      // Update instance state
+      {
+        const { error: instErr } = await supabase
+          .from('assessment_instances')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', instance.id)
+        if (instErr) throw instErr
+      }
+
+      // Compute score + extras
+      const raw = Number(engine.calculateRawScore() ?? 0)
+      const max = Number(template?.scoring_config?.max_score ?? 0)
+      const percentOfMax = max ? Math.round((raw / max) * 100) : undefined
+      const interpretation = engine.getInterpretation(raw) || {}
+      const subscales = engine.calculateSubscaleScores?.() ?? undefined
+      const narrative = engine.generateNarrativeReport(raw, interpretation)
+
+      // Persist canonical score
+      {
+        const payload = {
+          instance_id: instance.id,
+          raw_score: raw,
+          scaled_score: null,
+          percentile: null,
+          t_score: null,
+          z_score: null,
+          interpretation_category: interpretation.category ?? null,
+          interpretation_description: interpretation.description ?? null,
           clinical_significance: interpretation.clinical_significance ?? null,
-          severity_level: interpretation.severity ?? interpretation.severity_level ?? null,
+          severity_level: (interpretation.severity as string) ?? (interpretation.severity_level as string) ?? null,
           recommendations: interpretation.recommendations ?? null,
           therapist_notes: null,
           auto_generated: true,
         }
+        // If you’ve added a unique index on (instance_id), this will be idempotent.
         const { error: resErr } = await supabase
           .from('assessment_scores')
-          .upsert(payload, { onConflict: 'instance_id' }) // ok even if no unique index; supabase will fall back to PK if any
+          .upsert(payload, { onConflict: 'instance_id' })
         if (resErr) throw resErr
       }
 
-      // Read back saved score (optional)
+      // Read back saved score (optional consistency)
       const { data: scores, error: readErr } = await supabase
         .from('assessment_scores')
         .select(
@@ -32,7 +350,7 @@ iption: interpretation.description ?? null,
           category: s?.interpretation_category ?? interpretation.category,
           description: s?.interpretation_description ?? interpretation.description,
           clinical_significance: s?.clinical_significance ?? interpretation.clinical_significance,
-          severity_level: s?.severity_level ?? interpretation.severity ?? interpretation.severity_level,
+          severity_level: s?.severity_level ?? (interpretation.severity as string) ?? (interpretation.severity_level as string),
           recommendations: s?.recommendations ?? interpretation.recommendations,
         },
         subscales,
@@ -49,6 +367,9 @@ iption: interpretation.description ?? null,
     }
   }
 
+  /* ────────────────────────────────────────────────────────────────────────────
+     UI
+  ─────────────────────────────────────────────────────────────────────────────*/
   if (!template) {
     return (
       <div className="text-center py-8">
@@ -94,7 +415,7 @@ iption: interpretation.description ?? null,
           </div>
         </div>
 
-        {/* Interpretation */}
+        {/* Interpretation details */}
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
             <Brain className="w-5 h-5 mr-2 text-purple-600" />
@@ -132,6 +453,9 @@ iption: interpretation.description ?? null,
 
         {/* Printable Report */}
         <AssessmentReport
+          brandName="MindBridge Health"           // <— Replace with your brand
+          logoUrl="/brand/logo.png"               // <— Put your logo under public/brand/
+          therapistName={therapistName || undefined}
           template={template}
           instance={instance}
           score={{
