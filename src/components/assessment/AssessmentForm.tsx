@@ -454,7 +454,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
         {/* Printable Report */}
         <AssessmentReport
           brandName="MindBridge Health"           // <— Replace with your brand
-          logoUrl="/brand/logo.png"               // <— Put your logo under public/brand/
+          logoUrl="/thera-py-icon.png"               // <— Put your logo under public/brand/
           therapistName={therapistName || undefined}
           template={template}
           instance={instance}
