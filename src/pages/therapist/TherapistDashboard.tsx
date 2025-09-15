@@ -10,18 +10,12 @@ import {
 } from 'lucide-react'
 import { TherapistOnboarding } from '../../components/therapist/TherapistOnboarding'
 
-// Lazy load large panels
-const ClientManagement = React.lazy(() =>
-  import('../../components/therapist/ClientManagement').then(m => ({ default: (m as any).ClientManagement ?? m.default }))
-)
+// NOTE: Removed ClientManagement and CommunicationTools imports per cleanup
 const SessionManagement = React.lazy(() =>
   import('../../pages/therapist/SessionManagement').then(m => ({ default: (m as any).default ?? m }))
 )
 const CaseManagement = React.lazy(() =>
   import('../../pages/therapist/CaseManagement').then(m => ({ default: (m as any).default ?? m }))
-)
-const CommunicationTools = React.lazy(() =>
-  import('../../components/therapist/CommunicationTools').then(m => ({ default: (m as any).default ?? m }))
 )
 const ResourceLibrary = React.lazy(() =>
   import('../../pages/therapist/ResourceLibrary').then(m => ({ default: (m as any).default ?? m }))
@@ -94,9 +88,10 @@ interface RecentAssessmentItem {
 }
 
 type SectionId =
-  | 'overview' | 'clienteles' | 'clients' | 'cases' | 'sessions' | 'sessionBoard'
-  | 'leads' | 'metrics' | 'clinic' | 'resources' | 'licensing'
-  | 'supervision' | 'vip' | 'profile' | 'membership' | 'admin'
+  | 'overview' | 'clienteles' | 'cases' | 'sessions' | 'sessionBoard'
+  | 'metrics' | 'resources'
+  | 'licensing' | 'supervision' | 'vip' | 'clinic'
+  | 'profile' | 'membership' | 'admin'
 
 export default function TherapistDashboard() {
   const navigate = useNavigate()
@@ -123,15 +118,17 @@ export default function TherapistDashboard() {
   const [signOutError, setSignOutError] = useState<string | null>(null)
   const [active, setActive] = useState<SectionId>('overview')
 
+  // NAV: updated per your requests
   const navigationSections = [
     { title: null, items: [{ id: 'overview', name: 'Overview', icon: Target }] },
     {
-      title: 'Client Access',
+      title: 'Client Care',
       items: [
         { id: 'clienteles', name: 'Clienteles', icon: Users },
-        { id: 'clients', name: 'Client Management', icon: Users },
         { id: 'cases', name: 'Case Management', icon: FileText },
         { id: 'resources', name: 'Resource Library', icon: Library },
+        // Route link for the assessments workspace (kept only here)
+        { id: 'assessmentsRoute', name: 'Assessments', icon: Brain as any },
       ]
     },
     {
@@ -139,15 +136,14 @@ export default function TherapistDashboard() {
       items: [
         { id: 'sessions', name: 'Session Management', icon: Calendar },
         { id: 'sessionBoard', name: 'Session Board', icon: ClipboardList },
-        { id: 'leads', name: 'Client Leads', icon: Users },
         { id: 'metrics', name: 'Progress Metrics', icon: BarChart3 },
-        { id: 'clinic', name: 'Clinic Rentals', icon: Building2 },
       ]
     },
     {
       title: 'Profession Management',
       items: [
         { id: 'licensing', name: 'Licensing & Compliance', icon: ShieldCheck },
+        { id: 'clinic', name: 'Clinic Rentals', icon: Building2 }, // moved here
         { id: 'supervision', name: 'Supervision', icon: Headphones },
         { id: 'vip', name: 'VIP Opportunities', icon: Star },
       ]
@@ -157,7 +153,7 @@ export default function TherapistDashboard() {
       items: [
         { id: 'profile', name: 'Therapist Profile', icon: User },
         { id: 'membership', name: 'Membership', icon: CalendarDays },
-        { id: 'admin', name: 'Contact Administrator', icon: Shield },
+        { id: 'admin', name: 'Support/Tickets', icon: Shield }, // renamed
       ]
     }
   ] as const
@@ -253,7 +249,7 @@ export default function TherapistDashboard() {
           }
         })
 
-      // Insights (derive simple risk from latest assessment_scores per instance, if present)
+      // Insights from latest assessment_scores severity
       let insights: CaseInsight[] = []
       if (inst && inst.length) {
         const recentIds = inst.map(i => i.id)
@@ -299,14 +295,14 @@ export default function TherapistDashboard() {
         activeCases: activeCases?.length || 0,
         patientsToday: sessions.length,
         profileCompletion,
-        assessmentsInProgress: inProgressCount
+        assessmentsInProgress: (inst || []).filter(i => i.status === 'in_progress').length
       })
       setOnboardingSteps(steps)
       setProfileLive(isProfileLive)
       setTodaySessions(sessions)
       setRecentAssessments(recent3)
 
-      // Lightweight activity feed
+      // Activity feed
       const activities: ActivityItem[] = []
       if (sessions.length) {
         activities.push({
@@ -536,7 +532,7 @@ export default function TherapistDashboard() {
         </div>
       </div>
 
-      {/* Case Insights (from assessment_scores severity) */}
+      {/* Case Insights */}
       {caseInsights.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center space-x-3 mb-6">
@@ -721,42 +717,31 @@ export default function TherapistDashboard() {
                     {section.items.map(tab => {
                       const Icon = tab.icon as any
                       const isActive = active === (tab.id as SectionId)
+                      const isAssessmentsRoute = tab.id === 'assessmentsRoute'
                       return (
                         <button
                           key={tab.id as string}
-                          onClick={() => setActive(tab.id as SectionId)}
+                          onClick={() => {
+                            if (isAssessmentsRoute) navigate('/therapist/assessments')
+                            else setActive(tab.id as SectionId)
+                          }}
                           className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
-                            isActive
-                              ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow'
-                              : 'text-gray-700 hover:bg-gray-50'
+                            isActive ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow'
+                                     : isAssessmentsRoute ? 'text-amber-900 bg-amber-50 hover:bg-amber-100'
+                                     : 'text-gray-700 hover:bg-gray-50'
                           }`}
                           aria-current={isActive ? 'page' : undefined}
                           title={sidebarCollapsed ? tab.name : undefined}
                         >
-                          <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-400'}`} />
+                          <Icon className={`w-5 h-5 flex-shrink-0 ${
+                            isActive ? 'text-white' :
+                            isAssessmentsRoute ? 'text-amber-600' :
+                            'text-gray-400'
+                          }`} />
                           {!sidebarCollapsed && <span className="font-medium">{tab.name}</span>}
                         </button>
                       )
                     })}
-
-                    {/* Dedicated nav to Assessments Workspace */}
-                    {!sidebarCollapsed ? (
-                      <button
-                        onClick={() => navigate('/therapist/assessments')}
-                        className="w-full flex items-center space-x-3 px-3 py-3 rounded-xl transition-all duration-200 text-sm font-medium text-gray-700 hover:bg-amber-50"
-                      >
-                        <Brain className="w-5 h-5 text-amber-600" />
-                        <span>Assessments</span>
-                      </button>
-                    ) : (
-                      <button
-                        title="Assessments"
-                        onClick={() => navigate('/therapist/assessments')}
-                        className="w-full flex items-center justify-center px-3 py-3 rounded-xl transition-all duration-200 hover:bg-amber-50"
-                      >
-                        <Brain className="w-5 h-5 text-amber-600" />
-                      </button>
-                    )}
                   </div>
                 </div>
               ))}
@@ -784,25 +769,30 @@ export default function TherapistDashboard() {
                         {section.items.map(tab => {
                           const Icon = tab.icon as any
                           const isActive = active === (tab.id as SectionId)
+                          const isAssessmentsRoute = tab.id === 'assessmentsRoute'
                           return (
                             <button
                               key={tab.id as string}
-                              onClick={() => { goto(tab.id as SectionId) }}
-                              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-all text-sm font-medium ${isActive ? 'text-blue-700 bg-blue-50' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
+                              onClick={() => {
+                                if (isAssessmentsRoute) { setMobileMenuOpen(false); navigate('/therapist/assessments') }
+                                else { goto(tab.id as SectionId) }
+                              }}
+                              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-all text-sm font-medium ${
+                                isActive ? 'text-blue-700 bg-blue-50'
+                                : isAssessmentsRoute ? 'text-amber-800 bg-amber-50 hover:bg-amber-100'
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                              }`}
                               aria-current={isActive ? 'page' : undefined}
                             >
-                              <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />
+                              <Icon className={`w-5 h-5 flex-shrink-0 ${
+                                isActive ? 'text-blue-600'
+                                : isAssessmentsRoute ? 'text-amber-600'
+                                : 'text-gray-400'
+                              }`} />
                               <span>{tab.name}</span>
                             </button>
                           )
                         })}
-                        <button
-                          onClick={() => { setMobileMenuOpen(false); navigate('/therapist/assessments') }}
-                          className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-all text-sm font-medium text-amber-800 bg-amber-50 hover:bg-amber-100"
-                        >
-                          <Brain className="w-5 h-5 text-amber-600" />
-                          <span>Assessments</span>
-                        </button>
                       </div>
                     </div>
                   ))}
@@ -818,15 +808,13 @@ export default function TherapistDashboard() {
             <Suspense fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>}>
               {active === 'overview'      && <Overview />}
               {active === 'clienteles'    && <Clienteles />}
-              {active === 'clients'       && <ClientManagement />}
               {active === 'cases'         && <CaseManagement />}
               {active === 'sessions'      && <SessionManagement />}
               {active === 'sessionBoard'  && <SessionBoard />}
-              {active === 'leads'         && <CommunicationTools />}
               {active === 'metrics'       && <ProgressMetrics />}
-              {active === 'clinic'        && <ClinicRentalPanel />}
               {active === 'resources'     && <ResourceLibrary />}
               {active === 'licensing'     && <LicensingCompliance />}
+              {active === 'clinic'        && <ClinicRentalPanel />}
               {active === 'supervision'   && <SupervisionPanel />}
               {active === 'vip'           && <VIPOpportunities />}
               {active === 'profile'       && (
@@ -844,7 +832,7 @@ export default function TherapistDashboard() {
                 <div className="p-6">
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
                     <Shield className="mx-auto h-10 w-10 text-gray-300 mb-2" />
-                    <h3 className="text-gray-900 font-medium">Contact Administrator</h3>
+                    <h3 className="text-gray-900 font-medium">Support / Tickets</h3>
                     <p className="text-sm text-gray-600 mt-1">Use the Support/Tickets page in your account menu.</p>
                   </div>
                 </div>
