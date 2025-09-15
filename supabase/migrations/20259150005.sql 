@@ -465,4 +465,3 @@ begin
   perform storage.create_bucket('public-resources', jsonb_build_object('public', true));
 exception when others then null;
 end$$;
-
