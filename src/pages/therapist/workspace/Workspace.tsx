@@ -7,7 +7,7 @@ import React, {
 } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
-// ✅ FIXED: correct relative paths from /src/pages/therapist/workspace/Workspace.tsx
+// ✅ correct paths for /src/pages/therapist/workspace/Workspace.tsx
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../hooks/useAuth'
 import SessionBoard, { SessionBoardHandle } from '../../../components/therapist/SessionBoard'
@@ -96,13 +96,12 @@ async function getAIHighlightsOrFallback(texts: string[]): Promise<string> {
   const lines = texts
     .map(t => (typeof t === 'string' ? t : JSON.stringify(t)))
     .join('\n')
+  const picks = lines
     .split('\n')
     .map(s => s.trim())
     .filter(Boolean)
     .slice(0, 8)
-  return lines.length
-    ? `• ${lines.join('\n• ')}`
-    : 'No salient highlights could be extracted.'
+  return picks.length ? `• ${picks.join('\n• ')}` : 'No salient highlights could be extracted.'
 }
 
 /* =========================================================
@@ -726,12 +725,11 @@ async function exportCaseSummaryPDF(args: {
 }) {
   const { caseTitle, caseId, notes, activities } = args
 
-  // 👉 Avoid Vite pre-bundling so your app runs even if jspdf isn't installed.
-  // If it's not installed, we catch and show instructions instead of crashing.
+  // Avoid Vite pre-bundling; show a friendly message if jspdf isn't installed
   let jsPDFMod: any = null
   try {
     jsPDFMod = await import(/* @vite-ignore */ 'jspdf')
-  } catch (e) {
+  } catch {
     alert(
       'PDF export requires the "jspdf" package.\n\nInstall with one of:\n- npm i jspdf\n- pnpm add jspdf\n- yarn add jspdf'
     )
@@ -815,8 +813,7 @@ export default function Workspace() {
   const [drawerMode, setDrawerMode] = useState<'single' | 'phase'>('single')
   const [drawerSessionIndex, setDrawerSessionIndex] = useState<number | null>(null)
 
-  // Quick resource modal
-  the: // noop to keep TS calm if your linter enforces rules
+  // Quick resource modal (🔥 removed stray "the:" label that caused the parser error)
   const [showCreateResource, setShowCreateResource] = useState(false)
 
   // Load cases for dropdown
@@ -894,7 +891,6 @@ export default function Workspace() {
       const ok = await confirmLeave()
       if (!ok) return
       setSelectedCaseId(newId)
-      // ✅ confirm your route, update if your router uses a different path
       navigate(`/cases/${newId}/workspace`)
     },
     [confirmLeave, navigate, selectedCaseId]
@@ -961,8 +957,6 @@ export default function Workspace() {
     () => cases.find((c) => c.id === selectedCaseId) || null,
     [cases, selectedCaseId]
   )
-
-  const [drawerOpenState] = useState(null) // placeholder to prevent unused warnings
 
   // Open single/phase drawers
   const openNoteDrawer = (n: SessionNote, label: string) => {
@@ -1156,9 +1150,7 @@ export default function Workspace() {
         <CreateQuickResourceModal
           ownerId={profile.id}
           onClose={() => setShowCreateResource(false)}
-          onCreated={() => {
-            setShowCreateResource(false)
-          }}
+          onCreated={() => setShowCreateResource(false)}
         />
       )}
     </div>
