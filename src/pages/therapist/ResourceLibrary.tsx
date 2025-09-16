@@ -4,8 +4,8 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useAssessments } from '../../hooks/useAssessments'
 import {
-  Library, Search, Grid3X3, List, Plus, Eye, Send, BookOpen, FileText, Video, Headphones, X,
-  Users, Zap, BookmarkCheck, Bookmark, Download, AlertTriangle, Clock, ChevronDown, Link as LinkIcon, Trash2
+  Library, Search, Grid3X3, List, Eye, Send, BookOpen, FileText, Video, Headphones, X,
+  Users, Zap, BookmarkCheck, Bookmark, Download, AlertTriangle, Clock, Link as LinkIcon, Trash2
 } from 'lucide-react'
 
 /* =========================
@@ -26,8 +26,6 @@ interface Resource {
   evidence_level?: string | null
   is_public?: boolean | null
   created_at: string
-
-  // upload / complex content
   media_url?: string | null
   storage_path?: string | null
   external_url?: string | null
@@ -78,7 +76,7 @@ const getDifficultyColor = (level?: string | null) => {
 }
 
 /* =========================
-   Assessments Library (left tab) — fetch via hook
+   Assessments Library (left tab)
 ========================= */
 
 interface AssessmentLibraryProps {
@@ -1015,12 +1013,13 @@ const CreateCourseModal: React.FC<{
 /* =========================
    Main Component
 ========================= */
-// Main Component
 export default function ResourceLibrary() {
   const [activeTab, setActiveTab] = useState<'assessments' | 'resources'>('assessments')
 
   // Shared state
   const [clients, setClients] = useState<any[]>([])
+  const [clientsError, setClientsError] = useState<string | null>(null)
+  const [clientsLoading, setClientsLoading] = useState<boolean>(false)
   const { profile } = useAuth()
 
   // Assessments state
@@ -1044,8 +1043,13 @@ export default function ResourceLibrary() {
 
   // Load therapist's clients once we have a profile
   useEffect(() => {
-    if (!profile) return
-    ;(async () => {
+    const run = async () => {
+      if (!profile?.id) {
+        setClients([])
+        return
+      }
+      setClientsLoading(true)
+      setClientsError(null)
       try {
         const { data: relations, error: relErr } = await supabase
           .from('therapist_client_relations')
@@ -1054,7 +1058,10 @@ export default function ResourceLibrary() {
 
         if (relErr) throw relErr
         const clientIds = relations?.map(r => r.client_id) || []
-        if (!clientIds.length) return setClients([])
+        if (clientIds.length === 0) {
+          setClients([])
+          return
+        }
 
         const { data: clientRows, error: cErr } = await supabase
           .from('profiles')
@@ -1066,17 +1073,21 @@ export default function ResourceLibrary() {
       } catch (e) {
         console.warn('[ResourceLibrary] fetchClients error:', e)
         setClients([])
+        setClientsError('Could not load client list.')
+      } finally {
+        setClientsLoading(false)
       }
-    })()
+    }
+    run()
   }, [profile])
 
   // Load resources only on the Resources tab
   useEffect(() => {
-    if (!profile || activeTab !== 'resources') return
-    ;(async () => {
+    const run = async () => {
+      if (!profile?.id || activeTab !== 'resources') return
+      setResourcesLoading(true)
+      setResourcesError(null)
       try {
-        setResourcesLoading(true)
-        setResourcesError(null)
         const { data, error } = await supabase
           .from('resource_library')
           .select(
@@ -1086,15 +1097,16 @@ export default function ResourceLibrary() {
           .order('created_at', { ascending: false })
 
         if (error) throw error
-        setResources(data as Resource[] || [])
-      } catch (e: any) {
+        setResources((data as Resource[]) || [])
+      } catch (e) {
         console.error('[ResourceLibrary] fetchResources error:', e)
         setResources([])
         setResourcesError('Could not load resources.')
       } finally {
         setResourcesLoading(false)
       }
-    })()
+    }
+    run()
   }, [profile, activeTab])
 
   // Derived
@@ -1124,8 +1136,9 @@ export default function ResourceLibrary() {
   const assignResource = async (resourceId: string, clientIds: string[]) => {
     try {
       const res = resources.find(r => r.id === resourceId)
-      if (!res || !profile) return
+      if (!res || !profile?.id) return
 
+      // NOTE: If you have an `assigned_resources` table, switch to it here.
       const payload = clientIds.map(clientId => ({
         therapist_id: profile.id,
         client_id: clientId,
@@ -1229,14 +1242,23 @@ export default function ResourceLibrary() {
               </div>
             </div>
 
-            {resourcesError && (
-              <div className="lg:col-span-3 mt-2 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-2">
-                {resourcesError}
+            {(resourcesError || clientsError) && (
+              <div className="lg:col-span-3 mt-2 space-y-1">
+                {resourcesError && (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-2">
+                    {resourcesError}
+                  </div>
+                )}
+                {clientsError && (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-2">
+                    {clientsError}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Inline create actions (replaces dropdown) */}
+          {/* Inline create actions */}
           <div className="mt-3 flex justify-end">
             <div className="inline-flex rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
               <button
@@ -1409,7 +1431,7 @@ export default function ResourceLibrary() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Top segmented tabs (moved above content) */}
+      {/* Top segmented tabs */}
       <div className="sticky top-0 z-20 bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-3 py-3">
           <div
