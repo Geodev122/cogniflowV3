@@ -1,4 +1,3 @@
-// src/pages/therapist/TherapistDashboard.tsx
 import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -6,11 +5,11 @@ import { useAuth } from '../../hooks/useAuth'
 import {
   Users, FileText, Calendar, Library, CheckCircle, AlertTriangle, Menu, X, Target, ChevronLeft,
   User, CalendarDays, Brain, Shield, Headphones, Plus, Eye, LogOut, BarChart3, Building2,
-  ShieldCheck, Star, ClipboardList, Activity, ChevronRight
+  ShieldCheck, Star, ClipboardList, Activity, ChevronRight, Play
 } from 'lucide-react'
 import { TherapistOnboarding } from '../../components/therapist/TherapistOnboarding'
 
-// NOTE: Removed ClientManagement and CommunicationTools imports per cleanup
+// NOTE: Client management removed; leads removed; Clinic Rentals moved to Profession Management
 const SessionManagement = React.lazy(() =>
   import('../../pages/therapist/SessionManagement').then(m => ({ default: (m as any).default ?? m }))
 )
@@ -58,7 +57,7 @@ interface DashboardStats {
 }
 
 interface OnboardingStep { id: string; title: string; completed: boolean }
-interface TodaySession { id: string; client_name: string; time: string; type?: string; notes?: string }
+interface TodaySession { id: string; client_name: string; time: string; type?: string; notes?: string; case_id?: string | null }
 
 type InsightPriority = 'high' | 'medium' | 'low'
 interface CaseInsight {
@@ -177,7 +176,7 @@ export default function TherapistDashboard() {
         .eq('therapist_id', profile.id)
         .eq('status', 'active')
 
-      // Today appointments
+      // Today appointments (include case_id so we can deep-link Workspace)
       const now = new Date()
       const yyyy = now.getFullYear()
       const mm = String(now.getMonth() + 1).padStart(2, '0')
@@ -187,7 +186,7 @@ export default function TherapistDashboard() {
 
       const { data: appts } = await supabase
         .from('appointments')
-        .select('id, start_time, end_time, status, notes, client_id, title')
+        .select('id, start_time, end_time, status, notes, client_id, title, case_id')
         .eq('therapist_id', profile.id)
         .gte('start_time', dayStart)
         .lte('start_time', dayEnd)
@@ -228,7 +227,8 @@ export default function TherapistDashboard() {
           client_name: `${c?.first_name || 'Unknown'} ${c?.last_name || 'Client'}`.trim(),
           time: new Date(apt.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           type: apt.title || apt.status,
-          notes: apt.notes || undefined
+          notes: apt.notes || undefined,
+          case_id: apt.case_id ?? null
         } as TodaySession
       })
 
@@ -295,7 +295,7 @@ export default function TherapistDashboard() {
         activeCases: activeCases?.length || 0,
         patientsToday: sessions.length,
         profileCompletion,
-        assessmentsInProgress: (inst || []).filter(i => i.status === 'in_progress').length
+        assessmentsInProgress: inProgressCount
       })
       setOnboardingSteps(steps)
       setProfileLive(isProfileLive)
@@ -380,17 +380,19 @@ export default function TherapistDashboard() {
       )}
 
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-xl shadow-lg">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold mb-1">Welcome back{profile?.first_name ? `, Dr. ${profile.first_name}!` : '!'}</h2>
             <p className="text-blue-100">{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
           </div>
-          {profileLive && (
-            <div className="flex items-center space-x-2 bg-green-500 bg-opacity-20 px-3 py-1 rounded-full">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-sm text-green-100">Profile Live</span>
-            </div>
-          )}
+          {/* NEW: Access Workspace button (standalone) */}
+          <button
+            onClick={() => navigate('/therapist/workspace')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-blue-700 hover:bg-blue-50 font-medium shadow-sm"
+          >
+            <Play className="w-4 h-4" />
+            Access Workspace
+          </button>
         </div>
       </div>
 
@@ -467,10 +469,27 @@ export default function TherapistDashboard() {
                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><User className="w-5 h-5 text-blue-600" /></div>
                     <div>
                       <h4 className="font-medium text-gray-900">{session.client_name}</h4>
-                      <p className="text-sm text-gray-600">{session.time}{session.type ? ` • ${session.type}` : ''}</p>
+                      <p className="text-sm text-gray-600">
+                        {session.time}{session.type ? ` • ${session.type}` : ''}
+                      </p>
                     </div>
                   </div>
-                  <button className="text-blue-600 hover:text-blue-800"><Eye className="w-4 h-4" /></button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="text-blue-600 hover:text-blue-800"
+                      onClick={() =>
+                        session.case_id
+                          ? navigate(`/therapist/workspace/${session.case_id}`)
+                          : navigate('/therapist/workspace')
+                      }
+                      title="Open Workspace"
+                    >
+                      <Play className="w-4 h-4" />
+                    </button>
+                    <button className="text-blue-600 hover:text-blue-800" title="View">
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -573,13 +592,13 @@ export default function TherapistDashboard() {
             <Calendar className="w-8 h-8 text-purple-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-purple-900">Schedule Session</p>
           </button>
+          <button onClick={() => navigate('/therapist/workspace')} className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group">
+            <Play className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+            <p className="text-sm font-medium text-blue-900">Access Workspace</p>
+          </button>
           <button onClick={() => navigate('/therapist/assessments')} className="p-4 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors group">
             <Brain className="w-8 h-8 text-amber-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-amber-900">Assessments</p>
-          </button>
-          <button onClick={() => goto('resources')} className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group">
-            <Library className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-blue-900">Resource Library</p>
           </button>
           <button onClick={() => goto('cases')} className="p-4 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors group">
             <FileText className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
