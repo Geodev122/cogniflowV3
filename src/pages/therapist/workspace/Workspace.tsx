@@ -1,10 +1,19 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../hooks/useAuth'
-import SessionBoard, { SessionBoardHandle } from '../therapist/SessionBoard'
+
+// ✅ FIXED: correct relative paths from /src/pages/therapist/workspace/Workspace.tsx
+import { supabase } from '../../../lib/supabase'
+import { useAuth } from '../../../hooks/useAuth'
+import SessionBoard, { SessionBoardHandle } from '../../../components/therapist/SessionBoard'
+
 import {
-  ClipboardList, Flag, LogOut, ChevronDown, FileText, AlertTriangle, X, Clock, ChevronRight,
+  ClipboardList, Flag, LogOut, FileText, AlertTriangle, X, Clock, ChevronRight,
   Plus, Shield, Globe, Download, RefreshCw
 } from 'lucide-react'
 
@@ -23,7 +32,7 @@ type CaseItem = {
 type PlanPhase = {
   id: string
   case_id?: string
-  phase: string                   // 'Intake' | 'Assessment' | 'Intervention' | ...
+  phase: string
   planned_date?: string | null
   session_index?: number | null
 }
@@ -65,21 +74,13 @@ type ResourceRow = {
   created_at?: string
 }
 
-/* =========================================================
-   Small helpers
-========================================================= */
-
 const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString() : 'n/a')
 
 /* =========================================================
    AI summary helper (optional Edge Function)
-   - Tries /functions/v1/ai_summarize with { texts: string[] }
-   - Falls back to simple heuristic if not available
 ========================================================= */
 async function getAIHighlightsOrFallback(texts: string[]): Promise<string> {
   try {
-    // Optional: Supabase Edge Function you can add
-    // https://supabase.com/docs/guides/functions
     const resp = await fetch('/functions/v1/ai_summarize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -89,10 +90,9 @@ async function getAIHighlightsOrFallback(texts: string[]): Promise<string> {
       const json = await resp.json()
       if (json?.summary) return json.summary as string
     }
-  } catch (_) {
+  } catch {
     // ignore
   }
-  // Fallback: extract first lines & bullet them
   const lines = texts
     .map(t => (typeof t === 'string' ? t : JSON.stringify(t)))
     .join('\n')
@@ -125,12 +125,12 @@ const NotesDrawer: React.FC<{
   const [aiSummary, setAiSummary] = useState<string>('')
 
   const loadPage = useCallback(async () => {
-    if (mode !== 'phase' || !sessionIndex) return
+    if (mode !== 'phase' || sessionIndex == null) return
     try {
       setLoading(true)
       const from = page * pageSize
       const to = from + pageSize - 1
-      const q = supabase
+      const { data, error } = await supabase
         .from('session_notes')
         .select('id, case_id, therapist_id, content, created_at, updated_at, session_index')
         .eq('case_id', caseId)
@@ -138,7 +138,6 @@ const NotesDrawer: React.FC<{
         .order('updated_at', { ascending: false })
         .range(from, to)
 
-      const { data, error } = await q
       if (error) throw error
       setItems((data ?? []) as SessionNote[])
 
@@ -274,16 +273,14 @@ const SessionTimeline: React.FC<{
         setLoading(true)
         setError(null)
 
-        // treatment plan phases
         const { data: phasesRows, error: pErr } = await supabase
-          .from('treatment_plan_phases') // ← adjust if different
+          .from('treatment_plan_phases')
           .select('id, case_id, phase, planned_date, session_index')
           .eq('case_id', caseId)
           .order('session_index', { ascending: true })
 
         if (pErr) throw pErr
 
-        // notes
         const { data: notesRows, error: nErr } = await supabase
           .from('session_notes')
           .select('id, case_id, therapist_id, content, created_at, updated_at, session_index')
@@ -349,7 +346,7 @@ const SessionTimeline: React.FC<{
               const key = ph.session_index ? String(ph.session_index) : 'misc'
               const related = notesMap[key] || []
               const planned = ph.planned_date ? new Date(ph.planned_date).toLocaleDateString() : 'n/a'
-              const hasDeviation = false // plug your deviation logic here
+              const hasDeviation = false
 
               return (
                 <div key={ph.id} className="min-w-[240px] bg-white border rounded-lg p-3">
@@ -432,7 +429,7 @@ const InBetweenPanel: React.FC<{
       setLoading(true)
       setError(null)
       const { data, error } = await supabase
-        .from('client_activities') // ← your table
+        .from('client_activities')
         .select('id, case_id, client_id, type, title, details, occurred_at, session_phase, reviewed_at, reviewed_by')
         .eq('case_id', caseId)
         .order('occurred_at', { ascending: false })
@@ -606,7 +603,7 @@ const CreateQuickResourceModal: React.FC<{
           description,
           category,
           content_type: contentType,
-          therapist_owner_id: ownerId, // <- visibility owner
+          therapist_owner_id: ownerId,
           is_public: isPublic,
           media_url: media_url || null,
           storage_path,
@@ -718,7 +715,7 @@ const CreateQuickResourceModal: React.FC<{
 }
 
 /* =========================================================
-   PDF Export helper (dynamic import to keep bundle small)
+   PDF Export helper — lazy import with vite-ignore
 ========================================================= */
 
 async function exportCaseSummaryPDF(args: {
@@ -728,12 +725,25 @@ async function exportCaseSummaryPDF(args: {
   activities: ClientActivity[]
 }) {
   const { caseTitle, caseId, notes, activities } = args
-  const [{ default: jsPDF }] = await Promise.all([import('jspdf')])
 
+  // 👉 Avoid Vite pre-bundling so your app runs even if jspdf isn't installed.
+  // If it's not installed, we catch and show instructions instead of crashing.
+  let jsPDFMod: any = null
+  try {
+    jsPDFMod = await import(/* @vite-ignore */ 'jspdf')
+  } catch (e) {
+    alert(
+      'PDF export requires the "jspdf" package.\n\nInstall with one of:\n- npm i jspdf\n- pnpm add jspdf\n- yarn add jspdf'
+    )
+    return
+  }
+
+  const jsPDF = jsPDFMod.default || jsPDFMod.jsPDF || jsPDFMod
   const doc = new jsPDF()
-  const line = (txt: string, y: number) => doc.text(txt, 14, y)
 
+  const line = (txt: string, y: number) => doc.text(txt, 14, y)
   let y = 14
+
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(16)
   line(`Case Summary — ${caseTitle}`, y); y += 8
@@ -742,7 +752,6 @@ async function exportCaseSummaryPDF(args: {
   line(`Case ID: ${caseId}`, y); y += 6
   line(`Generated: ${new Date().toLocaleString()}`, y); y += 8
 
-  // Activities
   doc.setFont('helvetica', 'bold')
   line('In-Between Activities', y); y += 6
   doc.setFont('helvetica', 'normal')
@@ -757,7 +766,6 @@ async function exportCaseSummaryPDF(args: {
   }
   y += 2
 
-  // Notes
   doc.setFont('helvetica', 'bold')
   line('Recent Session Notes', y); y += 6
   doc.setFont('helvetica', 'normal')
@@ -808,6 +816,7 @@ export default function Workspace() {
   const [drawerSessionIndex, setDrawerSessionIndex] = useState<number | null>(null)
 
   // Quick resource modal
+  the: // noop to keep TS calm if your linter enforces rules
   const [showCreateResource, setShowCreateResource] = useState(false)
 
   // Load cases for dropdown
@@ -885,6 +894,7 @@ export default function Workspace() {
       const ok = await confirmLeave()
       if (!ok) return
       setSelectedCaseId(newId)
+      // ✅ confirm your route, update if your router uses a different path
       navigate(`/cases/${newId}/workspace`)
     },
     [confirmLeave, navigate, selectedCaseId]
@@ -903,7 +913,6 @@ export default function Workspace() {
       } as any)
       if (fErr) throw fErr
 
-      // build summary title & last highlight
       const c = cases.find(x => x.id === selectedCaseId)
       const caseNum = c?.case_number ? `Case ${c.case_number}` : `Case ${selectedCaseId.slice(0,6)}…`
       const clientName = `${c?.client?.first_name ?? ''} ${c?.client?.last_name ?? ''}`.trim()
@@ -923,7 +932,7 @@ export default function Workspace() {
       const last_highlight = highlightSource.slice(0, 240)
 
       const { error: sErr } = await supabase
-        .from('case_summaries') // <- adjust to your table
+        .from('case_summaries')
         .upsert({
           case_id: selectedCaseId,
           title,
@@ -953,6 +962,8 @@ export default function Workspace() {
     [cases, selectedCaseId]
   )
 
+  const [drawerOpenState] = useState(null) // placeholder to prevent unused warnings
+
   // Open single/phase drawers
   const openNoteDrawer = (n: SessionNote, label: string) => {
     setDrawerNote(n || null)
@@ -972,7 +983,6 @@ export default function Workspace() {
   // Export PDF
   const onExportPDF = useCallback(async () => {
     if (!selectedCaseId) return
-    // gather notes & activities
     const [{ data: notes }, { data: acts }] = await Promise.all([
       supabase
         .from('session_notes')
@@ -1148,7 +1158,6 @@ export default function Workspace() {
           onClose={() => setShowCreateResource(false)}
           onCreated={() => {
             setShowCreateResource(false)
-            // optional toast
           }}
         />
       )}
