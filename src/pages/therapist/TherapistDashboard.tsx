@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import {
   Users, FileText, Calendar, Library, CheckCircle, AlertTriangle, Menu, X, Target, ChevronLeft,
   User, CalendarDays, Brain, Shield, Headphones, Plus, Eye, LogOut, BarChart3, Building2,
-  ShieldCheck, Star, ClipboardList, Activity, ChevronRight, Play
+  ShieldCheck, Star, Activity, ChevronRight, Play
 } from 'lucide-react'
 import { TherapistOnboarding } from '../../components/therapist/TherapistOnboarding'
 
@@ -23,9 +23,7 @@ const ResourceLibrary = React.lazy(() =>
 const Clienteles = React.lazy(() =>
   import('../../components/therapist/Clienteles').then(m => ({ default: m.Clienteles }))
 )
-const SessionBoard = React.lazy(() =>
-  import('../../components/therapist/SessionBoard').then(m => ({ default: m.SessionBoard }))
-)
+// 🚫 SessionBoard tab removed — Session Board now lives inside the Workspace only
 const ClinicRentalPanel = React.lazy(() =>
   import('../../components/therapist/ClinicRentalPanel').then(m => ({ default: m.ClinicRentalPanel }))
 )
@@ -87,7 +85,7 @@ interface RecentAssessmentItem {
 }
 
 type SectionId =
-  | 'overview' | 'clienteles' | 'cases' | 'sessions' | 'sessionBoard'
+  | 'overview' | 'clienteles' | 'cases' | 'sessions'
   | 'metrics' | 'resources'
   | 'licensing' | 'supervision' | 'vip' | 'clinic'
   | 'profile' | 'membership' | 'admin'
@@ -117,7 +115,7 @@ export default function TherapistDashboard() {
   const [signOutError, setSignOutError] = useState<string | null>(null)
   const [active, setActive] = useState<SectionId>('overview')
 
-  // NAV: updated per your requests
+  // NAV: updated — Session Board removed from dashboard (it’s inside Workspace now)
   const navigationSections = [
     { title: null, items: [{ id: 'overview', name: 'Overview', icon: Target }] },
     {
@@ -127,14 +125,13 @@ export default function TherapistDashboard() {
         { id: 'cases', name: 'Case Management', icon: FileText },
         { id: 'resources', name: 'Resource Library', icon: Library },
         // Route link for the assessments workspace (kept only here)
-        { id: 'assessmentsRoute', name: 'Assessments', icon: Brain as any },
+        { id: 'assessmentsRoute' as const, name: 'Assessments', icon: Brain as any },
       ]
     },
     {
       title: 'Practice Management',
       items: [
         { id: 'sessions', name: 'Session Management', icon: Calendar },
-        { id: 'sessionBoard', name: 'Session Board', icon: ClipboardList },
         { id: 'metrics', name: 'Progress Metrics', icon: BarChart3 },
       ]
     },
@@ -295,7 +292,7 @@ export default function TherapistDashboard() {
         activeCases: activeCases?.length || 0,
         patientsToday: sessions.length,
         profileCompletion,
-        assessmentsInProgress: inProgressCount
+        assessmentsInProgress: (inst || []).filter(i => i.status === 'in_progress').length
       })
       setOnboardingSteps(steps)
       setProfileLive(isProfileLive)
@@ -385,7 +382,7 @@ export default function TherapistDashboard() {
             <h2 className="text-2xl font-bold mb-1">Welcome back{profile?.first_name ? `, Dr. ${profile.first_name}!` : '!'}</h2>
             <p className="text-blue-100">{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
           </div>
-          {/* NEW: Access Workspace button (standalone) */}
+          {/* Access Workspace (general entry) */}
           <button
             onClick={() => navigate('/therapist/workspace')}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-blue-700 hover:bg-blue-50 font-medium shadow-sm"
@@ -479,7 +476,7 @@ export default function TherapistDashboard() {
                       className="text-blue-600 hover:text-blue-800"
                       onClick={() =>
                         session.case_id
-                          ? navigate(`/therapist/workspace/${session.case_id}`)
+                          ? navigate(`/cases/${session.case_id}/workspace`) // ✅ deep-link to Workspace for this case
                           : navigate('/therapist/workspace')
                       }
                       title="Open Workspace"
@@ -829,7 +826,7 @@ export default function TherapistDashboard() {
               {active === 'clienteles'    && <Clienteles />}
               {active === 'cases'         && <CaseManagement />}
               {active === 'sessions'      && <SessionManagement />}
-              {active === 'sessionBoard'  && <SessionBoard />}
+              {/* 🚫 sessionBoard removed */}
               {active === 'metrics'       && <ProgressMetrics />}
               {active === 'resources'     && <ResourceLibrary />}
               {active === 'licensing'     && <LicensingCompliance />}
