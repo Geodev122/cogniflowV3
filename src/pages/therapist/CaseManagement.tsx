@@ -13,7 +13,7 @@ import { useAuth } from '../../hooks/useAuth'
 const IntakeForm = React.lazy(() => import('./case/IntakeForm'))
 const CaseFormulation = React.lazy(() => import('./case/CaseFormulation'))
 const Diagnosis = React.lazy(() => import('./case/Diagnosis'))
-const Intervention = React.lazy(() => import('./case/Intervention'))          // ← new, not SessionBoard
+const Intervention = React.lazy(() => import('./case/SessionBoard'))          // ← new, not SessionBoard
 const TreatmentPlanning = React.lazy(() => import('./case/TreatmentPlanning'))
 const CaseSummary = React.lazy(() => import('./case/CaseSummary'))
 
