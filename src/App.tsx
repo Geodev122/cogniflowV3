@@ -1,4 +1,3 @@
-// src/App.tsx
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
@@ -11,6 +10,10 @@ import { Register } from './pages/therapist/Register'
 // Therapist stack (lazy to speed TTI)
 const TherapistDashboard = React.lazy(() => import('./pages/therapist/TherapistDashboard'))
 const AssessmentsPage = React.lazy(() => import('./pages/therapist/AssessmentsPage'))
+
+// NEW: Practice Management Workspace (shell) + Case Summary
+const Workspace   = React.lazy(() => import('./pages/therapist/workspace/Workspace'))
+const CaseSummary = React.lazy(() => import('./pages/therapist/CaseSummary'))
 
 // Client stack (mobile-first)
 const ClientHome = React.lazy(() => import('./pages/client/ClientHome'))
@@ -126,6 +129,32 @@ export default function App() {
               element={
                 <ProtectedRoute role="therapist">
                   <AssessmentsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* NEW: Practice Management Workspace & Case Summary */}
+            <Route
+              path="/therapist/workspace"
+              element={
+                <ProtectedRoute role="therapist">
+                  <Workspace />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/therapist/workspace/:caseId"
+              element={
+                <ProtectedRoute role="therapist">
+                  <Workspace />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/therapist/case-summary/:caseId"
+              element={
+                <ProtectedRoute role="therapist">
+                  <CaseSummary />
                 </ProtectedRoute>
               }
             />
