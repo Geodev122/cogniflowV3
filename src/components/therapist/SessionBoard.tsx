@@ -1,4 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { ClipboardList } from 'lucide-react'
@@ -10,12 +18,30 @@ type QuickResource = {
   category: string | null
 }
 
-export const SessionBoard: React.FC = () => {
+export type SessionBoardHandle = {
+  saveNow: () => Promise<boolean>
+  isSaving: () => boolean
+  isDirty: () => boolean
+}
+
+type Props = {
+  defaultCaseId?: string
+  defaultClientId?: string
+  onSavingChange?: (saving: boolean) => void
+  onDirtyChange?: (dirty: boolean) => void
+  onSavedOnce?: () => void // optional hook for Save & Exit flows
+}
+
+const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard(
+  { defaultCaseId = '', defaultClientId = '', onSavingChange, onDirtyChange, onSavedOnce },
+  ref
+) {
   const { profile } = useAuth()
+  const therapistId = profile?.id ?? null
 
   // Local inputs for scoping the note
-  const [clientId, setClientId] = useState<string>('')
-  const [caseId, setCaseId] = useState<string>('')
+  const [clientId, setClientId] = useState<string>(defaultClientId)
+  const [caseId, setCaseId] = useState<string>(defaultCaseId)
 
   // Note content & save states
   const [content, setContent] = useState<string>('')
@@ -23,25 +49,32 @@ export const SessionBoard: React.FC = () => {
   const [saveInfo, setSaveInfo] = useState<string | null>(null)
   const saveInfoTimer = useRef<number | null>(null)
 
+  // Dirty tracking (compare against lastSavedContent)
+  const lastSaved = useRef<string>('') // last successfully saved content
+
   // Quick resources list (public)
   const [resources, setResources] = useState<QuickResource[]>([])
   const [resourcesLoading, setResourcesLoading] = useState<boolean>(false)
   const [resourcesError, setResourcesError] = useState<string | null>(null)
 
-  // ===== Helpers =====
-  const therapistId = profile?.id ?? null
-  const canSave = useMemo(() => !!therapistId, [therapistId])
+  const canSave = useMemo(() => !!therapistId && !!caseId, [therapistId, caseId])
+  const dirty = useMemo(() => content.trim() !== lastSaved.current.trim(), [content])
+
+  useEffect(() => {
+    onSavingChange?.(saving)
+  }, [saving, onSavingChange])
+
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
 
   const showSaveInfo = useCallback((msg: string) => {
     setSaveInfo(msg)
-    if (saveInfoTimer.current) {
-      window.clearTimeout(saveInfoTimer.current)
-    }
-    // Fade the message after a short delay to keep the header clean
+    if (saveInfoTimer.current) window.clearTimeout(saveInfoTimer.current)
     saveInfoTimer.current = window.setTimeout(() => setSaveInfo(null), 3000)
   }, [])
 
-  // ===== Load existing draft for (therapist, case) to avoid overwriting prior work =====
+  // ===== Load existing draft for (therapist, case) =====
   useEffect(() => {
     const loadDraft = async () => {
       if (!therapistId || !caseId) return
@@ -60,18 +93,21 @@ export const SessionBoard: React.FC = () => {
           return
         }
         if (data?.content) {
-          // support string or json content; keep as string in textarea
-          setContent(typeof data.content === 'string' ? data.content : JSON.stringify(data.content))
+          const text = typeof data.content === 'string' ? data.content : JSON.stringify(data.content)
+          lastSaved.current = text
+          setContent(text)
+        } else {
+          lastSaved.current = ''
+          setContent('')
         }
       } catch (e) {
         console.warn('[SessionBoard] loadDraft exception:', e)
       }
     }
     loadDraft()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [therapistId, caseId])
 
-  // ===== Fetch quick resources (with proper loading & error states) =====
+  // ===== Fetch quick resources =====
   useEffect(() => {
     let cancelled = false
     const fetchResources = async () => {
@@ -112,17 +148,13 @@ export const SessionBoard: React.FC = () => {
     }
   }, [])
 
-  // ===== Autosave (debounced) =====
-  const autoSave = useCallback(
-    async (next: string) => {
-      if (!canSave) return
-      // If there is absolutely no content, skip writing empty rows
-      if (!next.trim()) return
-
+  // ===== Core save routine (reusable for autosave and saveNow) =====
+  const persist = useCallback(
+    async (text: string) => {
+      if (!canSave) return false
+      if (!text.trim()) return true // treat empty as "nothing to save"
       setSaving(true)
-      setSaveInfo(null)
       try {
-        // Keep the API aligned with your unique constraint (therapist_id, case_id)
         const { error } = await supabase
           .from('session_notes')
           .upsert(
@@ -130,36 +162,51 @@ export const SessionBoard: React.FC = () => {
               therapist_id: therapistId,
               client_id: clientId || null,
               case_id: caseId || null,
-              content: next, // if your column is jsonb, you can JSON.parse(next) when needed
+              content: text, // if jsonb, adapt accordingly
               updated_at: new Date().toISOString(),
             } as any,
-            // Important: make sure you actually have a unique index on (therapist_id, case_id)
             { onConflict: 'therapist_id,case_id' } as any
           )
 
         if (error) {
-          console.error('[SessionBoard] autosave error:', error)
+          console.error('[SessionBoard] save error:', error)
           showSaveInfo('Save failed')
+          return false
         } else {
+          lastSaved.current = text
           showSaveInfo('Saved')
+          onSavedOnce?.()
+          return true
         }
       } catch (e) {
-        console.error('[SessionBoard] autosave exception:', e)
+        console.error('[SessionBoard] save exception:', e)
         showSaveInfo('Save failed')
+        return false
       } finally {
         setSaving(false)
       }
     },
-    [canSave, therapistId, clientId, caseId, showSaveInfo]
+    [canSave, therapistId, clientId, caseId, onSavedOnce, showSaveInfo]
   )
 
-  // Debounce: save 600ms after user stops typing
+  // ===== Autosave (debounced) =====
   useEffect(() => {
+    if (!dirty) return
     const t = window.setTimeout(() => {
-      if (content.trim()) autoSave(content)
+      // if still dirty after debounce, try save
+      if (content.trim()) void persist(content)
     }, 600)
     return () => window.clearTimeout(t)
-  }, [content, autoSave])
+  }, [content, dirty, persist])
+
+  // ===== Expose imperative API for Workspace =====
+  useImperativeHandle(ref, () => ({
+    saveNow: async () => {
+      return await persist(content)
+    },
+    isSaving: () => saving,
+    isDirty: () => dirty,
+  }))
 
   // ===== Attach a resource (append a reference line) =====
   const attach = (r: QuickResource) => {
@@ -168,21 +215,21 @@ export const SessionBoard: React.FC = () => {
     )
   }
 
-  // ===== Render =====
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-4">
+    <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4">
+      {/* Top row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ClipboardList className="w-6 h-6 text-blue-600" />
           <h2 className="text-2xl font-bold text-gray-900">Session Board</h2>
         </div>
         <div className="text-xs text-gray-500">
-          {saving ? 'Saving…' : saveInfo || 'Idle'}
+          {!therapistId ? 'Sign in required' : saving ? 'Saving…' : (dirty ? 'Unsaved changes' : (saveInfo || 'Idle'))}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Quick Resources */}
+        {/* Resource drawer (compact quick access) */}
         <div className="bg-white border rounded-lg shadow-sm p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="text-sm font-semibold text-gray-900">Quick Resources</div>
@@ -222,19 +269,19 @@ export const SessionBoard: React.FC = () => {
           )}
         </div>
 
-        {/* Note Editor */}
+        {/* Note editor */}
         <div className="lg:col-span-2 bg-white border rounded-lg shadow-sm p-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
             <input
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
-              placeholder="Client ID (optional)"
+              placeholder="Client ID"
               className="px-3 py-2 border rounded text-sm"
             />
             <input
               value={caseId}
               onChange={(e) => setCaseId(e.target.value)}
-              placeholder="Case ID (optional)"
+              placeholder="Case ID"
               className="px-3 py-2 border rounded text-sm"
             />
             <div className="text-xs text-gray-500 flex items-center md:justify-end">
@@ -243,22 +290,45 @@ export const SessionBoard: React.FC = () => {
           </div>
 
           {!therapistId ? (
-            <div className="text-sm text-red-600">
-              You must be signed in to save notes.
-            </div>
+            <div className="text-sm text-red-600">You must be signed in to save notes.</div>
           ) : (
-            <textarea
-              rows={16}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Live session notes…"
-              className="w-full border rounded p-3 text-sm"
-            />
+            <>
+              <textarea
+                rows={14}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Live session notes…"
+                className="w-full border rounded p-3 text-sm"
+              />
+              {/* Session controls inline (End Session & Save, Save & Exit) */}
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  onClick={async () => {
+                    const ok = await persist(content)
+                    if (ok) {
+                      // maybe add finalize flag/column in `session_notes` here
+                    }
+                  }}
+                  className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
+                >
+                  End Session & Save
+                </button>
+                <button
+                  onClick={async () => {
+                    const ok = await persist(content)
+                    if (ok) onSavedOnce?.()
+                  }}
+                  className="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Save & Exit
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
     </div>
   )
-}
+})
 
 export default SessionBoard
