@@ -11,16 +11,20 @@ const TreatmentPlanning: React.FC = () => {
   useEffect(() => {
     let cancel = false
     const run = async () => {
-      const { data, error } = await supabase
-        .from('cases')
-        .select('treatment_plan')
-        .eq('id', String(caseId))
-        .maybeSingle()
-      if (error) {
-        console.error('Error loading treatment plan:', error)
-      }
-      if (data && !cancel) {
-        setPlan(data.treatment_plan || { goals: [], interventions: [] })
+      try {
+        const { data, error } = await supabase
+          .from('cases')
+          .select('treatment_plan')
+          .eq('id', String(caseId))
+          .maybeSingle()
+        
+        if (error) throw error
+        if (data && !cancel) {
+          setPlan(data.treatment_plan || { goals: [], interventions: [] })
+        }
+      } catch (e) {
+        console.error('Error loading treatment plan:', e)
+        if (!cancel) setPlan({ goals: [], interventions: [] })
       }
     }
     run()
@@ -29,9 +33,20 @@ const TreatmentPlanning: React.FC = () => {
 
   const save = async () => {
     setSaving(true)
-    const { error } = await supabase.from('cases').update({ treatment_plan: plan }).eq('id', String(caseId))
-    if (error) console.error('Error saving treatment plan:', error)
-    setSaving(false)
+    try {
+      const { error } = await supabase
+        .from('cases')
+        .update({ treatment_plan: plan })
+        .eq('id', String(caseId))
+      
+      if (error) throw error
+      alert('Treatment plan saved successfully')
+    } catch (e) {
+      console.error('Error saving treatment plan:', e)
+      alert('Error saving treatment plan')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (

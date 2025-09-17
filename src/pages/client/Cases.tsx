@@ -22,7 +22,7 @@ export default function Cases() {
       try {
         const { data, error: err } = await supabase
           .from('cases')
-          .select('id, case_number, status, therapist_id, data')
+          .select('id, case_number, status, therapist_id, treatment_plan, data')
           .eq('client_id', profile.id)
           .order('created_at', { ascending: false })
         if (err) throw err
@@ -77,8 +77,8 @@ export default function Cases() {
                 {/* Basic progress summary from case.data.plan or metrics */}
                 <div className="mt-1 text-[11px] text-gray-600 flex items-center gap-1">
                   <BarChart3 className="w-3.5 h-3.5" />
-                  {c.data?.treatment_plan?.goals?.length || c.data?.plan?.goals?.length
-                    ? `${c.data.treatment_plan?.goals?.length || c.data.plan?.goals?.length} goal(s) set`
+                  {c.treatment_plan?.goals?.length || c.data?.treatment_plan?.goals?.length || c.data?.plan?.goals?.length
+                    ? `${c.treatment_plan?.goals?.length || c.data?.treatment_plan?.goals?.length || c.data?.plan?.goals?.length} goal(s) set`
                     : 'Treatment plan not available yet'}
                 </div>
                 <div className="mt-2 flex items-center gap-2">

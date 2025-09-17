@@ -11,8 +11,21 @@ const Diagnosis: React.FC = () => {
   useEffect(() => {
     let cancel = false
     const run = async () => {
-      const { data } = await supabase.from('cases').select('diagnosis_codes').eq('id', String(caseId)).maybeSingle()
-      if (!cancel) setCodes((data?.diagnosis_codes ?? []).join(', '))
+      try {
+        const { data, error } = await supabase
+          .from('cases')
+          .select('diagnosis_codes')
+          .eq('id', String(caseId))
+          .maybeSingle()
+        
+        if (error) throw error
+        if (!cancel) {
+          setCodes((data?.diagnosis_codes ?? []).join(', '))
+        }
+      } catch (e) {
+        console.error('Error loading diagnosis codes:', e)
+        if (!cancel) setCodes('')
+      }
     }
     run()
     return () => { cancel = true }
@@ -20,10 +33,21 @@ const Diagnosis: React.FC = () => {
 
   const save = async () => {
     setSaving(true)
-    const arr = codes.split(',').map(s => s.trim()).filter(Boolean)
-    const { error } = await supabase.from('cases').update({ diagnosis_codes: arr }).eq('id', String(caseId))
-    if (error) console.error('Error saving diagnosis codes:', error)
-    setSaving(false)
+    try {
+      const arr = codes.split(',').map(s => s.trim()).filter(Boolean)
+      const { error } = await supabase
+        .from('cases')
+        .update({ diagnosis_codes: arr })
+        .eq('id', String(caseId))
+      
+      if (error) throw error
+      alert('Diagnosis codes saved successfully')
+    } catch (e) {
+      console.error('Error saving diagnosis codes:', e)
+      alert('Error saving diagnosis codes')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (

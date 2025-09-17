@@ -61,7 +61,7 @@ export const Clienteles: React.FC = () => {
     try {
       let query = supabase
         .from('profiles')
-        .select('id, first_name, last_name, email, phone, city, country, created_at, role, whatsapp_number')
+        .select('id, first_name, last_name, email, phone, whatsapp_number, city, country, created_at, role')
         .eq('role', 'client') as any
 
       // Scope enforcement
@@ -131,7 +131,7 @@ export const Clienteles: React.FC = () => {
   const sendIntake = (via: 'whatsapp' | 'email', r: ClientRow) => {
     const link = `${window.location.origin}/intake/${r.id}`
     if (via === 'whatsapp') {
-      const phone = ((r.phone || r.whatsapp_number) || '').replace(/[^\d]/g, '')
+      const phone = (r.phone || r.whatsapp_number || '').replace(/[^\d]/g, '')
       if (!phone) return alert('No phone on file.')
       const text = `Hello ${r.first_name || ''}, please complete your intake form: ${link}`
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
