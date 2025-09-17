@@ -84,7 +84,7 @@ export default function ClientHome() {
             abbrev: abbrevMap.get(i.template_id) || null
           })))
         }
-
+          id, start_time, end_time, appointment_type, therapist_id,
         // Optional: count alerts from latest results
         const ids = (inst || []).map(i => i.id)
         if (ids.length) {
@@ -95,7 +95,7 @@ export default function ClientHome() {
             .order('created_at', { ascending: false })
             .limit(20)
           const count = (results || []).reduce((acc, r: any) => acc + (Array.isArray(r.alerts) ? r.alerts.length : 0), 0)
-          if (!cancel) setAlertsCount(count)
+        const appointmentTime = a?.start_time
         }
       } catch (e: any) {
         console.error('[ClientHome] load error', e)

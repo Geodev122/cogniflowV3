@@ -666,7 +666,7 @@ const EditAppointmentModal: React.FC<{
   onSave: (updates: Partial<Appointment>) => void
   onDelete: () => void
 }> = ({ appointment, onClose, onSave, onDelete }) => {
-  const [dateTime, setDateTime] = useState((appointment.start_time || appointment.appointment_date).slice(0, 16)) // assume ISO string
+  const [dateTime, setDateTime] = useState(appointment.start_time.slice(0, 16)) // assume ISO string
   const [type, setType] = useState<AptType>(appointment.appointment_type)
   const [status, setStatus] = useState<AptStatus>(appointment.status)
   const [duration, setDuration] = useState<number>(appointment.duration_minutes)
@@ -677,6 +677,7 @@ const EditAppointmentModal: React.FC<{
     onSave({
       start_time: dateTime,
       appointment_date: dateTime,
+      end_time: new Date(new Date(dateTime).getTime() + duration * 60000).toISOString(),
       appointment_type: type,
       status,
       duration_minutes: duration,

@@ -20,7 +20,7 @@ export default function Resources() {
       try {
         // Show public or shared to this client
         const { data, error: err } = await supabase
-          .from('resources')
+          .from('resource_library')
           .select('id, title, category, external_url, media_url, description')
           .eq('is_public', true)
           .order('title', { ascending: true })
