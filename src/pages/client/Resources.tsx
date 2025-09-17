@@ -21,12 +21,21 @@ export default function Resources() {
         // Show public or shared to this client
         const { data, error: err } = await supabase
           .from('resources')
-          .select('id, title, kind, url, meta')
-          .or(`visibility.eq.public,visibility.eq.client`)
+          .select('id, title, category, external_url, media_url, description')
+          .eq('is_public', true)
           .order('title', { ascending: true })
           .limit(200)
         if (err) throw err
-        if (!cancel) setRows((data || []) as Resource[])
+        if (!cancel) {
+          const mapped = (data || []).map(r => ({
+            id: r.id,
+            title: r.title,
+            kind: r.category || 'resource',
+            url: r.external_url || r.media_url,
+            meta: { description: r.description }
+          }))
+          setRows(mapped)
+        }
       } catch (e:any) {
         console.error('[Resources] load', e); if (!cancel) setError('Could not load resources.')
       } finally {

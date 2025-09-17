@@ -140,7 +140,7 @@ export default function CommunicationTools() {
       if (clientIds.length > 0) {
         const { data: clientData, error: clientDataError } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, email, whatsapp_number')
+          .select('id, first_name, last_name, email, whatsapp_number, phone')
           .in('id', clientIds)
 
         if (clientDataError) {

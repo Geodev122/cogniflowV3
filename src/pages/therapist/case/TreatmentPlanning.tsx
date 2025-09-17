@@ -8,11 +8,14 @@ const TreatmentPlanning: React.FC = () => {
   const [plan, setPlan] = useState<any>({ goals: [], interventions: [] })
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
+        .maybeSingle()
+      if (error) {
+        console.error('Error loading treatment plan:', error)
+      }
     let cancel = false
     const run = async () => {
       const { data } = await supabase.from('cases').select('treatment_plan').eq('id', String(caseId)).single()
-      if (!cancel) setPlan(data?.treatment_plan ?? { goals: [], interventions: [] })
+      const { data, error } = await supabase
     }
     run()
     return () => { cancel = true }
@@ -20,7 +23,8 @@ const TreatmentPlanning: React.FC = () => {
 
   const save = async () => {
     setSaving(true)
-    await supabase.from('cases').update({ treatment_plan: plan }).eq('id', String(caseId))
+    const { error } = await supabase.from('cases').update({ treatment_plan: values }).eq('id', String(caseId))
+    if (error) console.error('Error saving treatment plan:', error)
     setSaving(false)
   }
 

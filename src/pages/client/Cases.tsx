@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { MobileShell } from '../../components/client/MobileShell'
 import { BarChart3, Send } from 'lucide-react'
 
-type CaseRow = { id: string; case_code?: string | null; status: string; data?: any; therapist_id?: string | null }
+type CaseRow = { id: string; case_number?: string | null; status: string; data?: any; therapist_id?: string | null }
 
 export default function Cases() {
   const { profile } = useAuth()
@@ -22,7 +22,7 @@ export default function Cases() {
       try {
         const { data, error: err } = await supabase
           .from('cases')
-          .select('id, case_code, status, therapist_id, data')
+          .select('id, case_number, status, therapist_id, data')
           .eq('client_id', profile.id)
           .order('created_at', { ascending: false })
         if (err) throw err
@@ -68,7 +68,7 @@ export default function Cases() {
             {rows.map(c => (
               <div key={c.id} className="bg-white border border-gray-200 rounded-xl p-3">
                 <div className="flex items-center justify-between">
-                  <div className="font-medium text-gray-900">{c.case_code || `Case ${c.id.slice(0,6)}`}</div>
+                  <div className="font-medium text-gray-900">{c.case_number || `Case ${c.id.slice(0,6)}`}</div>
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
                     c.status === 'active' ? 'bg-blue-100 text-blue-700' :
                     c.status === 'closed' ? 'bg-gray-100 text-gray-700' : 'bg-amber-100 text-amber-700'
@@ -77,8 +77,8 @@ export default function Cases() {
                 {/* Basic progress summary from case.data.plan or metrics */}
                 <div className="mt-1 text-[11px] text-gray-600 flex items-center gap-1">
                   <BarChart3 className="w-3.5 h-3.5" />
-                  {c.data?.plan?.goals?.length
-                    ? `${c.data.plan.goals.length} goal(s) set`
+                  {c.data?.treatment_plan?.goals?.length || c.data?.plan?.goals?.length
+                    ? `${c.data.treatment_plan?.goals?.length || c.data.plan?.goals?.length} goal(s) set`
                     : 'Treatment plan not available yet'}
                 </div>
                 <div className="mt-2 flex items-center gap-2">

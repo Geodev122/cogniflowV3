@@ -183,7 +183,7 @@ export default function TherapistDashboard() {
 
       const { data: appts } = await supabase
         .from('appointments')
-        .select('id, start_time, end_time, status, notes, client_id, title, case_id')
+        .select('id, start_time, end_time, appointment_date, status, notes, client_id, title, case_id')
         .eq('therapist_id', profile.id)
         .gte('start_time', dayStart)
         .lte('start_time', dayEnd)
@@ -219,10 +219,11 @@ export default function TherapistDashboard() {
       // Build today's sessions
       const sessions = (appts || []).map(apt => {
         const c = clientsById.get(apt.client_id)
+        const appointmentTime = apt.start_time || apt.appointment_date
         return {
           id: apt.id,
           client_name: `${c?.first_name || 'Unknown'} ${c?.last_name || 'Client'}`.trim(),
-          time: new Date(apt.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: appointmentTime ? new Date(appointmentTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
           type: apt.title || apt.status,
           notes: apt.notes || undefined,
           case_id: apt.case_id ?? null

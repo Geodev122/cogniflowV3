@@ -146,11 +146,15 @@ const SessionManagement: React.FC = () => {
                 value={editing.title ?? ''} onChange={(e) => setEditing(s => ({ ...s!, title: e.target.value }))} />
               <label className="block text-sm">Start</label>
               <input type="datetime-local" className="w-full border rounded p-2"
-                value={new Date(editing.start_time!).toISOString().slice(0,16)}
-                onChange={(e) => setEditing(s => ({ ...s!, start_time: new Date(e.target.value).toISOString() }))}/>
+                value={editing.start_time ? new Date(editing.start_time).toISOString().slice(0,16) : ''}
+                onChange={(e) => setEditing(s => ({ 
+                  ...s!, 
+                  start_time: new Date(e.target.value).toISOString(),
+                  appointment_date: new Date(e.target.value).toISOString()
+                }))}/>
               <label className="block text-sm">End</label>
               <input type="datetime-local" className="w-full border rounded p-2"
-                value={new Date(editing.end_time!).toISOString().slice(0,16)}
+                value={editing.end_time ? new Date(editing.end_time).toISOString().slice(0,16) : ''}
                 onChange={(e) => setEditing(s => ({ ...s!, end_time: new Date(e.target.value).toISOString() }))}/>
               <input className="w-full border rounded p-2" placeholder="Location"
                 value={editing.location ?? ''} onChange={(e) => setEditing(s => ({ ...s!, location: e.target.value }))}/>

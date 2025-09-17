@@ -211,6 +211,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
       const { error: upErr } = await supabase.from('assessment_responses').upsert({
         instance_id: instance.id,
         question_id: questionId,
+        item_id: questionId,
         response_value: value,
         is_final: false,
       })

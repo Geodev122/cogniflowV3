@@ -31,20 +31,21 @@ export default function ClientHome() {
         const { data: appts, error: apptErr } = await supabase
           .from('appointments')
           .select(`
-            id, appointment_date, appointment_type, therapist_id,
+            id, start_time, end_time, appointment_date, appointment_type, therapist_id,
             therapist:profiles!appointments_therapist_id_fkey(first_name,last_name)
           `)
           .eq('client_id', profile.id)
-          .gte('appointment_date', nowIso)
-          .order('appointment_date', { ascending: true })
+          .gte('start_time', nowIso)
+          .order('start_time', { ascending: true })
           .limit(1)
 
         if (apptErr) throw apptErr
         if (!cancel) {
           const a = appts?.[0]
+          const appointmentTime = a?.start_time || a?.appointment_date
           setNextAppt(a ? {
             id: a.id,
-            when: new Date(a.appointment_date).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }),
+            when: appointmentTime ? new Date(appointmentTime).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : '—',
             type: a.appointment_type,
             therapist_name: `${a?.therapist?.first_name || ''} ${a?.therapist?.last_name || ''}`.trim() || undefined
           } : null)

@@ -13,11 +13,14 @@ const IntakeForm: React.FC = () => {
     let cancel = false
     const run = async () => {
       setLoading(true)
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('cases')
         .select('intake_data')
         .eq('id', String(caseId))
-        .single()
+        .maybeSingle()
+      if (error) {
+        console.error('Error loading intake data:', error)
+      }
       if (!cancel) {
         setValues(data?.intake_data ?? {})
         setLoading(false)
@@ -29,7 +32,8 @@ const IntakeForm: React.FC = () => {
 
   const save = async () => {
     setSaving(true)
-    await supabase.from('cases').update({ intake_data: values }).eq('id', String(caseId))
+    const { error } = await supabase.from('cases').update({ intake_data: values }).eq('id', String(caseId))
+    if (error) console.error('Error saving intake data:', error)
     setSaving(false)
   }
 

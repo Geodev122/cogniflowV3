@@ -95,7 +95,7 @@ export const CaseFiles: React.FC = () => {
           // Get session count
           const { data: sessions } = await supabase
             .from('appointments')
-            .select('id, appointment_date, status')
+            .select('id, start_time, end_time, appointment_date, status')
             .eq('client_id', client.id)
             .eq('therapist_id', profile.id)
 
@@ -116,13 +116,13 @@ export const CaseFiles: React.FC = () => {
             .single()
 
           const completedSessions = sessions?.filter(s => s.status === 'completed') || []
-          const upcomingSessions = sessions?.filter(s => s.status === 'scheduled' && new Date(s.appointment_date) > new Date()) || []
+          const upcomingSessions = sessions?.filter(s => s.status === 'scheduled' && new Date(s.start_time || s.appointment_date) > new Date()) || []
 
           return {
             client,
             sessionCount: completedSessions.length,
-            lastSession: completedSessions.length > 0 ? completedSessions[completedSessions.length - 1].appointment_date : undefined,
-            nextAppointment: upcomingSessions.length > 0 ? upcomingSessions[0].appointment_date : undefined,
+            lastSession: completedSessions.length > 0 ? (completedSessions[completedSessions.length - 1].start_time || completedSessions[completedSessions.length - 1].appointment_date) : undefined,
+            nextAppointment: upcomingSessions.length > 0 ? (upcomingSessions[0].start_time || upcomingSessions[0].appointment_date) : undefined,
             assessments: assessments?.map(a => ({
               id: a.id,
               assessment_name: a.title,

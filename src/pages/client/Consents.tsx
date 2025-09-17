@@ -28,7 +28,7 @@ export default function Consents() {
         if (err) throw err
         if (!cancel) setRows((data || []) as any)
       } catch (e:any) {
-        console.warn('[Consents] load', e); if (!cancel) setError('No consent records available.')
+        console.warn('[Consents] load', e); if (!cancel) setError('Could not load consent forms.')
       } finally {
         if (!cancel) setLoading(false)
       }

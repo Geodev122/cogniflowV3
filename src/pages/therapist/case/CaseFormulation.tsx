@@ -11,7 +11,10 @@ const CaseFormulation: React.FC = () => {
   useEffect(() => {
     let cancel = false
     const run = async () => {
-      const { data } = await supabase.from('cases').select('formulation').eq('id', String(caseId)).single()
+      const { data, error } = await supabase.from('cases').select('formulation').eq('id', String(caseId)).maybeSingle()
+      if (error) {
+        console.error('Error loading formulation:', error)
+      }
       if (!cancel) setText(data?.formulation ?? '')
     }
     run()
@@ -20,7 +23,8 @@ const CaseFormulation: React.FC = () => {
 
   const save = async () => {
     setSaving(true)
-    await supabase.from('cases').update({ formulation: text }).eq('id', String(caseId))
+    const { error } = await supabase.from('cases').update({ formulation: text }).eq('id', String(caseId))
+    if (error) console.error('Error saving formulation:', error)
     setSaving(false)
   }
 
