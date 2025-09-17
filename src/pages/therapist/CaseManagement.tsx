@@ -1,3 +1,4 @@
+// src/pages/therapist/CaseManagement.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import {
@@ -5,15 +6,13 @@ import {
   User, Hash, ShieldAlert, Play, Flag, ChevronRight, Users, Timer, GitBranch
 } from 'lucide-react'
 
-// ✅ paths from /src/pages/therapist/CaseManagement.tsx
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 
-// Lazy-load your tab modules (keep each tab modular)
 const IntakeForm = React.lazy(() => import('./case/IntakeForm'))
 const CaseFormulation = React.lazy(() => import('./case/CaseFormulation'))
 const Diagnosis = React.lazy(() => import('./case/Diagnosis'))
-const Intervention = React.lazy(() => import('./case/Intervention'))          // ← new, not SessionBoard
+const Intervention = React.lazy(() => import('./case/Intervention'))
 const TreatmentPlanning = React.lazy(() => import('./case/TreatmentPlanning'))
 const CaseSummary = React.lazy(() => import('./case/CaseSummary'))
 
@@ -33,7 +32,7 @@ const tabs = [
   { to: 'intake',       label: 'Intake',        icon: FileText,       tip: 'View/annotate client intake' },
   { to: 'formulation',  label: 'Formulation',   icon: ClipboardList,  tip: 'Symptoms & clinical model' },
   { to: 'diagnosis',    label: 'Diagnosis',     icon: Stethoscope,    tip: 'DSM/ICD selection & DDx' },
-  { to: 'intervention', label: 'Intervention',  icon: Activity,       tip: 'Assessments & materials' },
+  { to: 'intervention', label: 'Intervention',  icon: Activity,       tip: 'Assessments, goals & packs' },
   { to: 'treatment',    label: 'Treatment',     icon: Pill,           tip: 'Goals, sessions, checkpoints' },
   { to: 'summary',      label: 'Summary',       icon: BookOpen,       tip: 'Full case summary & export' },
 ] as const
@@ -47,14 +46,17 @@ export default function CaseManagement() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const base = useMemo(() => `/therapist/cases/${caseId}`, [caseId])
+  const base = useMemo(() => `/therapist/cases/${caseId ?? ''}`, [caseId])
 
   const loadHeader = useCallback(async () => {
-    if (!caseId) return
+    if (!caseId) {
+      setLoading(false)
+      setError('No caseId in route.')
+      return
+    }
     setLoading(true)
     setError(null)
     try {
-      // Case basics
       const { data: c, error: cerr } = await supabase
         .from('cases')
         .select('id, case_number, status, client_id, therapist_id, current_phase')
@@ -63,7 +65,6 @@ export default function CaseManagement() {
       if (cerr) throw cerr
       if (!c) { setHeader(null); setError('Case not found.'); return }
 
-      // Client name (RLS-safe)
       let clientFirst: string | null = null
       let clientLast: string | null = null
       if (c.client_id) {
@@ -76,7 +77,6 @@ export default function CaseManagement() {
         clientLast = cp?.last_name ?? null
       }
 
-      // Assigned therapists (multi-therapist support)
       const { data: rels } = await supabase
         .from('therapist_case_relations')
         .select('therapist_id')
@@ -143,7 +143,6 @@ export default function CaseManagement() {
       } as any)
       if (fErr) throw fErr
 
-      // Update / upsert short case summary head (to surface in dashboards)
       const title =
         `${header?.client_first_name ?? ''} ${header?.client_last_name ?? ''}`.trim() ||
         (header?.case_number ? `Case ${header.case_number}` : `Case ${String(caseId).slice(0,6)}…`)
@@ -187,6 +186,16 @@ export default function CaseManagement() {
     return 'bg-blue-100 text-blue-700'
   }, [header?.status])
 
+  if (!caseId) {
+    return (
+      <div className="p-6">
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3">
+          Missing <code>:caseId</code> in route. Open this from a case link (e.g. <code>/therapist/cases/123/intervention</code>).
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="h-full grid place-items-center">
@@ -207,7 +216,7 @@ export default function CaseManagement() {
 
   return (
     <div className="h-full grid grid-rows-[auto_auto_1fr]">
-      {/* ── Case Header (persistent) ─────────────────────────────────────────── */}
+      {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
@@ -239,25 +248,13 @@ export default function CaseManagement() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={launchWorkspace}
-                className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50 inline-flex items-center gap-1"
-                title="Launch live session workspace"
-              >
+              <button onClick={launchWorkspace} className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50 inline-flex items-center gap-1" title="Launch live session workspace">
                 <Play className="w-4 h-4" /> Launch Session
               </button>
-              <button
-                onClick={openSummary}
-                className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50 inline-flex items-center gap-1"
-                title="View case summary"
-              >
+              <button onClick={openSummary} className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50 inline-flex items-center gap-1" title="View case summary">
                 <BookOpen className="w-4 h-4" /> View Summary
               </button>
-              <button
-                onClick={flagForSupervision}
-                className="px-3 py-2 text-sm rounded-lg bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 inline-flex items-center gap-1"
-                title="Flag for supervision"
-              >
+              <button onClick={flagForSupervision} className="px-3 py-2 text-sm rounded-lg bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 inline-flex items-center gap-1" title="Flag for supervision">
                 <Flag className="w-4 h-4" /> Save & Flag
               </button>
             </div>
@@ -265,7 +262,7 @@ export default function CaseManagement() {
         </div>
       </div>
 
-      {/* ── Tabbed Nav (with tooltips) ──────────────────────────────────────── */}
+      {/* Tabs */}
       <div className="border-b bg-white">
         <div className="max-w-7xl mx-auto px-4 py-2 flex gap-2 overflow-x-auto">
           {tabs.map(({ to, label, icon: Icon, tip }) => (
@@ -288,7 +285,7 @@ export default function CaseManagement() {
         </div>
       </div>
 
-      {/* ── Tab Content ─────────────────────────────────────────────────────── */}
+      {/* Tab content */}
       <div className="min-h-0 overflow-y-auto">
         <React.Suspense fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>}>
           <Routes>
@@ -304,7 +301,7 @@ export default function CaseManagement() {
         </React.Suspense>
       </div>
 
-      {/* Optional: tiny breadcrumb/footnote */}
+      {/* Foot */}
       <div className="border-t bg-white">
         <div className="max-w-7xl mx-auto px-4 py-2 text-xs text-gray-500 flex items-center gap-1">
           Case Management <ChevronRight className="w-3 h-3" /> {clientName} <ChevronRight className="w-3 h-3" /> {caseTag}
