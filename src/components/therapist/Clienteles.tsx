@@ -1,24 +1,62 @@
 // src/components/therapist/Clienteles.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import {
-  Users, Search, AlertTriangle, ShieldCheck, MessageSquare, FileText, Brain, RefreshCcw
+  Users, Search, AlertTriangle, ShieldCheck, MessageSquare, FileText, Brain, RefreshCcw, Plus, X
 } from 'lucide-react'
 
+/* -------------------------------------------------------------------------- */
+/* Types                                                                      */
+/* -------------------------------------------------------------------------- */
 type ClientRow = {
   id: string
   first_name: string | null
   last_name: string | null
   email: string | null
   phone: string | null
+  whatsapp_number: string | null
   city: string | null
   country: string | null
   created_at: string
   role: string
+  patient_code: string | null
 }
 
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
+function toInitials(first?: string | null, last?: string | null) {
+  const f = (first || '').trim()
+  const l = (last || '').trim()
+  if (!f && !l) return 'CL'
+  return (f[0] || '').concat(l[0] || '').toUpperCase()
+}
+
+function formatWhatsappDigits(input: string) {
+  // keep digits and leading '+'
+  const trimmed = input.trim()
+  const plus = trimmed.startsWith('+') ? '+' : ''
+  const digits = trimmed.replace(/[^\d]/g, '')
+  return plus + digits
+}
+
+function generatePatientCode(): string {
+  // PT + 6 random digits
+  const n = Math.floor(100000 + Math.random() * 900000)
+  return `PT${n}`
+}
+
+function fullName(r: Pick<ClientRow, 'first_name' | 'last_name'>) {
+  const s = `${r.first_name || ''} ${r.last_name || ''}`.trim()
+  return s || 'Client'
+}
+
+/* -------------------------------------------------------------------------- */
+/* Component                                                                  */
+/* -------------------------------------------------------------------------- */
 export const Clienteles: React.FC = () => {
   const navigate = useNavigate()
   const { profile } = useAuth()
@@ -33,9 +71,6 @@ export const Clienteles: React.FC = () => {
 
   const searchDebounce = useRef<number | null>(null)
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // Fetch IDs of clients linked to this therapist
-  // ────────────────────────────────────────────────────────────────────────────
   const fetchMineIds = useCallback(async () => {
     if (!profile?.id) return setMyIds(new Set())
     try {
@@ -52,19 +87,15 @@ export const Clienteles: React.FC = () => {
     }
   }, [profile?.id])
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // Fetch clients list, with scope + server-side search (ilike)
-  // ────────────────────────────────────────────────────────────────────────────
   const fetchRows = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       let query = supabase
         .from('profiles')
-        .select('id, first_name, last_name, email, phone, whatsapp_number, city, country, created_at, role')
+        .select('id, first_name, last_name, email, phone, whatsapp_number, city, country, created_at, role, patient_code')
         .eq('role', 'client') as any
 
-      // Scope enforcement
       if (scope === 'mine') {
         const ids = Array.from(myIds)
         if (ids.length === 0) {
@@ -75,9 +106,7 @@ export const Clienteles: React.FC = () => {
         query = query.in('id', ids)
       }
 
-      // Server-side search against common fields
-      const hasQ = q.trim().length > 0
-      if (hasQ) {
+      if (q.trim().length > 0) {
         const like = `%${q.trim()}%`
         query = query.or(
           [
@@ -104,66 +133,185 @@ export const Clienteles: React.FC = () => {
   }, [scope, q, myIds])
 
   // Initial + manual refresh
-  useEffect(() => {
-    fetchMineIds()
-  }, [fetchMineIds, refreshKey])
+  useEffect(() => { fetchMineIds() }, [fetchMineIds, refreshKey])
 
-  // Debounce search to reduce roundtrips
+  // Debounce search
   useEffect(() => {
     if (searchDebounce.current) window.clearTimeout(searchDebounce.current)
-    searchDebounce.current = window.setTimeout(() => {
-      fetchRows()
-    }, 250)
-    return () => {
-      if (searchDebounce.current) window.clearTimeout(searchDebounce.current)
-    }
+    searchDebounce.current = window.setTimeout(() => { fetchRows() }, 250)
+    return () => { if (searchDebounce.current) window.clearTimeout(searchDebounce.current) }
   }, [q, scope, myIds, fetchRows])
 
-  // Also fetch when myIds change (e.g., first load)
+  // Also fetch when myIds first resolves
   useEffect(() => { fetchRows() }, [myIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Client-side highlight / fallback filter (kept minimal; server-side is primary)
   const displayRows = useMemo(() => rows, [rows])
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // Actions
-  // ────────────────────────────────────────────────────────────────────────────
+  /* ------------------------------ Actions --------------------------------- */
   const sendIntake = (via: 'whatsapp' | 'email', r: ClientRow) => {
     const link = `${window.location.origin}/intake/${r.id}`
     if (via === 'whatsapp') {
-      const phone = (r.phone || r.whatsapp_number || '').replace(/[^\d]/g, '')
-      if (!phone) return alert('No phone on file.')
-      const text = `Hello ${r.first_name || ''}, please complete your intake form: ${link}`
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+      const phone = formatWhatsappDigits((r.phone || r.whatsapp_number || ''))
+      if (!phone || phone.replace(/\D/g, '').length < 6) return alert('No valid WhatsApp number on file.')
+      const code = r.patient_code || 'your code'
+      const text = `Hello ${r.first_name || ''}, please use the code ${code} to log in and complete your intake form: ${link}`
+      window.open(`https://wa.me/${phone.replace('+', '')}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
     } else {
-      window.location.href = `mailto:${r.email}?subject=Intake%20Form&body=${encodeURIComponent('Please complete your intake: ' + link)}`
+      const code = r.patient_code ? `Your code: ${r.patient_code}\n\n` : ''
+      window.location.href = `mailto:${r.email}?subject=Intake%20Form&body=${encodeURIComponent(
+        `${code}Please complete your intake: ${link}`
+      )}`
     }
   }
 
-  const openCase = (r: ClientRow) => {
-    // Deep link to Case Management filtered by client
-    navigate(`/therapist/cases?clientId=${encodeURIComponent(r.id)}`)
-  }
-
-  const assignAssessment = (r: ClientRow) => {
-    // Open assessments workspace with preselected client
-    navigate(`/therapist/assessments?clientId=${encodeURIComponent(r.id)}`)
-  }
-
-  const messageClient = (r: ClientRow) => {
-    // Deep link to comms tool with context
-    navigate(`/therapist/comms?clientId=${encodeURIComponent(r.id)}`)
-  }
-
+  const openCase = (r: ClientRow) => navigate(`/therapist/cases?clientId=${encodeURIComponent(r.id)}`)
+  const assignAssessment = (r: ClientRow) => navigate(`/therapist/assessments?clientId=${encodeURIComponent(r.id)}`)
+  const messageClient = (r: ClientRow) => navigate(`/therapist/comms?clientId=${encodeURIComponent(r.id)}`)
   const isMine = (id: string) => myIds.has(id)
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // UI
-  // ────────────────────────────────────────────────────────────────────────────
+  /* ----------------------------- Create Modal ----------------------------- */
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+
+  const resetCreateForm = () => {
+    setFirstName(''); setLastName(''); setEmail(''); setPhone('')
+  }
+
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!profile?.id) return
+    const cleanPhone = formatWhatsappDigits(phone)
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || !cleanPhone) return
+
+    setCreating(true)
+    try {
+      // 1) If a profile with this email already exists, link & update minimal fields
+      let newUserId: string | null = null
+      let existingProfileId: string | null = null
+      let patientCode = generatePatientCode()
+
+      // NOTE: RLS may allow this select; if not, we fall back to signUp branch.
+      const { data: existing, error: existingErr } = await supabase
+        .from('profiles')
+        .select('id, patient_code, role')
+        .eq('email', email.toLowerCase())
+        .limit(1)
+        .maybeSingle()
+
+      if (!existingErr && existing?.id) {
+        existingProfileId = existing.id
+        if (existing.patient_code) patientCode = existing.patient_code
+      } else {
+        existingProfileId = null
+      }
+
+      if (!existingProfileId) {
+        // 2) Create Auth user with temp password = patientCode (no session persistence!)
+        const supabaseAnon = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_ANON_KEY,
+          { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+        )
+
+        const signUp = await supabaseAnon.auth.signUp({
+          email: email.toLowerCase(),
+          password: patientCode,
+          options: {
+            data: {
+              first_name: firstName,
+              last_name: lastName,
+              role: 'client',
+              password_set: false
+            }
+          }
+        })
+
+        if (signUp.error) {
+          // Common case: email already registered -> try to fetch profile again and proceed
+          if (!signUp.error.message?.toLowerCase().includes('already registered')) {
+            throw signUp.error
+          }
+          // Try find the profile now (user was there)
+          const fallback = await supabase
+            .from('profiles')
+            .select('id, patient_code, role')
+            .eq('email', email.toLowerCase())
+            .limit(1)
+            .maybeSingle()
+          if (fallback.error || !fallback.data?.id) throw signUp.error
+          existingProfileId = fallback.data.id
+          if (fallback.data.patient_code) patientCode = fallback.data.patient_code
+        } else {
+          if (!signUp.data.user) throw new Error('Auth signup succeeded but no user returned.')
+          newUserId = signUp.data.user.id
+        }
+      }
+
+      const targetId = existingProfileId || newUserId
+      if (!targetId) throw new Error('Could not resolve client id.')
+
+      // 3) Upsert into profiles (ensure role=client, patient_code, names, whatsapp_number)
+      const { error: upsertErr } = await supabase.from('profiles').upsert({
+        id: targetId,
+        role: 'client',
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        email: email.toLowerCase(),
+        whatsapp_number: cleanPhone,
+        patient_code: patientCode,
+        created_by_therapist: profile.id,
+        password_set: false
+      }, { onConflict: 'id' })
+      if (upsertErr) throw upsertErr
+
+      // 4) Link therapist <> client (ignore duplicate relation error)
+      const rel = await supabase
+        .from('therapist_client_relations')
+        .insert({ therapist_id: profile.id, client_id: targetId })
+      if (rel.error && !/duplicate key|already exists/i.test(rel.error.message || '')) {
+        throw rel.error
+      }
+
+      // 5) Ensure client_profiles placeholder (optional)
+      await supabase.from('client_profiles')
+        .insert({ therapist_id: profile.id, client_id: targetId })
+        .then(({ error }) => {
+          if (error && !/duplicate key|already exists/i.test(error.message || '')) {
+            // Non-fatal — log only
+            console.warn('[Clienteles] client_profiles insert warning:', error.message)
+          }
+        })
+
+      // 6) Done — refresh and suggest WhatsApp
+      setShowCreateModal(false)
+      resetCreateForm()
+      setRefreshKey(k => k + 1)
+
+      // Offer to open WhatsApp prefilled
+      const intakeUrl = `${window.location.origin}/intake/${targetId}`
+      const msg = `Client created.\n\n• Temp password: ${patientCode}\n• Intake: ${intakeUrl}\n\nOpen WhatsApp to share this now?`
+      if (confirm(msg)) {
+        const waText = `Hello ${firstName}, please use the code ${patientCode} to log in and complete your intake form: ${intakeUrl}`
+        const waNumber = cleanPhone.replace('+', '')
+        if (waNumber) window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(waText)}`, '_blank', 'noopener,noreferrer')
+      }
+    } catch (err: any) {
+      console.error('[Clienteles] create client error', err)
+      alert(err?.message || 'Failed to create client. Please try again.')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  /* --------------------------------- UI ----------------------------------- */
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div className="flex items-center gap-2">
           <Users className="w-6 h-6 text-blue-600" />
           <h2 className="text-2xl font-bold text-gray-900">Clienteles</h2>
@@ -195,6 +343,15 @@ export const Clienteles: React.FC = () => {
           >
             <RefreshCcw className="w-4 h-4" />
             Refresh
+          </button>
+
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-700"
+            title="Add Client"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Add Client</span>
           </button>
         </div>
       </div>
@@ -231,22 +388,23 @@ export const Clienteles: React.FC = () => {
               <tbody className="divide-y text-sm">
                 {displayRows.map(r => {
                   const mine = isMine(r.id)
-                  const fullName = `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Client'
+                  const name = fullName(r)
                   return (
                     <tr key={r.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{fullName}</div>
+                        <div className="font-medium text-gray-900 flex items-center gap-2">
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-[10px]">
+                            {toInitials(r.first_name, r.last_name)}
+                          </span>
+                          {name}
+                        </div>
                         <div className="text-xs text-gray-500">{new Date(r.created_at).toLocaleDateString()}</div>
                       </td>
                       <td className="px-4 py-3">{r.city || '—'}</td>
                       <td className="px-4 py-3">{r.country || '—'}</td>
                       <td className="px-4 py-3">
-                        <div className="text-xs text-gray-600">
-                          {mine ? r.email || '—' : 'Hidden'}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {mine ? (r.phone || r.whatsapp_number) || '—' : '—'}
-                        </div>
+                        <div className="text-xs text-gray-600">{mine ? (r.email || '—') : 'Hidden'}</div>
+                        <div className="text-xs text-gray-500">{mine ? (r.phone || r.whatsapp_number || '—') : '—'}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 justify-end">
@@ -309,6 +467,94 @@ export const Clienteles: React.FC = () => {
           <span className="whitespace-nowrap"> therapist_client_relations</span>).
         </span>
       </div>
+
+      {/* -------------------------------- Modal ------------------------------- */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/40"
+            onClick={() => !creating && setShowCreateModal(false)}
+          />
+          {/* Dialog */}
+          <div className="flex min-h-screen items-end justify-center px-4 pb-10 pt-6 text-center sm:block sm:p-0">
+            <div className="inline-block w-full max-w-lg transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:align-middle">
+              <form onSubmit={handleCreateSubmit}>
+                <div className="bg-white px-6 pt-6 pb-3">
+                  <div className="flex items-start justify-between">
+                    <h3 className="text-lg font-medium text-gray-900">Create New Client</h3>
+                    <button
+                      type="button"
+                      onClick={() => !creating && setShowCreateModal(false)}
+                      className="p-2 rounded hover:bg-gray-100"
+                      title="Close"
+                    >
+                      <X className="w-5 h-5 text-gray-500" />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name *</label>
+                        <input
+                          id="firstName" type="text" required
+                          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                          value={firstName} onChange={e => setFirstName(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name *</label>
+                        <input
+                          id="lastName" type="text" required
+                          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                          value={lastName} onChange={e => setLastName(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email *</label>
+                      <input
+                        id="email" type="email" required placeholder="client@example.com"
+                        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                        value={email} onChange={e => setEmail(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700">WhatsApp Number *</label>
+                      <input
+                        id="phone" type="tel" required placeholder="+1 555 123 4567"
+                        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                        value={phone} onChange={e => setPhone(e.target.value)}
+                      />
+                      <p className="mt-1 text-[11px] text-gray-500">Use international format if possible (e.g., +15551234567).</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse">
+                  <button
+                    type="submit"
+                    disabled={creating || !firstName.trim() || !lastName.trim() || !email.trim() || !formatWhatsappDigits(phone)}
+                    className="inline-flex w-full justify-center rounded-md bg-blue-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
+                  >
+                    {creating ? 'Creating…' : 'Create Client'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => !creating && setShowCreateModal(false)}
+                    className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
