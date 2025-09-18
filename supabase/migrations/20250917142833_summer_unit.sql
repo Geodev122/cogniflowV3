@@ -1,486 +1,457 @@
-/*
-  # Fix Schema Inconsistencies and Add Missing Tables
+-- =========================================
+-- Migration: fix missing tables/columns + RLS
+-- Safe & idempotent (can be re-run)
+-- =========================================
+begin;
 
-  This migration addresses all naming inconsistencies and missing tables identified in the audit:
+-- UUIDs for gen_random_uuid()
+create extension if not exists pgcrypto;
 
-  1. Add missing columns to existing tables
-  2. Create missing tables for frontend functionality
-  3. Ensure consistent naming conventions
-  4. Add proper indexes and RLS policies
-
-  ## Changes Made
-
-  1. **Cases Table Updates**
-     - Add `current_phase` column for treatment phase tracking
-     - Add `diagnosis_codes` column for ICD/DSM codes
-     - Add `treatment_plan` column for structured treatment plans
-     - Add `formulation` column for case formulation text
-     - Add `intake_data` column for intake form data
-
-  2. **Profiles Table Updates**
-     - Add `phone` column (alias for whatsapp_number for consistency)
-     - Add `city` and `country` columns for location filtering
-
-  3. **New Tables**
-     - `client_requests` - For therapy termination/referral requests
-     - `therapist_case_relations` - Multiple therapists per case
-     - `supervision_flags` - Case supervision flagging
-     - `supervision_threads` - Supervision discussion threads
-     - `therapist_licenses` - License document tracking
-     - `subscriptions` - Membership/billing tracking
-     - `invoices` - Billing invoice tracking
-     - `vip_offers` - VIP opportunities
-     - `clinic_spaces` - Clinic rental spaces
-     - `clinic_rental_requests` - Rental booking requests
-     - `consents` - Client consent forms
-
-  4. **Security**
-     - Enable RLS on all new tables
-     - Add appropriate policies for therapist/client access
-*/
-
--- Add missing columns to cases table
-DO $$
-BEGIN
-  -- Add current_phase column
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'cases' AND column_name = 'current_phase'
-  ) THEN
-    ALTER TABLE cases ADD COLUMN current_phase TEXT DEFAULT 'intake';
-  END IF;
-
-  -- Add diagnosis_codes column
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'cases' AND column_name = 'diagnosis_codes'
-  ) THEN
-    ALTER TABLE cases ADD COLUMN diagnosis_codes TEXT[] DEFAULT '{}';
-  END IF;
-
-  -- Add formulation column
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'cases' AND column_name = 'formulation'
-  ) THEN
-    ALTER TABLE cases ADD COLUMN formulation TEXT;
-  END IF;
-
-  -- Add intake_data column
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'cases' AND column_name = 'intake_data'
-  ) THEN
-    ALTER TABLE cases ADD COLUMN intake_data JSONB DEFAULT '{}';
-  END IF;
-
-  -- Add data column for legacy compatibility
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'cases' AND column_name = 'data'
-  ) THEN
-    ALTER TABLE cases ADD COLUMN data JSONB DEFAULT '{}';
-  END IF;
-END $$;
-
--- Add missing columns to profiles table
-DO $$
-BEGIN
-  -- Add phone column (alias for whatsapp_number)
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'profiles' AND column_name = 'phone'
-  ) THEN
-    ALTER TABLE profiles ADD COLUMN phone TEXT;
-    -- Copy whatsapp_number to phone for consistency
-    UPDATE profiles SET phone = whatsapp_number WHERE whatsapp_number IS NOT NULL;
-  END IF;
-
-  -- Add city column
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'profiles' AND column_name = 'city'
-  ) THEN
-    ALTER TABLE profiles ADD COLUMN city TEXT;
-  END IF;
-
-  -- Add country column
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'profiles' AND column_name = 'country'
-  ) THEN
-    ALTER TABLE profiles ADD COLUMN country TEXT;
-  END IF;
-END $$;
-
--- Add missing columns to appointments table for consistency
-DO $$
-BEGIN
-  -- Ensure appointment_date column exists (some code expects this)
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'appointments' AND column_name = 'appointment_date'
-  ) THEN
-    ALTER TABLE appointments ADD COLUMN appointment_date TIMESTAMPTZ;
-    -- Copy start_time to appointment_date for compatibility
-    UPDATE appointments SET appointment_date = start_time WHERE start_time IS NOT NULL;
-  END IF;
-
-  -- Add location column for appointment location
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'appointments' AND column_name = 'location'
-  ) THEN
-    ALTER TABLE appointments ADD COLUMN location TEXT;
-  END IF;
-END $$;
-
--- Create client_requests table for therapy termination/referral requests
-CREATE TABLE IF NOT EXISTS client_requests (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  therapist_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-  case_id UUID REFERENCES cases(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('end_therapy', 'referral', 'complaint', 'question')),
-  message TEXT,
-  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_review', 'resolved', 'closed')),
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  resolved_at TIMESTAMPTZ,
-  resolved_by UUID REFERENCES profiles(id)
+-- -------------------------------------------------
+-- 1) Ensure public.cases exists (with needed cols)
+-- -------------------------------------------------
+create table if not exists public.cases (
+  id               uuid primary key default gen_random_uuid(),
+  case_number      text,
+  status           text,
+  client_id        uuid,
+  therapist_id     uuid,
+  current_phase    text default 'intake',
+  diagnosis_codes  text[] default '{}'::text[],
+  formulation      text,
+  intake_data      jsonb  default '{}'::jsonb,
+  data             jsonb  default '{}'::jsonb,
+  treatment_plan   jsonb  default '{}'::jsonb,
+  created_at       timestamptz default now(),
+  updated_at       timestamptz default now()
 );
 
-ALTER TABLE client_requests ENABLE ROW LEVEL SECURITY;
+-- Make sure the columns you rely on exist (idempotent)
+alter table public.cases add column if not exists current_phase   text default 'intake';
+alter table public.cases add column if not exists diagnosis_codes text[] default '{}'::text[];
+alter table public.cases add column if not exists formulation     text;
+alter table public.cases add column if not exists intake_data     jsonb default '{}'::jsonb;
+alter table public.cases add column if not exists data            jsonb default '{}'::jsonb;
+alter table public.cases add column if not exists treatment_plan  jsonb default '{}'::jsonb;
 
-CREATE POLICY "client_requests_client_manage"
-  ON client_requests
-  FOR ALL
-  TO authenticated
-  USING (client_id = auth.uid())
-  WITH CHECK (client_id = auth.uid());
+-- -------------------------------------------------
+-- 2) profiles: add phone/city/country (guarded copy)
+-- -------------------------------------------------
+alter table public.profiles add column if not exists phone   text;
+alter table public.profiles add column if not exists city    text;
+alter table public.profiles add column if not exists country text;
 
-CREATE POLICY "client_requests_therapist_read"
-  ON client_requests
-  FOR SELECT
-  TO authenticated
-  USING (therapist_id = auth.uid());
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='profiles' and column_name='whatsapp_number'
+  ) then
+    -- copy only where phone is null
+    update public.profiles
+       set phone = whatsapp_number
+     where phone is null and whatsapp_number is not null;
+  end if;
+end$$;
 
--- Create therapist_case_relations table for multiple therapists per case
-CREATE TABLE IF NOT EXISTS therapist_case_relations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
-  therapist_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  role TEXT DEFAULT 'collaborating' CHECK (role IN ('primary', 'collaborating', 'supervising', 'consulting')),
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(case_id, therapist_id)
+-- -------------------------------------------------
+-- 3) appointments: add appointment_date/location
+--     and backfill from start_time if present
+-- -------------------------------------------------
+alter table public.appointments add column if not exists appointment_date timestamptz;
+alter table public.appointments add column if not exists location         text;
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='appointments' and column_name='start_time'
+  ) then
+    update public.appointments
+       set appointment_date = start_time
+     where appointment_date is null and start_time is not null;
+  end if;
+end$$;
+
+-- -------------------------------------------------
+-- 4) Tables needed by FE features (with FK to cases)
+-- -------------------------------------------------
+
+-- client_requests
+create table if not exists public.client_requests (
+  id           uuid primary key default gen_random_uuid(),
+  client_id    uuid not null references public.profiles(id) on delete cascade,
+  therapist_id uuid references public.profiles(id) on delete set null,
+  case_id      uuid references public.cases(id) on delete cascade,
+  type         text not null check (type in ('end_therapy','referral','complaint','question')),
+  message      text,
+  status       text not null default 'open' check (status in ('open','in_review','resolved','closed')),
+  created_at   timestamptz default now(),
+  updated_at   timestamptz default now(),
+  resolved_at  timestamptz,
+  resolved_by  uuid references public.profiles(id)
 );
+alter table public.client_requests enable row level security;
 
-ALTER TABLE therapist_case_relations ENABLE ROW LEVEL SECURITY;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='client_requests' and policyname='client_requests_client_manage') then
+    create policy "client_requests_client_manage"
+      on public.client_requests for all to authenticated
+      using (client_id = auth.uid())
+      with check (client_id = auth.uid());
+  end if;
 
-CREATE POLICY "therapist_case_relations_manage"
-  ON therapist_case_relations
-  FOR ALL
-  TO authenticated
-  USING (therapist_id = auth.uid())
-  WITH CHECK (therapist_id = auth.uid());
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='client_requests' and policyname='client_requests_therapist_read') then
+    create policy "client_requests_therapist_read"
+      on public.client_requests for select to authenticated
+      using (therapist_id = auth.uid());
+  end if;
+end$$;
 
--- Create supervision_flags table
-CREATE TABLE IF NOT EXISTS supervision_flags (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
-  therapist_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  session_note_id UUID REFERENCES session_notes(id) ON DELETE SET NULL,
-  flagged_by UUID NOT NULL REFERENCES profiles(id),
-  reason TEXT NOT NULL,
-  status TEXT DEFAULT 'open' CHECK (status IN ('open', 'in_review', 'resolved')),
-  created_at TIMESTAMPTZ DEFAULT now(),
-  resolved_at TIMESTAMPTZ,
-  resolved_by UUID REFERENCES profiles(id)
+-- therapist_case_relations
+create table if not exists public.therapist_case_relations (
+  id           uuid primary key default gen_random_uuid(),
+  case_id      uuid not null references public.cases(id) on delete cascade,
+  therapist_id uuid not null references public.profiles(id) on delete cascade,
+  role         text default 'collaborating' check (role in ('primary','collaborating','supervising','consulting')),
+  created_at   timestamptz default now(),
+  unique(case_id, therapist_id)
 );
+alter table public.therapist_case_relations enable row level security;
 
-ALTER TABLE supervision_flags ENABLE ROW LEVEL SECURITY;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='therapist_case_relations' and policyname='therapist_case_relations_manage') then
+    create policy "therapist_case_relations_manage"
+      on public.therapist_case_relations for all to authenticated
+      using (therapist_id = auth.uid())
+      with check (therapist_id = auth.uid());
+  end if;
+end$$;
 
-CREATE POLICY "supervision_flags_therapist_manage"
-  ON supervision_flags
-  FOR ALL
-  TO authenticated
-  USING (therapist_id = auth.uid())
-  WITH CHECK (therapist_id = auth.uid());
-
--- Create supervision_threads table
-CREATE TABLE IF NOT EXISTS supervision_threads (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  therapist_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  supervisor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-  case_id UUID REFERENCES cases(id) ON DELETE SET NULL,
-  title TEXT NOT NULL,
-  description TEXT,
-  status TEXT DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
-  priority TEXT DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  resolved_at TIMESTAMPTZ
+-- supervision_flags (assumes session_notes exists)
+create table if not exists public.supervision_flags (
+  id             uuid primary key default gen_random_uuid(),
+  case_id        uuid not null references public.cases(id) on delete cascade,
+  therapist_id   uuid not null references public.profiles(id) on delete cascade,
+  session_note_id uuid references public.session_notes(id) on delete set null,
+  flagged_by     uuid not null references public.profiles(id),
+  reason         text not null,
+  status         text default 'open' check (status in ('open','in_review','resolved')),
+  created_at     timestamptz default now(),
+  resolved_at    timestamptz,
+  resolved_by    uuid references public.profiles(id)
 );
+alter table public.supervision_flags enable row level security;
 
-ALTER TABLE supervision_threads ENABLE ROW LEVEL SECURITY;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='supervision_flags' and policyname='supervision_flags_therapist_manage') then
+    create policy "supervision_flags_therapist_manage"
+      on public.supervision_flags for all to authenticated
+      using (therapist_id = auth.uid())
+      with check (therapist_id = auth.uid());
+  end if;
+end$$;
 
-CREATE POLICY "supervision_threads_therapist_manage"
-  ON supervision_threads
-  FOR ALL
-  TO authenticated
-  USING (therapist_id = auth.uid())
-  WITH CHECK (therapist_id = auth.uid());
-
--- Create therapist_licenses table
-CREATE TABLE IF NOT EXISTS therapist_licenses (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  therapist_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  license_name TEXT NOT NULL,
-  license_number TEXT,
-  issuing_authority TEXT,
-  country TEXT NOT NULL,
-  state_province TEXT,
-  file_path TEXT NOT NULL,
-  expires_on DATE,
-  status TEXT DEFAULT 'submitted' CHECK (status IN ('submitted', 'under_review', 'approved', 'rejected', 'expired')),
-  verified_at TIMESTAMPTZ,
-  verified_by UUID REFERENCES profiles(id),
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+-- supervision_threads
+create table if not exists public.supervision_threads (
+  id           uuid primary key default gen_random_uuid(),
+  therapist_id uuid not null references public.profiles(id) on delete cascade,
+  supervisor_id uuid references public.profiles(id) on delete set null,
+  case_id      uuid references public.cases(id) on delete set null,
+  title        text not null,
+  description  text,
+  status       text default 'open' check (status in ('open','in_progress','resolved','closed')),
+  priority     text default 'normal' check (priority in ('low','normal','high','urgent')),
+  created_at   timestamptz default now(),
+  updated_at   timestamptz default now(),
+  resolved_at  timestamptz
 );
+alter table public.supervision_threads enable row level security;
 
-ALTER TABLE therapist_licenses ENABLE ROW LEVEL SECURITY;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='supervision_threads' and policyname='supervision_threads_therapist_manage') then
+    create policy "supervision_threads_therapist_manage"
+      on public.supervision_threads for all to authenticated
+      using (therapist_id = auth.uid())
+      with check (therapist_id = auth.uid());
+  end if;
+end$$;
 
-CREATE POLICY "therapist_licenses_own_manage"
-  ON therapist_licenses
-  FOR ALL
-  TO authenticated
-  USING (therapist_id = auth.uid())
-  WITH CHECK (therapist_id = auth.uid());
-
--- Create subscriptions table for membership tracking
-CREATE TABLE IF NOT EXISTS subscriptions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  stripe_subscription_id TEXT UNIQUE,
-  plan_name TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('active', 'past_due', 'canceled', 'trialing', 'inactive')),
-  current_period_start TIMESTAMPTZ,
-  current_period_end TIMESTAMPTZ,
-  cancel_at_period_end BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+-- therapist_licenses
+create table if not exists public.therapist_licenses (
+  id               uuid primary key default gen_random_uuid(),
+  therapist_id     uuid not null references public.profiles(id) on delete cascade,
+  license_name     text not null,
+  license_number   text,
+  issuing_authority text,
+  country          text not null,
+  state_province   text,
+  file_path        text not null,
+  expires_on       date,
+  status           text default 'submitted' check (status in ('submitted','under_review','approved','rejected','expired')),
+  verified_at      timestamptz,
+  verified_by      uuid references public.profiles(id),
+  notes            text,
+  created_at       timestamptz default now(),
+  updated_at       timestamptz default now()
 );
+alter table public.therapist_licenses enable row level security;
 
-ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='therapist_licenses' and policyname='therapist_licenses_own_manage') then
+    create policy "therapist_licenses_own_manage"
+      on public.therapist_licenses for all to authenticated
+      using (therapist_id = auth.uid())
+      with check (therapist_id = auth.uid());
+  end if;
+end$$;
 
-CREATE POLICY "subscriptions_own_access"
-  ON subscriptions
-  FOR ALL
-  TO authenticated
-  USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
-
--- Create invoices table for billing
-CREATE TABLE IF NOT EXISTS invoices (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  stripe_invoice_id TEXT UNIQUE,
-  number TEXT,
-  amount_due INTEGER, -- cents
-  currency TEXT DEFAULT 'usd',
-  status TEXT CHECK (status IN ('paid', 'open', 'void', 'uncollectible')),
-  hosted_invoice_url TEXT,
-  invoice_pdf TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+-- subscriptions
+create table if not exists public.subscriptions (
+  id                     uuid primary key default gen_random_uuid(),
+  user_id                uuid not null references public.profiles(id) on delete cascade,
+  stripe_subscription_id text unique,
+  plan_name              text not null,
+  status                 text not null check (status in ('active','past_due','canceled','trialing','inactive')),
+  current_period_start   timestamptz,
+  current_period_end     timestamptz,
+  cancel_at_period_end   boolean default false,
+  created_at             timestamptz default now(),
+  updated_at             timestamptz default now()
 );
+alter table public.subscriptions enable row level security;
 
-ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='subscriptions' and policyname='subscriptions_own_access') then
+    create policy "subscriptions_own_access"
+      on public.subscriptions for all to authenticated
+      using (user_id = auth.uid())
+      with check (user_id = auth.uid());
+  end if;
+end$$;
 
-CREATE POLICY "invoices_own_access"
-  ON invoices
-  FOR SELECT
-  TO authenticated
-  USING (user_id = auth.uid());
-
--- Create vip_offers table
-CREATE TABLE IF NOT EXISTS vip_offers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  title TEXT NOT NULL,
-  body TEXT,
-  cta_label TEXT,
-  cta_url TEXT,
-  target_audience TEXT[] DEFAULT '{"therapist"}',
-  expires_on DATE,
-  is_active BOOLEAN DEFAULT true,
-  created_by UUID REFERENCES profiles(id),
-  created_at TIMESTAMPTZ DEFAULT now()
+-- invoices
+create table if not exists public.invoices (
+  id               uuid primary key default gen_random_uuid(),
+  user_id          uuid not null references public.profiles(id) on delete cascade,
+  stripe_invoice_id text unique,
+  number           text,
+  amount_due       integer,
+  currency         text default 'usd',
+  status           text check (status in ('paid','open','void','uncollectible')),
+  hosted_invoice_url text,
+  invoice_pdf      text,
+  created_at       timestamptz default now()
 );
+alter table public.invoices enable row level security;
 
-ALTER TABLE vip_offers ENABLE ROW LEVEL SECURITY;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='invoices' and policyname='invoices_own_access') then
+    create policy "invoices_own_access"
+      on public.invoices for select to authenticated
+      using (user_id = auth.uid());
+  end if;
+end$$;
 
-CREATE POLICY "vip_offers_read_all"
-  ON vip_offers
-  FOR SELECT
-  TO authenticated
-  USING (is_active = true AND (expires_on IS NULL OR expires_on >= CURRENT_DATE));
-
--- Create clinic_spaces table for clinic rentals
-CREATE TABLE IF NOT EXISTS clinic_spaces (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  admin_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  location TEXT NOT NULL,
-  amenities TEXT[],
-  pricing_hourly DECIMAL(10,2),
-  pricing_daily DECIMAL(10,2),
-  tailored_available BOOLEAN DEFAULT false,
-  whatsapp TEXT,
-  external_managed BOOLEAN DEFAULT false,
-  active BOOLEAN DEFAULT true,
-  images TEXT[],
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+-- vip_offers
+create table if not exists public.vip_offers (
+  id              uuid primary key default gen_random_uuid(),
+  title           text not null,
+  body            text,
+  cta_label       text,
+  cta_url         text,
+  target_audience text[] default array['therapist']::text[],
+  expires_on      date,
+  is_active       boolean default true,
+  created_by      uuid references public.profiles(id),
+  created_at      timestamptz default now()
 );
+alter table public.vip_offers enable row level security;
 
-ALTER TABLE clinic_spaces ENABLE ROW LEVEL SECURITY;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='vip_offers' and policyname='vip_offers_read_all') then
+    create policy "vip_offers_read_all"
+      on public.vip_offers for select to authenticated
+      using (is_active = true and (expires_on is null or expires_on >= current_date));
+  end if;
+end$$;
 
-CREATE POLICY "clinic_spaces_read_active"
-  ON clinic_spaces
-  FOR SELECT
-  TO authenticated
-  USING (active = true);
-
-CREATE POLICY "clinic_spaces_admin_manage"
-  ON clinic_spaces
-  FOR ALL
-  TO authenticated
-  USING (admin_id = auth.uid())
-  WITH CHECK (admin_id = auth.uid());
-
--- Create clinic_rental_requests table
-CREATE TABLE IF NOT EXISTS clinic_rental_requests (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  therapist_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  space_id UUID NOT NULL REFERENCES clinic_spaces(id) ON DELETE CASCADE,
-  request_type TEXT NOT NULL CHECK (request_type IN ('hourly', 'daily', 'tailored')),
-  preferred_date DATE,
-  duration_hours INTEGER,
-  notes TEXT,
-  status TEXT DEFAULT 'new' CHECK (status IN ('new', 'approved', 'rejected', 'expired')),
-  admin_response TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+-- clinic_spaces
+create table if not exists public.clinic_spaces (
+  id                 uuid primary key default gen_random_uuid(),
+  admin_id           uuid references public.profiles(id) on delete set null,
+  name               text not null,
+  description        text,
+  location           text not null,
+  amenities          text[],
+  pricing_hourly     numeric(10,2),
+  pricing_daily      numeric(10,2),
+  tailored_available boolean default false,
+  whatsapp           text,
+  external_managed   boolean default false,
+  active             boolean default true,
+  images             text[],
+  created_at         timestamptz default now(),
+  updated_at         timestamptz default now()
 );
+alter table public.clinic_spaces enable row level security;
 
-ALTER TABLE clinic_rental_requests ENABLE ROW LEVEL SECURITY;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='clinic_spaces' and policyname='clinic_spaces_read_active') then
+    create policy "clinic_spaces_read_active"
+      on public.clinic_spaces for select to authenticated
+      using (active = true);
+  end if;
 
-CREATE POLICY "clinic_rental_requests_therapist_manage"
-  ON clinic_rental_requests
-  FOR ALL
-  TO authenticated
-  USING (therapist_id = auth.uid())
-  WITH CHECK (therapist_id = auth.uid());
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='clinic_spaces' and policyname='clinic_spaces_admin_manage') then
+    create policy "clinic_spaces_admin_manage"
+      on public.clinic_spaces for all to authenticated
+      using (admin_id = auth.uid())
+      with check (admin_id = auth.uid());
+  end if;
+end$$;
 
--- Create consents table for client consent forms
-CREATE TABLE IF NOT EXISTS consents (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  therapist_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-  case_id UUID REFERENCES cases(id) ON DELETE SET NULL,
-  title TEXT NOT NULL,
-  body TEXT,
-  consent_type TEXT DEFAULT 'treatment' CHECK (consent_type IN ('treatment', 'privacy', 'communication', 'research')),
-  signed_at TIMESTAMPTZ,
-  expires_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now()
+-- clinic_rental_requests
+create table if not exists public.clinic_rental_requests (
+  id              uuid primary key default gen_random_uuid(),
+  therapist_id    uuid not null references public.profiles(id) on delete cascade,
+  space_id        uuid not null references public.clinic_spaces(id) on delete cascade,
+  request_type    text not null check (request_type in ('hourly','daily','tailored')),
+  preferred_date  date,
+  duration_hours  integer,
+  notes           text,
+  status          text default 'new' check (status in ('new','approved','rejected','expired')),
+  admin_response  text,
+  created_at      timestamptz default now(),
+  updated_at      timestamptz default now()
 );
+alter table public.clinic_rental_requests enable row level security;
 
-ALTER TABLE consents ENABLE ROW LEVEL SECURITY;
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='clinic_rental_requests' and policyname='clinic_rental_requests_therapist_manage') then
+    create policy "clinic_rental_requests_therapist_manage"
+      on public.clinic_rental_requests for all to authenticated
+      using (therapist_id = auth.uid())
+      with check (therapist_id = auth.uid());
+  end if;
+end$$;
 
-CREATE POLICY "consents_client_manage"
-  ON consents
-  FOR ALL
-  TO authenticated
-  USING (client_id = auth.uid())
-  WITH CHECK (client_id = auth.uid());
+-- consents
+create table if not exists public.consents (
+  id           uuid primary key default gen_random_uuid(),
+  client_id    uuid not null references public.profiles(id) on delete cascade,
+  therapist_id uuid references public.profiles(id) on delete set null,
+  case_id      uuid references public.cases(id) on delete set null,
+  title        text not null,
+  body         text,
+  consent_type text default 'treatment' check (consent_type in ('treatment','privacy','communication','research')),
+  signed_at    timestamptz,
+  expires_at   timestamptz,
+  created_at   timestamptz default now()
+);
+alter table public.consents enable row level security;
 
-CREATE POLICY "consents_therapist_read"
-  ON consents
-  FOR SELECT
-  TO authenticated
-  USING (therapist_id = auth.uid());
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='consents' and policyname='consents_client_manage') then
+    create policy "consents_client_manage"
+      on public.consents for all to authenticated
+      using (client_id = auth.uid())
+      with check (client_id = auth.uid());
+  end if;
 
--- Add indexes for performance
-CREATE INDEX IF NOT EXISTS idx_cases_current_phase ON cases(current_phase);
-CREATE INDEX IF NOT EXISTS idx_cases_diagnosis_codes ON cases USING GIN(diagnosis_codes);
-CREATE INDEX IF NOT EXISTS idx_profiles_phone ON profiles(phone);
-CREATE INDEX IF NOT EXISTS idx_profiles_city ON profiles(city);
-CREATE INDEX IF NOT EXISTS idx_profiles_country ON profiles(country);
-CREATE INDEX IF NOT EXISTS idx_client_requests_status ON client_requests(status);
-CREATE INDEX IF NOT EXISTS idx_client_requests_type ON client_requests(type);
-CREATE INDEX IF NOT EXISTS idx_supervision_flags_status ON supervision_flags(status);
-CREATE INDEX IF NOT EXISTS idx_supervision_threads_status ON supervision_threads(status);
-CREATE INDEX IF NOT EXISTS idx_therapist_licenses_status ON therapist_licenses(status);
-CREATE INDEX IF NOT EXISTS idx_therapist_licenses_expires ON therapist_licenses(expires_on);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
-CREATE INDEX IF NOT EXISTS idx_clinic_rental_requests_status ON clinic_rental_requests(status);
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='consents' and policyname='consents_therapist_read') then
+    create policy "consents_therapist_read"
+      on public.consents for select to authenticated
+      using (therapist_id = auth.uid());
+  end if;
+end$$;
 
--- Update existing data to populate new fields
-UPDATE profiles SET phone = whatsapp_number WHERE phone IS NULL AND whatsapp_number IS NOT NULL;
+-- -------------------------------------------------
+-- 5) Indexes
+-- -------------------------------------------------
+create index if not exists idx_cases_current_phase          on public.cases(current_phase);
+create index if not exists idx_cases_diagnosis_codes        on public.cases using gin(diagnosis_codes);
+create index if not exists idx_profiles_phone               on public.profiles(phone);
+create index if not exists idx_profiles_city                on public.profiles(city);
+create index if not exists idx_profiles_country             on public.profiles(country);
+create index if not exists idx_client_requests_status       on public.client_requests(status);
+create index if not exists idx_client_requests_type         on public.client_requests(type);
+create index if not exists idx_supervision_flags_status     on public.supervision_flags(status);
+create index if not exists idx_supervision_threads_status   on public.supervision_threads(status);
+create index if not exists idx_therapist_licenses_status    on public.therapist_licenses(status);
+create index if not exists idx_therapist_licenses_expires   on public.therapist_licenses(expires_on);
+create index if not exists idx_subscriptions_status         on public.subscriptions(status);
+create index if not exists idx_clinic_rental_requests_status on public.clinic_rental_requests(status);
 
--- Set default current_phase for existing cases
-UPDATE cases SET current_phase = 'active' WHERE current_phase IS NULL AND status = 'active';
-UPDATE cases SET current_phase = 'closed' WHERE current_phase IS NULL AND status = 'closed';
-UPDATE cases SET current_phase = 'intake' WHERE current_phase IS NULL;
+-- -------------------------------------------------
+-- 6) Data backfills (safe)
+-- -------------------------------------------------
+-- profiles phone already handled above DO-block if whatsapp_number exists
 
--- Create triggers for updated_at columns
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$ language 'plpgsql';
+-- sensible default for cases.current_phase based on status
+update public.cases set current_phase='active' where current_phase is null and status='active';
+update public.cases set current_phase='closed' where current_phase is null and status='closed';
+update public.cases set current_phase='intake' where current_phase is null;
 
--- Add updated_at triggers to new tables
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_client_requests_updated_at') THEN
-    CREATE TRIGGER update_client_requests_updated_at
-      BEFORE UPDATE ON client_requests
-      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-  END IF;
+-- -------------------------------------------------
+-- 7) updated_at trigger util + table triggers
+-- -------------------------------------------------
+create or replace function public.update_updated_at_column()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_supervision_threads_updated_at') THEN
-    CREATE TRIGGER update_supervision_threads_updated_at
-      BEFORE UPDATE ON supervision_threads
-      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-  END IF;
+do $$
+begin
+  if not exists (select 1 from pg_trigger where tgname='update_client_requests_updated_at') then
+    create trigger update_client_requests_updated_at
+      before update on public.client_requests
+      for each row execute function public.update_updated_at_column();
+  end if;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_therapist_licenses_updated_at') THEN
-    CREATE TRIGGER update_therapist_licenses_updated_at
-      BEFORE UPDATE ON therapist_licenses
-      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-  END IF;
+  if not exists (select 1 from pg_trigger where tgname='update_supervision_threads_updated_at') then
+    create trigger update_supervision_threads_updated_at
+      before update on public.supervision_threads
+      for each row execute function public.update_updated_at_column();
+  end if;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_subscriptions_updated_at') THEN
-    CREATE TRIGGER update_subscriptions_updated_at
-      BEFORE UPDATE ON subscriptions
-      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-  END IF;
+  if not exists (select 1 from pg_trigger where tgname='update_therapist_licenses_updated_at') then
+    create trigger update_therapist_licenses_updated_at
+      before update on public.therapist_licenses
+      for each row execute function public.update_updated_at_column();
+  end if;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_clinic_spaces_updated_at') THEN
-    CREATE TRIGGER update_clinic_spaces_updated_at
-      BEFORE UPDATE ON clinic_spaces
-      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-  END IF;
+  if not exists (select 1 from pg_trigger where tgname='update_subscriptions_updated_at') then
+    create trigger update_subscriptions_updated_at
+      before update on public.subscriptions
+      for each row execute function public.update_updated_at_column();
+  end if;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_clinic_rental_requests_updated_at') THEN
-    CREATE TRIGGER update_clinic_rental_requests_updated_at
-      BEFORE UPDATE ON clinic_rental_requests
-      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-  END IF;
-END $$;
+  if not exists (select 1 from pg_trigger where tgname='update_clinic_spaces_updated_at') then
+    create trigger update_clinic_spaces_updated_at
+      before update on public.clinic_spaces
+      for each row execute function public.update_updated_at_column();
+  end if;
+
+  if not exists (select 1 from pg_trigger where tgname='update_clinic_rental_requests_updated_at') then
+    create trigger update_clinic_rental_requests_updated_at
+      before update on public.clinic_rental_requests
+      for each row execute function public.update_updated_at_column();
+  end if;
+end$$;
+
+commit;
