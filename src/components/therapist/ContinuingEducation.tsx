@@ -20,8 +20,6 @@ export default function ContinuingEducation() {
     let mounted = true
     ;(async () => {
       setLoading(true); setError(null)
-      // Strategy: use your existing "resources" table as CE catalog
-      // Pick items marked as courses or education
       const { data, error } = await supabase
         .from('resources')
         .select('id, title, provider, hours, description, url, content_type, category')
