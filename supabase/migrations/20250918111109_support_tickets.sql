@@ -1,8 +1,6 @@
 -- db/support_tickets.sql
--- Support / Tickets module
--- Safe to run multiple -- db/support_tickets.sql
 -- Support / Tickets module (new)
--- Idempotent and wired to existing profiles table.
+-- Idempotent and wired to existing profiles table, with safe fallbacks.
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;  -- gen_random_uuid()
@@ -296,28 +294,54 @@ INSERT INTO public.support_ticket_tags (key, label) VALUES
 ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label;
 
 -- ---------------------------------------------------------------------
--- Idempotent sample tickets (no MAX(uuid); uses scalar subselects)
+-- Helper: safe profile pickers (avoid NULLs)
+-- ---------------------------------------------------------------------
+-- Grabs a profile id by email; falls back to a client, then therapist, then any profile.
+CREATE OR REPLACE FUNCTION public.fn_pick_profile_id(p_email TEXT, p_role_hint TEXT DEFAULT NULL)
+RETURNS UUID LANGUAGE sql STABLE AS $$
+  WITH by_email AS (
+    SELECT id FROM public.profiles WHERE email = p_email LIMIT 1
+  ), by_role AS (
+    SELECT id FROM public.profiles
+     WHERE ($2 IS NULL OR role = $2)
+     ORDER BY created_at
+     LIMIT 1
+  ), any_profile AS (
+    SELECT id FROM public.profiles ORDER BY created_at LIMIT 1
+  )
+  SELECT id FROM by_email
+  UNION ALL
+  SELECT id FROM by_role WHERE NOT EXISTS (SELECT 1 FROM by_email)
+  UNION ALL
+  SELECT id FROM any_profile WHERE NOT EXISTS (SELECT 1 FROM by_email)
+                              AND NOT EXISTS (SELECT 1 FROM by_role)
+  LIMIT 1;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Idempotent sample tickets (now with safe fallbacks)
 -- ---------------------------------------------------------------------
 
--- helpers (emails -> ids)
+-- Ticket 1: Billing question from Maria -> assigned to Sarah
 WITH ids AS (
   SELECT
-    (SELECT id FROM public.profiles WHERE email='maria.garcia@email.com' LIMIT 1)  AS maria_id,
-    (SELECT id FROM public.profiles WHERE email='sarah.johnson@therapist.com' LIMIT 1) AS sarah_id
+    public.fn_pick_profile_id('maria.garcia@email.com', 'client')  AS req_id,
+    public.fn_pick_profile_id('sarah.johnson@therapist.com','therapist') AS asg_id
 ),
 ins_ticket AS (
   INSERT INTO public.support_tickets (requester_id, assignee_id, category_key, status, priority, subject, description, metadata, created_at)
-  SELECT maria_id, sarah_id, 'billing', 'open', 'high',
+  SELECT req_id, asg_id, 'billing', 'open', 'high',
          'Incorrect invoice total for March',
          'Hi team, my March invoice seems to include two sessions that were canceled. Could you review and adjust?',
          '{"source":"app","case_number":"CASE-2024-002"}'::jsonb,
          '2024-03-20 09:10:00'
   FROM ids
-  WHERE NOT EXISTS (
-    SELECT 1 FROM public.support_tickets t
-    WHERE t.subject = 'Incorrect invoice total for March'
-      AND t.requester_id = (SELECT maria_id FROM ids)
-  )
+  WHERE (SELECT req_id FROM ids) IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM public.support_tickets t
+      WHERE t.subject = 'Incorrect invoice total for March'
+        AND t.requester_id = (SELECT req_id FROM ids)
+    )
   RETURNING id
 ),
 the_ticket AS (
@@ -325,14 +349,13 @@ the_ticket AS (
   UNION ALL
   SELECT id FROM public.support_tickets
   WHERE subject = 'Incorrect invoice total for March'
-    AND requester_id = (SELECT maria_id FROM ids)
+    AND requester_id = public.fn_pick_profile_id('maria.garcia@email.com','client')
 )
 INSERT INTO public.support_ticket_messages (ticket_id, sender_id, body, is_internal, created_at)
-SELECT t.id, i.sarah_id,
+SELECT t.id, public.fn_pick_profile_id('sarah.johnson@therapist.com','therapist'),
        'Thanks Maria — I''m checking this with billing now. We''ll update the invoice shortly.',
        FALSE, '2024-03-20 10:00:00'
 FROM the_ticket t
-CROSS JOIN ids i
 WHERE NOT EXISTS (
   SELECT 1 FROM public.support_ticket_messages m
   WHERE m.ticket_id = t.id
@@ -350,25 +373,26 @@ FROM t
 CROSS JOIN (VALUES ('appointments'), ('workspace')) AS x(tag)
 ON CONFLICT DO NOTHING;
 
--- Ticket 2 (bug report)
+-- Ticket 2: Bug report from Chris -> internal note + public reply by Emily
 WITH ids AS (
   SELECT
-    (SELECT id FROM public.profiles WHERE email='chris.brown@email.com' LIMIT 1)  AS chris_id,
-    (SELECT id FROM public.profiles WHERE email='emily.rodriguez@therapist.com' LIMIT 1) AS emily_id
+    public.fn_pick_profile_id('chris.brown@email.com','client')  AS req_id,
+    public.fn_pick_profile_id('emily.rodriguez@therapist.com','therapist') AS asg_id
 ),
 ins_ticket AS (
   INSERT INTO public.support_tickets (requester_id, assignee_id, category_key, status, priority, subject, description, metadata, created_at)
-  SELECT chris_id, emily_id, 'bug', 'open', 'medium',
+  SELECT req_id, asg_id, 'bug', 'open', 'medium',
          'Mobile breathing exercise freezes after 5 minutes',
          'The breathing exercise sometimes freezes and the timer stops around minute 5-6.',
          '{"platform":"ios","version":"1.4.2"}'::jsonb,
          '2024-04-02 12:40:00'
   FROM ids
-  WHERE NOT EXISTS (
-    SELECT 1 FROM public.support_tickets t
-    WHERE t.subject = 'Mobile breathing exercise freezes after 5 minutes'
-      AND t.requester_id = (SELECT chris_id FROM ids)
-  )
+  WHERE (SELECT req_id FROM ids) IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM public.support_tickets t
+      WHERE t.subject = 'Mobile breathing exercise freezes after 5 minutes'
+        AND t.requester_id = (SELECT req_id FROM ids)
+    )
   RETURNING id
 ),
 the_ticket AS (
@@ -376,15 +400,14 @@ the_ticket AS (
   UNION ALL
   SELECT id FROM public.support_tickets
   WHERE subject = 'Mobile breathing exercise freezes after 5 minutes'
-    AND requester_id = (SELECT chris_id FROM ids)
+    AND requester_id = public.fn_pick_profile_id('chris.brown@email.com','client')
 )
--- internal note
+-- internal note (only once)
 INSERT INTO public.support_ticket_messages (ticket_id, sender_id, body, is_internal, created_at)
-SELECT t.id, i.emily_id,
+SELECT t.id, public.fn_pick_profile_id('emily.rodriguez@therapist.com','therapist'),
        'Internal: can reproduce on iOS 17.3. Suspect audio session conflict. Creating bug ticket for devs.',
        TRUE, '2024-04-02 13:05:00'
 FROM the_ticket t
-CROSS JOIN ids i
 WHERE NOT EXISTS (
   SELECT 1 FROM public.support_ticket_messages m
   WHERE m.ticket_id = t.id
@@ -392,24 +415,25 @@ WHERE NOT EXISTS (
     AND m.body LIKE 'Internal: can reproduce on iOS 17.3.%'
 );
 
--- public reply for ticket 2
+-- public reply (only once)
 WITH t AS (
   SELECT id FROM public.support_tickets
   WHERE subject = 'Mobile breathing exercise freezes after 5 minutes'
 ),
 sender AS (
-  SELECT (SELECT id FROM public.profiles WHERE email='emily.rodriguez@therapist.com' LIMIT 1) AS emily_id
+  SELECT public.fn_pick_profile_id('emily.rodriguez@therapist.com','therapist') AS emily_id
 )
 INSERT INTO public.support_ticket_messages (ticket_id, sender_id, body, is_internal, created_at)
 SELECT t.id, s.emily_id,
        'Thanks for reporting! We''re able to reproduce and are working on a fix. In the meantime, if it freezes, backing out and reopening the exercise should work.',
        FALSE, '2024-04-02 13:20:00'
 FROM t CROSS JOIN sender s
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.support_ticket_messages m
-  WHERE m.ticket_id = t.id
-    AND m.is_internal = FALSE
-    AND m.body LIKE 'Thanks for reporting! We''re able to reproduce%'
-);
+WHERE s.emily_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM public.support_ticket_messages m
+    WHERE m.ticket_id = t.id
+      AND m.is_internal = FALSE
+      AND m.body LIKE 'Thanks for reporting! We''re able to reproduce%'
+  );
 
 COMMIT;
