@@ -330,7 +330,7 @@ export default function TherapistDashboard() {
         activities.push({
           id: 'act-appt',
           type: 'client',
-          title: 'Today's schedule ready',
+          title: `Today's schedule ready`,
           description: `${sessions.length} appointment(s)`,
           time: 'today',
           icon: 'Calendar'
