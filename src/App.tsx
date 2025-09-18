@@ -69,6 +69,12 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+// in App routes
+<Route
+  path="/therapist/archives"
+  element={<ProtectedRoute role="therapist"><CaseArchives/></ProtectedRoute>}
+/>
+
 export default function App() {
   const { user, profile, loading, error } = useAuth()
 
