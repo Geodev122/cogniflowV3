@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import {
   Users, FileText, Calendar, Library, CheckCircle, AlertTriangle, Menu, X, Target, ChevronLeft,
   User, CalendarDays, Brain, Shield, Headphones, Plus, Eye, LogOut, BarChart3, Building2,
-  ShieldCheck, Star, Activity, ChevronRight, Play, Crown, Settings
+  ShieldCheck, Star, Activity, ChevronRight, Play, Crown, Settings, Archive
 } from 'lucide-react'
 import { TherapistOnboarding } from '../../components/therapist/TherapistOnboarding'
 
@@ -93,6 +93,7 @@ interface RecentAssessmentItem {
 type SectionId =
   | 'overview' | 'clienteles' | 'cases' | 'sessions'
   | 'metrics' | 'resources'
+  | 'archives'
   | 'licensing' | 'supervision' | 'vip' | 'clinic'
   | 'profile' | 'membership' | 'admin'
   | 'membership-admin' | 'user-management' | 'system-settings'
@@ -147,6 +148,7 @@ export default function TherapistDashboard() {
       items: [
         { id: 'clienteles', name: 'Clienteles', icon: Users },
         { id: 'cases', name: 'Case Management', icon: FileText },
+        { id: 'archives', name: 'Case Archives', icon: Archive },
         { id: 'resources', name: 'Resource Library', icon: Library },
         // Route link for the assessments workspace (kept only here)
         { id: 'assessmentsRoute' as const, name: 'Assessments', icon: Brain as any },
@@ -875,6 +877,7 @@ export default function TherapistDashboard() {
               {active === 'overview'      && <Overview />}
               {active === 'clienteles'    && <Clienteles />}
               {active === 'cases'         && <CaseManagement />}
+              {active === 'archives'      && React.createElement(React.lazy(() => import('./CaseArchives')))}
               {active === 'sessions'      && <SessionManagement />}
               {/* 🚫 sessionBoard removed */}
               {active === 'metrics'       && <ProgressMetrics />}

@@ -10,6 +10,7 @@ import { Register } from './pages/therapist/Register'
 // Therapist stack (lazy to speed TTI)
 const TherapistDashboard = React.lazy(() => import('./pages/therapist/TherapistDashboard'))
 const AssessmentsPage = React.lazy(() => import('./pages/therapist/AssessmentsPage'))
+const CaseArchives = React.lazy(() => import('./pages/therapist/CaseArchives'))
 
 // NEW: Practice Management Workspace (shell) + Case Summary
 const Workspace   = React.lazy(() => import('./pages/therapist/workspace/Workspace'))
@@ -135,6 +136,16 @@ export default function App() {
               element={
                 <ProtectedRoute role="therapist">
                   <AssessmentsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Case Archives */}
+            <Route
+              path="/therapist/archives"
+              element={
+                <ProtectedRoute role="therapist">
+                  <CaseArchives />
                 </ProtectedRoute>
               }
             />
