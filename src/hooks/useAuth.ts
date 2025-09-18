@@ -26,11 +26,11 @@ export const useAuth = () => {
       
       // Fetch profile from database
       try {
-        const { data: profileData, error: profileError } = await supabase
+        const { data: profileData } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
         
         if (profileData) {
           console.log('Using profile from database:', profileData)
