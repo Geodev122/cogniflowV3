@@ -48,11 +48,9 @@ const ProgressMetrics = React.lazy(() =>
 const SimpleTherapistProfile = React.lazy(() =>
   import('../../components/therapist/SimpleTherapistProfile').then(m => ({ default: m.SimpleTherapistProfile }))
 )
-// NEW
 const ContinuingEducation = React.lazy(() =>
   import('../../components/therapist/ContinuingEducation').then(m => ({ default: (m as any).ContinuingEducation ?? (m as any).default ?? m }))
 )
-// Optional: make CaseArchives a named file in same dir
 const CaseArchives = React.lazy(() =>
   import('./CaseArchives').then(m => ({ default: (m as any).default ?? m }))
 )
@@ -87,7 +85,6 @@ type SectionId =
   | 'membership' | 'admin'
   | 'membership-admin' | 'user-management' | 'system-settings'
 
-// GROUP NAV TYPES
 type NavGroupKey = 'clientCare' | 'practiceMgmt' | 'profSetting' | 'account' | 'adminTools'
 type NavGroup = {
   key: NavGroupKey
@@ -100,7 +97,6 @@ export default function TherapistDashboard() {
   const navigate = useNavigate()
   const { profile, signOut } = useAuth()
 
-  // Role guard
   useEffect(() => {
     if (!profile) return
     if (profile.role === 'supervisor' || profile.role === 'admin' || profile.role === 'therapist') return
@@ -128,7 +124,7 @@ export default function TherapistDashboard() {
   const [signOutError, setSignOutError] = useState<string | null>(null)
   const [active, setActive] = useState<SectionId>(() => (localStorage.getItem('tdb_active') as SectionId) || 'overview')
 
-  // NAV SOLO + GROUPS
+  // SOLO nav (no title block)
   const navSolo = [
     { id: 'clienteles' as const, name: 'Clienteles', icon: Users },
   ] as const
@@ -139,6 +135,7 @@ export default function TherapistDashboard() {
       title: 'Client Care',
       expandable: true,
       items: [
+        // Clienteles is kept as solo above — not duplicated here
         { id: 'archives', name: 'Case Archives', icon: Archive },
         { id: 'cases', name: 'Case Management', icon: FileText },
         { id: 'resources', name: 'Resource Library', icon: Library },
@@ -216,7 +213,6 @@ export default function TherapistDashboard() {
         .eq('therapist_id', profile.id)
         .eq('status', 'active')
 
-      // Today appointments
       const now = new Date()
       const yyyy = now.getFullYear()
       const mm = String(now.getMonth() + 1).padStart(2, '0')
@@ -241,7 +237,6 @@ export default function TherapistDashboard() {
 
       const inProgressCount = (inst || []).filter(i => i.status === 'in_progress').length
 
-      // Resolve names (RLS-safe)
       const templateIds = Array.from(new Set((inst || []).map(i => i.template_id)))
       const clientIdsFromInst = Array.from(new Set((inst || []).map(i => i.client_id)))
       const clientIdsFromAppts = Array.from(new Set((appts || []).map(a => a.client_id)))
@@ -365,7 +360,16 @@ export default function TherapistDashboard() {
     finally { setIsSigningOut(false) }
   }
 
-  const goto = (id: SectionId) => { setActive(id); setMobileMenuOpen(false); localStorage.setItem('tdb_active', id) }
+  const goto = (id: SectionId) => {
+    if (id === 'admin') {
+      navigate('/support/tickets') // open Support/Tickets dedicated page
+      setMobileMenuOpen(false)
+      return
+    }
+    setActive(id)
+    setMobileMenuOpen(false)
+    localStorage.setItem('tdb_active', id)
+  }
 
   if (profile && profile.role !== 'therapist' && profile.role !== 'admin' && profile.role !== 'supervisor') return <Navigate to="/client" replace />
 
@@ -505,7 +509,7 @@ export default function TherapistDashboard() {
                       className="text-blue-600 hover:text-blue-800"
                       onClick={() =>
                         session.case_id
-                          ? navigate(`/therapist/workspace/${session.case_id}`) // ✅ fixed route
+                          ? navigate(`/therapist/workspace/${session.case_id}`)
                           : navigate('/therapist/workspace')
                       }
                       title="Open Workspace"
@@ -738,15 +742,8 @@ export default function TherapistDashboard() {
 
           <div className="flex-1 overflow-y-auto p-3">
             <nav className="space-y-6">
-              {/* Shortcuts */}
-              <div>
-                {!sidebarCollapsed && (
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-2 flex items-center">
-                    <div className="w-4 h-0.5 bg-gray-300 mr-2" />
-                    Shortcuts
-                    <div className="flex-1 h-0.5 bg-gray-300 ml-2" />
-                  </h4>
-                )}
+              {/* SOLO block—Clienteles (no title) */}
+              <div className="mb-2">
                 {navSolo.map(item => {
                   const Icon = item.icon as any
                   const isActive = active === item.id
@@ -828,9 +825,8 @@ export default function TherapistDashboard() {
             <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-xl pt-16">
               <div className="h-full overflow-y-auto p-4">
                 <nav className="space-y-6">
-                  {/* Shortcuts */}
-                  <div>
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Shortcuts</h3>
+                  {/* SOLO block—Clienteles (no title) */}
+                  <div className="space-y-1">
                     {navSolo.map(item => {
                       const Icon = item.icon as any
                       const isActive = active === item.id
@@ -939,15 +935,7 @@ export default function TherapistDashboard() {
                   </div>
                 </div>
               )}
-              {active === 'admin'         && (
-                <div className="p-6">
-                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
-                    <Shield className="mx-auto h-10 w-10 text-gray-300 mb-2" />
-                    <h3 className="text-gray-900 font-medium">Support / Tickets</h3>
-                    <p className="text-sm text-gray-600 mt-1">Use the Support/Tickets page in your account menu.</p>
-                  </div>
-                </div>
-              )}
+              {/* Note: admin tab now navigates to /support/tickets via goto(), so no placeholder render here */}
             </Suspense>
           </main>
         </div>
