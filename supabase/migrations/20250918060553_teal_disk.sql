@@ -30,39 +30,165 @@
 -- ENUMS AND TYPES
 -- ============================================================================
 
--- User roles with hierarchy
-CREATE TYPE user_role AS ENUM ('admin', 'supervisor', 'therapist', 'client');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+    CREATE TYPE user_role AS ENUM ('admin', 'supervisor', 'therapist', 'client');
+  END IF;
+END;
+$$;
 
--- Case and session statuses
-CREATE TYPE case_status AS ENUM ('active', 'paused', 'closed', 'archived', 'transferred');
-CREATE TYPE session_status AS ENUM ('scheduled', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled');
-CREATE TYPE appointment_type AS ENUM ('individual', 'group', 'family', 'assessment', 'consultation', 'intake');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'case_status') THEN
+    CREATE TYPE case_status AS ENUM ('active', 'paused', 'closed', 'archived', 'transferred');
+  END IF;
+END;
+$$;
 
--- Assessment system statuses
-CREATE TYPE assessment_status AS ENUM ('assigned', 'in_progress', 'completed', 'expired', 'cancelled');
-CREATE TYPE assessment_category AS ENUM ('depression', 'anxiety', 'trauma', 'stress', 'wellbeing', 'personality', 'substance', 'eating', 'sleep', 'general');
-CREATE TYPE scoring_method AS ENUM ('sum', 'average', 'weighted_sum', 'custom');
-CREATE TYPE evidence_level AS ENUM ('research_based', 'clinical_consensus', 'expert_opinion');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'session_status') THEN
+    CREATE TYPE session_status AS ENUM ('scheduled', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled');
+  END IF;
+END;
+$$;
 
--- Risk and severity levels
-CREATE TYPE risk_level AS ENUM ('low', 'moderate', 'high', 'crisis');
-CREATE TYPE severity_level AS ENUM ('minimal', 'mild', 'moderate', 'moderately_severe', 'severe', 'very_severe');
-CREATE TYPE clinical_significance AS ENUM ('subclinical', 'mild', 'moderate', 'significant', 'severe', 'critical');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'appointment_type') THEN
+    CREATE TYPE appointment_type AS ENUM ('individual', 'group', 'family', 'assessment', 'consultation', 'intake');
+  END IF;
+END;
+$$;
 
--- Communication and request types
-CREATE TYPE communication_type AS ENUM ('email', 'phone', 'text', 'whatsapp', 'in_person', 'crisis', 'reminder');
-CREATE TYPE communication_direction AS ENUM ('outgoing', 'incoming');
-CREATE TYPE communication_status AS ENUM ('draft', 'sent', 'delivered', 'read', 'failed');
-CREATE TYPE request_status AS ENUM ('open', 'in_progress', 'resolved', 'closed', 'cancelled');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assessment_status') THEN
+    CREATE TYPE assessment_status AS ENUM ('assigned', 'in_progress', 'completed', 'expired', 'cancelled');
+  END IF;
+END;
+$$;
 
--- Professional and compliance types
-CREATE TYPE verification_status AS ENUM ('pending', 'verified', 'rejected', 'expired');
-CREATE TYPE license_status AS ENUM ('submitted', 'under_review', 'approved', 'rejected', 'expired');
-CREATE TYPE subscription_status AS ENUM ('active', 'past_due', 'canceled', 'trialing', 'inactive');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assessment_category') THEN
+    CREATE TYPE assessment_category AS ENUM ('depression', 'anxiety', 'trauma', 'stress', 'wellbeing', 'personality', 'substance', 'eating', 'sleep', 'general');
+  END IF;
+END;
+$$;
 
--- Content and resource types
-CREATE TYPE content_type AS ENUM ('pdf', 'video', 'audio', 'interactive', 'link', 'text', 'worksheet', 'protocol', 'course');
-CREATE TYPE resource_category AS ENUM ('assessment', 'worksheet', 'educational', 'intervention', 'protocol', 'legal', 'template');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'scoring_method') THEN
+    CREATE TYPE scoring_method AS ENUM ('sum', 'average', 'weighted_sum', 'custom');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'evidence_level') THEN
+    CREATE TYPE evidence_level AS ENUM ('research_based', 'clinical_consensus', 'expert_opinion');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'risk_level') THEN
+    CREATE TYPE risk_level AS ENUM ('low', 'moderate', 'high', 'crisis');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'severity_level') THEN
+    CREATE TYPE severity_level AS ENUM ('minimal', 'mild', 'moderate', 'moderately_severe', 'severe', 'very_severe');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'clinical_significance') THEN
+    CREATE TYPE clinical_significance AS ENUM ('subclinical', 'mild', 'moderate', 'significant', 'severe', 'critical');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'communication_type') THEN
+    CREATE TYPE communication_type AS ENUM ('email', 'phone', 'text', 'whatsapp', 'in_person', 'crisis', 'reminder');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'communication_direction') THEN
+    CREATE TYPE communication_direction AS ENUM ('outgoing', 'incoming');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'communication_status') THEN
+    CREATE TYPE communication_status AS ENUM ('draft', 'sent', 'delivered', 'read', 'failed');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'request_status') THEN
+    CREATE TYPE request_status AS ENUM ('open', 'in_progress', 'resolved', 'closed', 'cancelled');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'verification_status') THEN
+    CREATE TYPE verification_status AS ENUM ('pending', 'verified', 'rejected', 'expired');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'license_status') THEN
+    CREATE TYPE license_status AS ENUM ('submitted', 'under_review', 'approved', 'rejected', 'expired');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_status') THEN
+    CREATE TYPE subscription_status AS ENUM ('active', 'past_due', 'canceled', 'trialing', 'inactive');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'content_type') THEN
+    CREATE TYPE content_type AS ENUM ('pdf', 'video', 'audio', 'interactive', 'link', 'text', 'worksheet', 'protocol', 'course');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'resource_category') THEN
+    CREATE TYPE resource_category AS ENUM ('assessment', 'worksheet', 'educational', 'intervention', 'protocol', 'legal', 'template');
+  END IF;
+END;
+$$;
 
 -- ============================================================================
 -- CORE USER MANAGEMENT
@@ -170,9 +296,24 @@ CREATE TABLE IF NOT EXISTS cases (
 );
 
 -- Add foreign key for therapist_case_relations
-ALTER TABLE therapist_case_relations 
-ADD CONSTRAINT fk_therapist_case_relations_case_id 
-FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE;
+DO $$
+BEGIN
+  -- Add fk_therapist_case_relations_case_id only if it doesn't already exist
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_class t ON c.conrelid = t.oid
+    JOIN pg_namespace n ON t.relnamespace = n.oid
+    WHERE c.conname = 'fk_therapist_case_relations_case_id'
+      AND n.nspname = 'public'
+      AND t.relname = 'therapist_case_relations'
+  ) THEN
+    ALTER TABLE public.therapist_case_relations
+    ADD CONSTRAINT fk_therapist_case_relations_case_id
+    FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+  END IF;
+END;
+$$;
 
 -- Detailed client profiles with clinical information
 CREATE TABLE IF NOT EXISTS client_profiles (
@@ -1287,13 +1428,70 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 
 -- ============================================================================
+-- PARTIAL INDEXES FOR ACTIVE / UPCOMING RECORDS (IMMUTABLE-SAFE)
+-- ============================================================================
+
+-- Active cases (no functions in predicate)
+CREATE INDEX IF NOT EXISTS idx_active_cases
+  ON public.cases (therapist_id)
+  WHERE status = 'active';
+
+-- Pending assessments (no functions in predicate)
+CREATE INDEX IF NOT EXISTS idx_pending_assessments
+  ON public.assessment_instances (therapist_id)
+  WHERE status IN ('assigned', 'in_progress');
+
+-- ---------------------------------------------------------------------------
+-- Upcoming appointments: avoid NOW() in index predicate (42P17). We keep a
+-- materialized boolean column updated by trigger, and index on that.
+-- ---------------------------------------------------------------------------
+
+-- 1) Ensure the helper column exists
+ALTER TABLE public.appointments
+  ADD COLUMN IF NOT EXISTS is_upcoming boolean DEFAULT false;
+
+-- 2) Trigger function to maintain the boolean at DML time
+CREATE OR REPLACE FUNCTION public.set_appointments_is_upcoming()
+RETURNS trigger AS $$
+BEGIN
+  -- An appointment is "upcoming" if it is scheduled and its start_time is in the future
+  NEW.is_upcoming := (NEW.status = 'scheduled' AND NEW.start_time > now());
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 3) Create (or replace) the trigger
+DROP TRIGGER IF EXISTS trg_set_appointments_is_upcoming ON public.appointments;
+CREATE TRIGGER trg_set_appointments_is_upcoming
+BEFORE INSERT OR UPDATE OF status, start_time ON public.appointments
+FOR EACH ROW EXECUTE FUNCTION public.set_appointments_is_upcoming();
+
+-- 4) Backfill existing rows once
+UPDATE public.appointments
+SET is_upcoming = (status = 'scheduled' AND start_time > now())
+WHERE is_upcoming IS DISTINCT FROM (status = 'scheduled' AND start_time > now());
+
+-- Fix: remove any indexes that use NOW() in predicate and create a safe partial index
+DROP INDEX IF EXISTS public.idx_upcoming_appointments;
+DROP INDEX IF EXISTS idx_upcoming_appointments;
+
+-- Create safe partial index using the trigger-maintained boolean column
+CREATE INDEX IF NOT EXISTS idx_upcoming_appointments
+  ON public.appointments (therapist_id, start_time)
+  WHERE is_upcoming = true AND status = 'scheduled';
+
+
+-- ============================================================================
 -- MATERIALIZED VIEWS FOR ANALYTICS
 -- ============================================================================
 
 -- Assessment results with latest scores
-CREATE MATERIALIZED VIEW IF NOT EXISTS assessment_instance_latest_score AS
+-- Recreate with safe alias (avoid reserved keyword ASC)
+DROP MATERIALIZED VIEW IF EXISTS public.assessment_instance_latest_score;
+
+CREATE MATERIALIZED VIEW public.assessment_instance_latest_score AS
 SELECT 
-  ai.id as instance_id,
+  ai.id           AS instance_id,
   ai.template_id,
   ai.therapist_id,
   ai.client_id,
@@ -1301,30 +1499,30 @@ SELECT
   ai.title,
   ai.status,
   ai.assigned_at,
-  ai.due_date,
+  ai.due_date,          -- keep if your table has it; otherwise remove this line
   ai.completed_at,
-  
+
   -- Template info
-  at.name as template_name,
-  at.abbreviation as template_abbrev,
-  
-  -- Latest score
-  asc.id as score_id,
-  asc.raw_score,
-  asc.scaled_score,
-  asc.percentile,
-  asc.t_score,
-  asc.z_score,
-  asc.interpretation_category,
-  asc.interpretation_description,
-  asc.clinical_significance,
-  asc.severity_level,
-  asc.recommendations,
-  asc.calculated_at
-  
-FROM assessment_instances ai
-LEFT JOIN assessment_templates at ON ai.template_id = at.id
-LEFT JOIN assessment_scores asc ON ai.id = asc.instance_id
+  at.name         AS template_name,
+  at.abbreviation AS template_abbrev,
+
+  -- Latest score (alias changed from asc -> sc)
+  sc.id                      AS score_id,
+  sc.raw_score,
+  sc.scaled_score,
+  sc.percentile,
+  sc.t_score,
+  sc.z_score,
+  sc.interpretation_category,
+  sc.interpretation_description,
+  sc.clinical_significance,
+  sc.severity_level,
+  sc.recommendations,
+  sc.calculated_at
+
+FROM public.assessment_instances ai
+LEFT JOIN public.assessment_templates at ON ai.template_id = at.id
+LEFT JOIN public.assessment_scores   sc ON ai.id = sc.instance_id
 ORDER BY ai.assigned_at DESC;
 
 -- Therapist dashboard summary
@@ -1358,47 +1556,82 @@ WHERE t.role = 'therapist'
 GROUP BY t.id, t.first_name, t.last_name;
 
 -- ============================================================================
--- TRIGGERS FOR AUTOMATION
+-- TRIGGERS FOR AUTOMATION (idempotent)
 -- ============================================================================
 
 -- Update timestamps trigger function
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
--- Apply updated_at triggers to relevant tables
-CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_cases_updated_at BEFORE UPDATE ON cases FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_client_profiles_updated_at BEFORE UPDATE ON client_profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_assessment_instances_updated_at BEFORE UPDATE ON assessment_instances FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_session_notes_updated_at BEFORE UPDATE ON session_notes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_treatment_plans_updated_at BEFORE UPDATE ON treatment_plans FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Ensure updated_at triggers are dropped first (idempotent)
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
+DROP TRIGGER IF EXISTS update_cases_updated_at ON public.cases;
+DROP TRIGGER IF EXISTS update_client_profiles_updated_at ON public.client_profiles;
+DROP TRIGGER IF EXISTS update_assessment_instances_updated_at ON public.assessment_instances;
+DROP TRIGGER IF EXISTS update_session_notes_updated_at ON public.session_notes;
+DROP TRIGGER IF EXISTS update_treatment_plans_updated_at ON public.treatment_plans;
 
--- Case number generation trigger
-CREATE OR REPLACE FUNCTION generate_case_number()
+-- Recreate updated_at triggers (safe to run multiple times)
+CREATE TRIGGER update_profiles_updated_at
+BEFORE UPDATE ON public.profiles
+FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER update_cases_updated_at
+BEFORE UPDATE ON public.cases
+FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER update_client_profiles_updated_at
+BEFORE UPDATE ON public.client_profiles
+FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER update_assessment_instances_updated_at
+BEFORE UPDATE ON public.assessment_instances
+FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER update_session_notes_updated_at
+BEFORE UPDATE ON public.session_notes
+FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER update_treatment_plans_updated_at
+BEFORE UPDATE ON public.treatment_plans
+FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+-- ============================================================================
+-- Case number generation (idempotent)
+-- ============================================================================
+
+-- Sequence for case numbers (create if not exists)
+CREATE SEQUENCE IF NOT EXISTS public.case_number_seq START 1;
+
+-- Case number generation function
+CREATE OR REPLACE FUNCTION public.generate_case_number()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW.case_number IS NULL THEN
-    NEW.case_number := 'CASE-' || TO_CHAR(NOW(), 'YYYY') || '-' || LPAD(NEXTVAL('case_number_seq')::TEXT, 4, '0');
+    NEW.case_number := 'CASE-' || TO_CHAR(NOW(), 'YYYY') || '-' || LPAD(NEXTVAL('public.case_number_seq')::TEXT, 4, '0');
   END IF;
   RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
--- Create sequence for case numbers
-CREATE SEQUENCE IF NOT EXISTS case_number_seq START 1;
+-- Ensure trigger is dropped then created (idempotent)
+DROP TRIGGER IF EXISTS generate_case_number_trigger ON public.cases;
+CREATE TRIGGER generate_case_number_trigger
+BEFORE INSERT ON public.cases
+FOR EACH ROW EXECUTE FUNCTION public.generate_case_number();
 
--- Apply case number trigger
-CREATE TRIGGER generate_case_number_trigger 
-BEFORE INSERT ON cases 
-FOR EACH ROW EXECUTE FUNCTION generate_case_number();
 
--- Patient code generation trigger
-CREATE OR REPLACE FUNCTION generate_patient_code()
+-- ============================================================================
+-- Patient code generation (idempotent)
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.generate_patient_code()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW.patient_code IS NULL AND NEW.role = 'client' THEN
@@ -1406,26 +1639,80 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
-CREATE TRIGGER generate_patient_code_trigger 
-BEFORE INSERT ON profiles 
-FOR EACH ROW EXECUTE FUNCTION generate_patient_code();
+DROP TRIGGER IF EXISTS generate_patient_code_trigger ON public.profiles;
+CREATE TRIGGER generate_patient_code_trigger
+BEFORE INSERT ON public.profiles
+FOR EACH ROW EXECUTE FUNCTION public.generate_patient_code();
 
--- Update case activity timestamp
-CREATE OR REPLACE FUNCTION update_case_activity()
+
+-- ============================================================================
+-- Case activity update (single function + idempotent triggers)
+-- ============================================================================
+
+-- Single, schema-qualified function that updates cases.last_activity_at
+CREATE OR REPLACE FUNCTION public.update_case_activity()
 RETURNS TRIGGER AS $$
 BEGIN
-  UPDATE cases 
-  SET last_activity_at = NOW() 
+  UPDATE public.cases
+  SET last_activity_at = NOW()
   WHERE id = COALESCE(NEW.case_id, OLD.case_id);
   RETURN COALESCE(NEW, OLD);
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
--- Apply activity triggers
-CREATE TRIGGER update_case_activity_sessions AFTER INSERT OR UPDATE OR DELETE ON session_notes FOR EACH ROW EXECUTE FUNCTION update_case_activity();
-CREATE TRIGGER update_case_activity_assessments AFTER INSERT OR UPDATE OR DELETE ON assessment_instances FOR EACH ROW EXECUTE FUNCTION update_case_activity();
+-- Drop triggers first to avoid "already exists" errors, then create
+DROP TRIGGER IF EXISTS update_case_activity_sessions ON public.session_notes;
+CREATE TRIGGER update_case_activity_sessions
+AFTER INSERT OR UPDATE OR DELETE ON public.session_notes
+FOR EACH ROW EXECUTE FUNCTION public.update_case_activity();
+
+DROP TRIGGER IF EXISTS update_case_activity_assessments ON public.assessment_instances;
+CREATE TRIGGER update_case_activity_assessments
+AFTER INSERT OR UPDATE OR DELETE ON public.assessment_instances
+FOR EACH ROW EXECUTE FUNCTION public.update_case_activity();
+
+--revision
+-- Fix: remove volatile functions from index predicates
+BEGIN;
+
+-- Ensure is_upcoming column exists (idempotent)
+ALTER TABLE public.appointments
+  ADD COLUMN IF NOT EXISTS is_upcoming BOOLEAN DEFAULT false;
+
+-- Ensure trigger function sets is_upcoming when start_time or status changes
+CREATE OR REPLACE FUNCTION public.set_appointments_is_upcoming()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- upcoming if scheduled and start_time in the future
+  NEW.is_upcoming := (NEW.status = 'scheduled' AND NEW.start_time > now());
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_set_appointments_is_upcoming ON public.appointments;
+CREATE TRIGGER trg_set_appointments_is_upcoming
+BEFORE INSERT OR UPDATE ON public.appointments
+FOR EACH ROW EXECUTE FUNCTION public.set_appointments_is_upcoming();
+
+-- Backfill existing rows
+UPDATE public.appointments
+SET is_upcoming = (status = 'scheduled' AND start_time > now())
+WHERE is_upcoming IS DISTINCT FROM (status = 'scheduled' AND start_time > now());
+
+-- Drop any older indexes that used NOW() in predicate
+DROP INDEX IF EXISTS idx_upcoming_appointments;
+
+-- Create a safe partial index that uses only immutable columns/expressions
+-- Use the boolean maintained by trigger instead of NOW()
+CREATE INDEX IF NOT EXISTS idx_upcoming_appointments ON public.appointments(therapist_id, start_time)
+WHERE is_upcoming = true AND status = 'scheduled';
+
+COMMIT;
+
+-- Note: avoid using NOW() or other non-IMMUTABLE functions in index predicates.
+-- If you need the index to reflect time progression, schedule a periodic job to refresh is_upcoming (eg. nightly) or rely on the trigger for DML updates.
 
 -- ============================================================================
 -- ROW LEVEL SECURITY POLICIES
@@ -1475,234 +1762,113 @@ ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_last_seen ENABLE ROW LEVEL SECURITY;
 ALTER TABLE practice_analytics ENABLE ROW LEVEL SECURITY;
 
--- ============================================================================
--- PROFILES POLICIES
--- ============================================================================
+-- ============================================================================ 
+-- PROFILES POLICIES 
+-- ============================================================================ 
 
--- Users can read their own profile
-CREATE POLICY "Users can read own profile" ON profiles
-  FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users can read own profile" ON public.profiles; CREATE POLICY "Users can read own profile" ON public.profiles FOR SELECT TO authenticated USING ((SELECT auth.uid()) = id);
 
--- Users can update their own profile
-CREATE POLICY "Users can update own profile" ON profiles
-  FOR UPDATE USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles; CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE TO authenticated USING ((SELECT auth.uid()) = id) WITH CHECK ((SELECT auth.uid()) = id);
 
--- Therapists can read their clients' basic info
-CREATE POLICY "Therapists can read assigned clients" ON profiles
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM therapist_client_relations tcr
-      WHERE tcr.therapist_id = auth.uid() 
-      AND tcr.client_id = profiles.id
-    )
-  );
+DROP POLICY IF EXISTS "Therapists can read assigned clients" ON public.profiles; CREATE POLICY "Therapists can read assigned clients" ON public.profiles FOR SELECT TO authenticated USING ( EXISTS ( SELECT 1 FROM public.therapist_client_relations tcr WHERE tcr.therapist_id = (SELECT auth.uid()) AND tcr.client_id = public.profiles.id ) );
 
--- Supervisors can read therapists and their clients
-CREATE POLICY "Supervisors can read therapist profiles" ON profiles
-  FOR SELECT USING (
-    (SELECT role FROM profiles WHERE id = auth.uid()) = 'supervisor'
-    AND role IN ('therapist', 'client')
-  );
+DROP POLICY IF EXISTS "Supervisors can read therapist profiles" ON public.profiles; CREATE POLICY "Supervisors can read therapist profiles" ON public.profiles FOR SELECT TO authenticated USING ( (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'supervisor' AND role IN ('therapist', 'client') );
 
--- ============================================================================
--- CASE MANAGEMENT POLICIES
--- ============================================================================
+-- ============================================================================ 
+-- CASE MANAGEMENT POLICIES 
+-- ============================================================================ 
 
--- Therapists can manage their own cases
-CREATE POLICY "Therapists can manage own cases" ON cases
-  FOR ALL USING (therapist_id = auth.uid());
+DROP POLICY IF EXISTS "Therapists can manage own cases" ON public.cases; CREATE POLICY "Therapists can manage own cases" ON public.cases FOR ALL TO authenticated USING (therapist_id = (SELECT auth.uid())) WITH CHECK (therapist_id = (SELECT auth.uid()));
 
--- Clients can read their own cases
-CREATE POLICY "Clients can read own cases" ON cases
-  FOR SELECT USING (client_id = auth.uid());
+DROP POLICY IF EXISTS "Clients can read own cases" ON public.cases; CREATE POLICY "Clients can read own cases" ON public.cases FOR SELECT TO authenticated USING (client_id = (SELECT auth.uid()));
 
--- Supervisors can read flagged cases
-CREATE POLICY "Supervisors can read flagged cases" ON cases
-  FOR SELECT USING (
-    (SELECT role FROM profiles WHERE id = auth.uid()) = 'supervisor'
-    AND EXISTS (
-      SELECT 1 FROM supervision_flags sf 
-      WHERE sf.case_id = cases.id
-    )
-  );
+DROP POLICY IF EXISTS "Supervisors can read flagged cases" ON public.cases; CREATE POLICY "Supervisors can read flagged cases" ON public.cases FOR SELECT TO authenticated USING ( (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'supervisor' AND EXISTS ( SELECT 1 FROM public.supervision_flags sf WHERE sf.case_id = public.cases.id ) );
 
--- Multi-therapist case access
-CREATE POLICY "Multi-therapist case access" ON cases
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM therapist_case_relations tcr
-      WHERE tcr.case_id = cases.id 
-      AND tcr.therapist_id = auth.uid()
-    )
-  );
+DROP POLICY IF EXISTS "Multi-therapist case access" ON public.cases; CREATE POLICY "Multi-therapist case access" ON public.cases FOR SELECT TO authenticated USING ( EXISTS ( SELECT 1 FROM public.therapist_case_relations tcr WHERE tcr.case_id = public.cases.id AND tcr.therapist_id = (SELECT auth.uid()) ) );
 
--- ============================================================================
--- CLIENT PROFILES POLICIES
--- ============================================================================
+-- ============================================================================ 
+-- CLIENT PROFILES POLICIES 
+-- ============================================================================ 
 
--- Therapists can manage their clients' profiles
-CREATE POLICY "Therapists can manage client profiles" ON client_profiles
-  FOR ALL USING (therapist_id = auth.uid());
+DROP POLICY IF EXISTS "Therapists can manage client profiles" ON public.client_profiles; CREATE POLICY "Therapists can manage client profiles" ON public.client_profiles FOR ALL TO authenticated USING (therapist_id = (SELECT auth.uid())) WITH CHECK (therapist_id = (SELECT auth.uid()));
 
--- Clients can read their own profile
-CREATE POLICY "Clients can read own profile" ON client_profiles
-  FOR SELECT USING (client_id = auth.uid());
+DROP POLICY IF EXISTS "Clients can read own profile" ON public.client_profiles; CREATE POLICY "Clients can read own profile" ON public.client_profiles FOR SELECT TO authenticated USING (client_id = (SELECT auth.uid()));
 
--- ============================================================================
--- ASSESSMENT SYSTEM POLICIES
--- ============================================================================
+-- ============================================================================ 
+-- ASSESSMENT SYSTEM POLICIES 
+-- ============================================================================ 
 
--- Public assessment templates
-CREATE POLICY "Public assessment templates" ON assessment_templates
-  FOR SELECT USING (is_public = true OR created_by = auth.uid());
+DROP POLICY IF EXISTS "Public assessment templates" ON public.assessment_templates; CREATE POLICY "Public assessment templates" ON public.assessment_templates FOR SELECT TO authenticated USING (is_public = true OR created_by = (SELECT auth.uid()));
 
--- Therapists can manage assessment instances
-CREATE POLICY "Therapists can manage assessment instances" ON assessment_instances
-  FOR ALL USING (therapist_id = auth.uid());
+DROP POLICY IF EXISTS "Therapists can manage assessment instances" ON public.assessment_instances; CREATE POLICY "Therapists can manage assessment instances" ON public.assessment_instances FOR ALL TO authenticated USING (therapist_id = (SELECT auth.uid())) WITH CHECK (therapist_id = (SELECT auth.uid()));
 
--- Clients can access their assigned assessments
-CREATE POLICY "Clients can access assigned assessments" ON assessment_instances
-  FOR SELECT USING (client_id = auth.uid());
+DROP POLICY IF EXISTS "Clients can access assigned assessments" ON public.assessment_instances; CREATE POLICY "Clients can access assigned assessments" ON public.assessment_instances FOR SELECT TO authenticated USING (client_id = (SELECT auth.uid()));
 
--- Clients can update their assessment progress
-CREATE POLICY "Clients can update assessment progress" ON assessment_instances
-  FOR UPDATE USING (client_id = auth.uid());
+DROP POLICY IF EXISTS "Clients can update assessment progress" ON public.assessment_instances; CREATE POLICY "Clients can update assessment progress" ON public.assessment_instances FOR UPDATE TO authenticated USING (client_id = (SELECT auth.uid())) WITH CHECK (client_id = (SELECT auth.uid()));
 
--- Assessment responses access
-CREATE POLICY "Assessment responses access" ON assessment_responses
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM assessment_instances ai
-      WHERE ai.id = assessment_responses.instance_id
-      AND (ai.therapist_id = auth.uid() OR ai.client_id = auth.uid())
-    )
-  );
+DROP POLICY IF EXISTS "Assessment responses access" ON public.assessment_responses; CREATE POLICY "Assessment responses access" ON public.assessment_responses FOR ALL TO authenticated USING ( EXISTS ( SELECT 1 FROM public.assessment_instances ai WHERE ai.id = public.assessment_responses.instance_id AND (ai.therapist_id = (SELECT auth.uid()) OR ai.client_id = (SELECT auth.uid())) ) );
 
--- Assessment scores access
-CREATE POLICY "Assessment scores access" ON assessment_scores
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM assessment_instances ai
-      WHERE ai.id = assessment_scores.instance_id
-      AND (ai.therapist_id = auth.uid() OR ai.client_id = auth.uid())
-    )
-  );
+DROP POLICY IF EXISTS "Assessment scores access" ON public.assessment_scores; CREATE POLICY "Assessment scores access" ON public.assessment_scores FOR ALL TO authenticated USING ( EXISTS ( SELECT 1 FROM public.assessment_instances ai WHERE ai.id = public.assessment_scores.instance_id AND (ai.therapist_id = (SELECT auth.uid()) OR ai.client_id = (SELECT auth.uid())) ) );
 
--- ============================================================================
--- SESSION MANAGEMENT POLICIES
--- ============================================================================
+-- ============================================================================ 
+-- SESSION MANAGEMENT POLICIES 
+-- ============================================================================ 
 
--- Appointment access
-CREATE POLICY "Appointment access" ON appointments
-  FOR ALL USING (therapist_id = auth.uid() OR client_id = auth.uid());
+DROP POLICY IF EXISTS "Appointment access" ON public.appointments; CREATE POLICY "Appointment access" ON public.appointments FOR ALL TO authenticated USING (therapist_id = (SELECT auth.uid()) OR client_id = (SELECT auth.uid())) WITH CHECK (therapist_id = (SELECT auth.uid()) OR client_id = (SELECT auth.uid()));
 
--- Session notes access (therapists only)
-CREATE POLICY "Session notes therapist access" ON session_notes
-  FOR ALL USING (therapist_id = auth.uid());
+DROP POLICY IF EXISTS "Session notes therapist access" ON public.session_notes; CREATE POLICY "Session notes therapist access" ON public.session_notes FOR ALL TO authenticated USING (therapist_id = (SELECT auth.uid())) WITH CHECK (therapist_id = (SELECT auth.uid()));
 
--- Session agenda access
-CREATE POLICY "Session agenda access" ON session_agenda
-  FOR ALL USING (therapist_id = auth.uid());
+DROP POLICY IF EXISTS "Session agenda access" ON public.session_agenda; CREATE POLICY "Session agenda access" ON public.session_agenda FOR ALL TO authenticated USING (therapist_id = (SELECT auth.uid())) WITH CHECK (therapist_id = (SELECT auth.uid()));
 
--- ============================================================================
--- RESOURCE LIBRARY POLICIES
--- ============================================================================
+-- ============================================================================ 
+-- RESOURCE LIBRARY POLICIES 
+-- ============================================================================ 
 
--- Public resources and owned resources
-CREATE POLICY "Resource library access" ON resource_library
-  FOR SELECT USING (
-    is_public = true 
-    OR therapist_owner_id = auth.uid()
-    OR created_by = auth.uid()
-  );
+DROP POLICY IF EXISTS "Resource library access" ON public.resource_library; CREATE POLICY "Resource library access" ON public.resource_library FOR SELECT TO authenticated USING ( is_public = true OR therapist_owner_id = (SELECT auth.uid()) OR created_by = (SELECT auth.uid()) );
 
--- Therapists can create resources
-CREATE POLICY "Therapists can create resources" ON resource_library
-  FOR INSERT WITH CHECK (
-    (SELECT role FROM profiles WHERE id = auth.uid()) = 'therapist'
-  );
+DROP POLICY IF EXISTS "Therapists can create resources" ON public.resource_library; CREATE POLICY "Therapists can create resources" ON public.resource_library FOR INSERT TO authenticated WITH CHECK ( (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'therapist' );
 
--- Therapists can update their own resources
-CREATE POLICY "Therapists can update own resources" ON resource_library
-  FOR UPDATE USING (therapist_owner_id = auth.uid() OR created_by = auth.uid());
+DROP POLICY IF EXISTS "Therapists can update own resources" ON public.resource_library; CREATE POLICY "Therapists can update own resources" ON public.resource_library FOR UPDATE TO authenticated USING (therapist_owner_id = (SELECT auth.uid()) OR created_by = (SELECT auth.uid())) WITH CHECK (therapist_owner_id = (SELECT auth.uid()) OR created_by = (SELECT auth.uid()));
 
--- ============================================================================
--- COMMUNICATION POLICIES
--- ============================================================================
+-- ============================================================================ 
+-- COMMUNICATION POLICIES 
+-- ============================================================================ 
 
--- Communication logs access
-CREATE POLICY "Communication logs access" ON communication_logs
-  FOR ALL USING (therapist_id = auth.uid() OR client_id = auth.uid());
+DROP POLICY IF EXISTS "Communication logs access" ON public.communication_logs; CREATE POLICY "Communication logs access" ON public.communication_logs FOR ALL TO authenticated USING (therapist_id = (SELECT auth.uid()) OR client_id = (SELECT auth.uid())) WITH CHECK (therapist_id = (SELECT auth.uid()) OR client_id = (SELECT auth.uid()));
 
--- Client requests access
-CREATE POLICY "Client requests access" ON client_requests
-  FOR ALL USING (client_id = auth.uid() OR therapist_id = auth.uid());
+DROP POLICY IF EXISTS "Client requests access" ON public.client_requests; CREATE POLICY "Client requests access" ON public.client_requests FOR ALL TO authenticated USING (client_id = (SELECT auth.uid()) OR therapist_id = (SELECT auth.uid())) WITH CHECK (client_id = (SELECT auth.uid()) OR therapist_id = (SELECT auth.uid()));
 
--- ============================================================================
--- SUPERVISION POLICIES
--- ============================================================================
+-- ============================================================================ 
+-- SUPERVISION POLICIES 
+-- ============================================================================ 
 
--- Supervision flags access
-CREATE POLICY "Supervision flags access" ON supervision_flags
-  FOR ALL USING (
-    therapist_id = auth.uid() 
-    OR flagged_by = auth.uid()
-    OR (SELECT role FROM profiles WHERE id = auth.uid()) = 'supervisor'
-  );
+DROP POLICY IF EXISTS "Supervision flags access" ON public.supervision_flags; CREATE POLICY "Supervision flags access" ON public.supervision_flags FOR ALL TO authenticated USING ( therapist_id = (SELECT auth.uid()) OR flagged_by = (SELECT auth.uid()) OR (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'supervisor' ) WITH CHECK ( therapist_id = (SELECT auth.uid()) OR flagged_by = (SELECT auth.uid()) OR (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'supervisor' );
 
--- Supervision threads access
-CREATE POLICY "Supervision threads access" ON supervision_threads
-  FOR ALL USING (
-    therapist_id = auth.uid() 
-    OR supervisor_id = auth.uid()
-    OR (SELECT role FROM profiles WHERE id = auth.uid()) = 'supervisor'
-  );
+DROP POLICY IF EXISTS "Supervision threads access" ON public.supervision_threads; CREATE POLICY "Supervision threads access" ON public.supervision_threads FOR ALL TO authenticated USING ( therapist_id = (SELECT auth.uid()) OR supervisor_id = (SELECT auth.uid()) OR (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'supervisor' ) WITH CHECK ( therapist_id = (SELECT auth.uid()) OR supervisor_id = (SELECT auth.uid()) OR (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'supervisor' );
 
--- ============================================================================
--- PROFESSIONAL MANAGEMENT POLICIES
--- ============================================================================
+-- ============================================================================ 
+-- PROFESSIONAL MANAGEMENT POLICIES 
+-- ============================================================================ 
 
--- Therapist licenses (own only)
-CREATE POLICY "Therapist licenses own access" ON therapist_licenses
-  FOR ALL USING (therapist_id = auth.uid());
+DROP POLICY IF EXISTS "Therapist licenses own access" ON public.therapist_licenses; CREATE POLICY "Therapist licenses own access" ON public.therapist_licenses FOR ALL TO authenticated USING (therapist_id = (SELECT auth.uid())) WITH CHECK (therapist_id = (SELECT auth.uid()));
 
--- Subscriptions (own only)
-CREATE POLICY "Subscriptions own access" ON subscriptions
-  FOR ALL USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "Subscriptions own access" ON public.subscriptions; CREATE POLICY "Subscriptions own access" ON public.subscriptions FOR ALL TO authenticated USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
 
--- Invoices (own only)
-CREATE POLICY "Invoices own access" ON invoices
-  FOR ALL USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "Invoices own access" ON public.invoices; CREATE POLICY "Invoices own access" ON public.invoices FOR ALL TO authenticated USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
 
--- Clinic spaces (public read, admin manage)
-CREATE POLICY "Clinic spaces public read" ON clinic_spaces
-  FOR SELECT USING (active = true);
+DROP POLICY IF EXISTS "Clinic spaces public read" ON public.clinic_spaces; CREATE POLICY "Clinic spaces public read" ON public.clinic_spaces FOR SELECT TO authenticated USING (active = true);
 
--- Clinic rental requests
-CREATE POLICY "Clinic rental requests access" ON clinic_rental_requests
-  FOR ALL USING (
-    therapist_id = auth.uid() 
-    OR (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
-  );
+DROP POLICY IF EXISTS "Clinic rental requests access" ON public.clinic_rental_requests; CREATE POLICY "Clinic rental requests access" ON public.clinic_rental_requests FOR ALL TO authenticated USING ( therapist_id = (SELECT auth.uid()) OR (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'admin' ) WITH CHECK ( therapist_id = (SELECT auth.uid()) OR (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'admin' );
 
--- ============================================================================
+-- ============================================================================ 
 -- AUDIT AND ANALYTICS POLICIES
--- ============================================================================
+-- ============================================================================ 
 
--- Audit logs (read own, supervisors read all)
-CREATE POLICY "Audit logs access" ON audit_logs
-  FOR SELECT USING (
-    user_id = auth.uid() 
-    OR (SELECT role FROM profiles WHERE id = auth.uid()) IN ('supervisor', 'admin')
-  );
+DROP POLICY IF EXISTS "Audit logs access" ON public.audit_logs; CREATE POLICY "Audit logs access" ON public.audit_logs FOR SELECT TO authenticated USING ( user_id = (SELECT auth.uid()) OR (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) IN ('supervisor', 'admin') );
 
--- User activity tracking (own only)
-CREATE POLICY "User last seen own access" ON user_last_seen
-  FOR ALL USING (user_id = auth.uid());
+DROP POLICY IF EXISTS "User last seen own access" ON public.user_last_seen; CREATE POLICY "User last seen own access" ON public.user_last_seen FOR ALL TO authenticated USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
 
--- Practice analytics (own only)
-CREATE POLICY "Practice analytics own access" ON practice_analytics
-  FOR ALL USING (therapist_id = auth.uid());
+DROP POLICY IF EXISTS "Practice analytics own access" ON public.practice_analytics; CREATE POLICY "Practice analytics own access" ON public.practice_analytics FOR ALL TO authenticated USING (therapist_id = (SELECT auth.uid())) WITH CHECK (therapist_id = (SELECT auth.uid()));
 
 -- ============================================================================
 -- UTILITY FUNCTIONS
@@ -1822,9 +1988,30 @@ INSERT INTO storage.buckets (id, name, public) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage policies
-CREATE POLICY "Public resource files" ON storage.objects FOR SELECT USING (bucket_id = 'resource_files');
-CREATE POLICY "Therapists can upload resources" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'resource_files' AND (SELECT role FROM profiles WHERE id = auth.uid()) = 'therapist');
-CREATE POLICY "Therapists can manage licensing docs" ON storage.objects FOR ALL USING (bucket_id = 'licensing' AND (SELECT role FROM profiles WHERE id = auth.uid()) = 'therapist');
+-- Idempotent storage policy creation for storage.objects
+DROP POLICY IF EXISTS "Public resource files" ON storage.objects;
+CREATE POLICY "Public resource files" ON storage.objects
+  FOR SELECT
+  TO public
+  USING (bucket_id = 'resource_files');
+
+DROP POLICY IF EXISTS "Therapists can upload resources" ON storage.objects;
+CREATE POLICY "Therapists can upload resources" ON storage.objects
+  FOR INSERT
+  TO public
+  WITH CHECK (
+    bucket_id = 'resource_files'
+    AND (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'therapist'
+  );
+
+DROP POLICY IF EXISTS "Therapists can manage licensing docs" ON storage.objects;
+CREATE POLICY "Therapists can manage licensing docs" ON storage.objects
+  FOR ALL
+  TO public
+  USING (
+    bucket_id = 'licensing'
+    AND (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'therapist'
+  );
 
 -- ============================================================================
 -- PERFORMANCE OPTIMIZATIONS
@@ -1840,44 +2027,138 @@ CREATE INDEX IF NOT EXISTS idx_session_notes_case_session ON session_notes(case_
 -- Partial indexes for active records
 CREATE INDEX IF NOT EXISTS idx_active_cases ON cases(therapist_id) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_pending_assessments ON assessment_instances(therapist_id) WHERE status IN ('assigned', 'in_progress');
-CREATE INDEX IF NOT EXISTS idx_upcoming_appointments ON appointments(therapist_id, start_time) WHERE status = 'scheduled' AND start_time > NOW();
+
+
+-- Fix: remove volatile partial index (uses NOW()) and create safe trigger-maintained boolean index
+DROP INDEX IF EXISTS public.idx_upcoming_appointments;
+DROP INDEX IF EXISTS idx_upcoming_appointments;
+
+CREATE INDEX IF NOT EXISTS idx_upcoming_appointments
+  ON public.appointments (therapist_id, start_time)
+  WHERE is_upcoming = true AND status = 'scheduled';
 
 -- ============================================================================
 -- DATA VALIDATION CONSTRAINTS
 -- ============================================================================
+-- Idempotent constraint additions
 
--- Ensure valid email formats
-ALTER TABLE profiles ADD CONSTRAINT valid_email CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$');
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON c.conrelid = t.oid
+    JOIN pg_namespace n ON t.relnamespace = n.oid
+    WHERE c.conname = 'valid_email'
+      AND n.nspname = 'public'
+      AND t.relname = 'profiles'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.profiles ADD CONSTRAINT valid_email CHECK (email ~* ''^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'')';
+  END IF;
+END;
+$$;
 
--- Ensure valid phone numbers (basic check)
-ALTER TABLE profiles ADD CONSTRAINT valid_phone CHECK (phone IS NULL OR phone ~ '^\+?[1-9]\d{1,14}$');
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON c.conrelid = t.oid
+    JOIN pg_namespace n ON t.relnamespace = n.oid
+    WHERE c.conname = 'valid_phone'
+      AND n.nspname = 'public'
+      AND t.relname = 'profiles'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.profiles ADD CONSTRAINT valid_phone CHECK (phone IS NULL OR phone ~ ''^\\+?[1-9]\\d{1,14}$'')';
+  END IF;
+END;
+$$;
 
--- Ensure valid progress percentages
-ALTER TABLE therapy_goals ADD CONSTRAINT valid_progress CHECK (progress_percentage >= 0 AND progress_percentage <= 100);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON c.conrelid = t.oid
+    JOIN pg_namespace n ON t.relnamespace = n.oid
+    WHERE c.conname = 'valid_progress'
+      AND n.nspname = 'public'
+      AND t.relname = 'therapy_goals'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.therapy_goals ADD CONSTRAINT valid_progress CHECK (progress_percentage >= 0 AND progress_percentage <= 100)';
+  END IF;
+END;
+$$;
 
--- Ensure valid scores
-ALTER TABLE assessment_scores ADD CONSTRAINT valid_raw_score CHECK (raw_score >= 0);
-ALTER TABLE assessment_scores ADD CONSTRAINT valid_percentile CHECK (percentile IS NULL OR (percentile >= 0 AND percentile <= 100));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON c.conrelid = t.oid
+    JOIN pg_namespace n ON t.relnamespace = n.oid
+    WHERE c.conname = 'valid_raw_score'
+      AND n.nspname = 'public'
+      AND t.relname = 'assessment_scores'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.assessment_scores ADD CONSTRAINT valid_raw_score CHECK (raw_score >= 0)';
+  END IF;
+END;
+$$;
 
--- Ensure valid appointment times
-ALTER TABLE appointments ADD CONSTRAINT valid_appointment_duration CHECK (end_time > start_time);
-ALTER TABLE appointments ADD CONSTRAINT valid_duration_minutes CHECK (duration_minutes > 0 AND duration_minutes <= 480);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON c.conrelid = t.oid
+    JOIN pg_namespace n ON t.relnamespace = n.oid
+    WHERE c.conname = 'valid_percentile'
+      AND n.nspname = 'public'
+      AND t.relname = 'assessment_scores'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.assessment_scores ADD CONSTRAINT valid_percentile CHECK (percentile IS NULL OR (percentile >= 0 AND percentile <= 100))';
+  END IF;
+END;
+$$;
 
--- ============================================================================
--- COMMENTS FOR DOCUMENTATION
--- ============================================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON c.conrelid = t.oid
+    JOIN pg_namespace n ON t.relnamespace = n.oid
+    WHERE c.conname = 'valid_appointment_duration'
+      AND n.nspname = 'public'
+      AND t.relname = 'appointments'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.appointments ADD CONSTRAINT valid_appointment_duration CHECK (end_time > start_time)';
+  END IF;
+END;
+$$;
 
-COMMENT ON TABLE profiles IS 'Core user profiles supporting therapists, clients, supervisors, and admins';
-COMMENT ON TABLE cases IS 'Central case management with treatment tracking and clinical data';
-COMMENT ON TABLE assessment_templates IS 'Psychometric assessment instruments and scoring configurations';
-COMMENT ON TABLE assessment_instances IS 'Individual assessment assignments with progress tracking';
-COMMENT ON TABLE session_notes IS 'Clinical session documentation with versioning support';
-COMMENT ON TABLE resource_library IS 'Comprehensive library of therapeutic resources and materials';
-COMMENT ON TABLE supervision_flags IS 'Case flagging system for supervisor review and consultation';
-COMMENT ON TABLE audit_logs IS 'Comprehensive audit trail for compliance and security';
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON c.conrelid = t.oid
+    JOIN pg_namespace n ON t.relnamespace = n.oid
+    WHERE c.conname = 'valid_duration_minutes'
+      AND n.nspname = 'public'
+      AND t.relname = 'appointments'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.appointments ADD CONSTRAINT valid_duration_minutes CHECK (duration_minutes > 0 AND duration_minutes <= 480)';
+  END IF;
+END;
+$$;
 
-COMMENT ON COLUMN profiles.professional_details IS 'JSONB field storing therapist qualifications, specializations, and practice information';
-COMMENT ON COLUMN cases.treatment_plan IS 'JSONB field storing structured treatment plan with goals and interventions';
-COMMENT ON COLUMN assessment_templates.questions IS 'JSONB array of assessment questions with type, options, and validation rules';
-COMMENT ON COLUMN assessment_templates.scoring_config IS 'JSONB configuration for scoring method, weights, and calculations';
-COMMENT ON COLUMN session_notes.content IS 'JSONB field storing structured session notes, interventions, and observations';
+-- Comments (safe to run multiple times)
+COMMENT ON TABLE public.profiles IS 'Core user profiles supporting therapists, clients, supervisors, and admins';
+COMMENT ON TABLE public.cases IS 'Central case management with treatment tracking and clinical data';
+COMMENT ON TABLE public.assessment_templates IS 'Psychometric assessment instruments and scoring configurations';
+COMMENT ON TABLE public.assessment_instances IS 'Individual assessment assignments with progress tracking';
+COMMENT ON TABLE public.session_notes IS 'Clinical session documentation with versioning support';
+COMMENT ON TABLE public.resource_library IS 'Comprehensive library of therapeutic resources and materials';
+COMMENT ON TABLE public.supervision_flags IS 'Case flagging system for supervisor review and consultation';
+COMMENT ON TABLE public.audit_logs IS 'Comprehensive audit trail for compliance and security';
+
+COMMENT ON COLUMN public.profiles.professional_details IS 'JSONB field storing therapist qualifications, specializations, and practice information';
+COMMENT ON COLUMN public.cases.treatment_plan IS 'JSONB field storing structured treatment plan with goals and interventions';
+COMMENT ON COLUMN public.assessment_templates.questions IS 'JSONB array of assessment questions with type, options, and validation rules';
+COMMENT ON COLUMN public.assessment_templates.scoring_config IS 'JSONB configuration for scoring method, weights, and calculations';
+COMMENT ON COLUMN public.session_notes.content IS 'JSONB field storing structured session notes, interventions, and observations';
