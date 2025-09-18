@@ -650,8 +650,6 @@ export default function TherapistDashboard() {
               <div className="flex items-center space-x-3">
                 <img src="/thera-py-icon.png" alt="Thera-PY Logo" className="w-8 h-8"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                <img src="/thera-py-image.png" alt="Thera-PY" className="h-6"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).outerHTML = '<span>Thera-PY</span>' }} />
               </div>
               <div className="hidden sm:block"><p className="text-sm text-gray-500">Therapist Portal</p></div>
             </div>
