@@ -142,3 +142,4 @@ CREATE POLICY "Active VIP offers are readable by therapists"
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('assessment_files', 'assessment_files', false)
 ON CONFLICT (id) DO NOTHING;
+
