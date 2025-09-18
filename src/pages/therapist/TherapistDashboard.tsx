@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import {
   Users, FileText, Calendar, Library, CheckCircle, AlertTriangle, Menu, X, Target, ChevronLeft,
   User, CalendarDays, Brain, Shield, Headphones, Plus, Eye, LogOut, BarChart3, Building2,
-  ShieldCheck, Star, Activity, ChevronRight, Play
+  ShieldCheck, Star, Activity, ChevronRight, Play, Crown, Settings
 } from 'lucide-react'
 import { TherapistOnboarding } from '../../components/therapist/TherapistOnboarding'
 
@@ -38,6 +38,12 @@ const VIPOpportunities = React.lazy(() =>
 )
 const MembershipPanel = React.lazy(() =>
   import('../../components/therapist/MembershipPanel').then(m => ({ default: m.MembershipPanel }))
+)
+const MembershipManagement = React.lazy(() =>
+  import('../../components/admin/MembershipManagement').then(m => ({ default: m.MembershipManagement }))
+)
+const SupervisorDashboard = React.lazy(() =>
+  import('../../components/supervisor/SupervisorDashboard').then(m => ({ default: m.SupervisorDashboard }))
 )
 const ProgressMetrics = React.lazy(() =>
   import('../../components/therapist/ProgressMetrics').then(m => ({ default: m.ProgressMetrics }))
@@ -89,10 +95,28 @@ type SectionId =
   | 'metrics' | 'resources'
   | 'licensing' | 'supervision' | 'vip' | 'clinic'
   | 'profile' | 'membership' | 'admin'
+  | 'membership-admin' | 'user-management' | 'system-settings'
 
 export default function TherapistDashboard() {
   const navigate = useNavigate()
   const { profile, signOut } = useAuth()
+
+  // Check user role for appropriate dashboard
+  useEffect(() => {
+    if (profile) {
+      if (profile.role === 'supervisor') {
+        // Redirect supervisors to their dashboard
+        return
+      } else if (profile.role === 'admin') {
+        // Admins can access therapist dashboard but with additional features
+        return
+      } else if (profile.role !== 'therapist') {
+        // Redirect non-therapists to their appropriate area
+        navigate('/client', { replace: true })
+        return
+      }
+    }
+  }, [profile, navigate])
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -115,7 +139,7 @@ export default function TherapistDashboard() {
   const [signOutError, setSignOutError] = useState<string | null>(null)
   const [active, setActive] = useState<SectionId>('overview')
 
-  // NAV: updated — Session Board removed from dashboard (it’s inside Workspace now)
+  // NAV: updated — Session Board removed from dashboard (it's inside Workspace now)
   const navigationSections = [
     { title: null, items: [{ id: 'overview', name: 'Overview', icon: Target }] },
     {
@@ -306,7 +330,7 @@ export default function TherapistDashboard() {
         activities.push({
           id: 'act-appt',
           type: 'client',
-          title: 'Today’s schedule ready',
+          title: 'Today's schedule ready',
           description: `${sessions.length} appointment(s)`,
           time: 'today',
           icon: 'Calendar'
@@ -342,7 +366,32 @@ export default function TherapistDashboard() {
     finally { setIsSigningOut(false) }
   }
 
-  if (profile && profile.role !== 'therapist') return <Navigate to="/client" replace />
+  if (profile && profile.role !== 'therapist' && profile.role !== 'admin' && profile.role !== 'supervisor') return <Navigate to="/client" replace />
+
+  // Render supervisor dashboard for supervisors
+  if (profile?.role === 'supervisor') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <React.Suspense fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>}>
+          <SupervisorDashboard />
+        </React.Suspense>
+      </div>
+    )
+  }
+
+  // Enhanced navigation for admins
+  const isAdmin = profile?.role === 'admin'
+  const enhancedNavigationSections = isAdmin ? [
+    ...navigationSections,
+    {
+      title: 'Administration',
+      items: [
+        { id: 'membership-admin' as const, name: 'Membership Admin', icon: Crown as any },
+        { id: 'user-management' as const, name: 'User Management', icon: Users as any },
+        { id: 'system-settings' as const, name: 'System Settings', icon: Settings as any },
+      ]
+    }
+  ] : navigationSections
 
   const handleOnboardingComplete = () => { setShowOnboardingModal(false); fetchDashboardData() }
   const goto = (id: SectionId) => { setActive(id); setMobileMenuOpen(false) }
@@ -408,7 +457,7 @@ export default function TherapistDashboard() {
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Today’s Sessions</p>
+              <p className="text-sm font-medium text-gray-600">Today's Sessions</p>
               <p className="text-3xl font-bold text-purple-600">{stats.patientsToday}</p>
             </div>
             <div className="p-3 bg-purple-100 rounded-full"><CalendarDays className="h-6 w-6 text-purple-600" /></div>
@@ -721,7 +770,7 @@ export default function TherapistDashboard() {
 
           <div className="flex-1 overflow-y-auto p-3">
             <nav className="space-y-6">
-              {navigationSections.map((section, idx) => (
+              {enhancedNavigationSections.map((section, idx) => (
                 <div key={idx}>
                   {section.title && !sidebarCollapsed && (
                     <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-2 flex items-center">
@@ -740,7 +789,7 @@ export default function TherapistDashboard() {
                           key={tab.id as string}
                           onClick={() => {
                             if (isAssessmentsRoute) navigate('/therapist/assessments')
-                            else setActive(tab.id as SectionId)
+                            else setActive(tab.id as any)
                           }}
                           className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
                             isActive ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow'
@@ -779,7 +828,7 @@ export default function TherapistDashboard() {
             <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-xl pt-16">
               <div className="h-full overflow-y-auto p-4">
                 <nav className="space-y-6">
-                  {navigationSections.map((section, idx) => (
+                  {enhancedNavigationSections.map((section, idx) => (
                     <div key={idx}>
                       {section.title && <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">{section.title}</h3>}
                       <div className="space-y-1">
@@ -845,6 +894,26 @@ export default function TherapistDashboard() {
                 </div>
               )}
               {active === 'membership'    && <MembershipPanel />}
+              {/* Admin-only sections */}
+              {isAdmin && active === 'membership-admin' && <MembershipManagement />}
+              {isAdmin && active === 'user-management' && (
+                <div className="p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
+                    <Users className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+                    <h3 className="text-gray-900 font-medium">User Management</h3>
+                    <p className="text-sm text-gray-600 mt-1">Advanced user management features coming soon.</p>
+                  </div>
+                </div>
+              )}
+              {isAdmin && active === 'system-settings' && (
+                <div className="p-6">
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
+                    <Settings className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+                    <h3 className="text-gray-900 font-medium">System Settings</h3>
+                    <p className="text-sm text-gray-600 mt-1">System configuration options coming soon.</p>
+                  </div>
+                </div>
+              )}
               {active === 'admin'         && (
                 <div className="p-6">
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
