@@ -1,8 +1,10 @@
 -- ====== EXTENSIONS ======
+
 create extension if not exists "uuid-ossp";
 create extension if not exists "pgcrypto";
 
 -- ====== ENUMS ======
+
 do $$ begin
   create type public.assessment_status as enum ('assigned','in_progress','completed','expired','cancelled');
 exception when duplicate_object then null; end $$;
