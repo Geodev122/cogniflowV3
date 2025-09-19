@@ -7,51 +7,20 @@ import { ProtectedRoute } from './components/therapist/ProtectedRoute'
 import { Login } from './pages/therapist/Login'
 import { Register } from './pages/therapist/Register'
 
-/**
- * lazyWithRetry:
- * - fixes transient “Failed to fetch dynamically imported module” issues
- *   by retrying once after a short delay, which is common with Vite HMR or flaky networks.
- */
-const lazyWithRetry = <T extends React.ComponentType<any>>(
-  factory: () => Promise<{ default: T }>
-) => {
-  let loaded = false
-  return React.lazy(async () => {
-    try {
-      const mod = await factory()
-      loaded = true
-      return mod
-    } catch (err) {
-      // If the first attempt failed due to a transient fetch error, retry once
-      const isChunkError =
-        err instanceof Error &&
-        /Loading chunk|Failed to fetch dynamically imported module|Importing a module script failed/.test(err.message)
-      if (!loaded && isChunkError) {
-        await new Promise((r) => setTimeout(r, 500))
-        return factory()
-      }
-      throw err
-    }
-  })
-}
-
 // Therapist stack (lazy to speed TTI)
-const TherapistDashboard = lazyWithRetry(() => import('./pages/therapist/TherapistDashboard'))
-const AssessmentsPage    = lazyWithRetry(() => import('./pages/therapist/AssessmentsPage'))
-const CaseArchives       = lazyWithRetry(() => import('./pages/therapist/CaseArchives'))
+const TherapistDashboard = React.lazy(() => import('./pages/therapist/TherapistDashboard'))
+const AssessmentsPage = React.lazy(() => import('./pages/therapist/AssessmentsPage'))
+const CaseArchives = React.lazy(() => import('./pages/therapist/CaseArchives'))
 
 // NEW: Practice Management Workspace (shell) + Case Summary
-const Workspace   = lazyWithRetry(() => import('./pages/therapist/workspace/Workspace'))
-const CaseSummary = lazyWithRetry(() => import('./pages/therapist/CaseSummary'))
+const Workspace   = React.lazy(() => import('./pages/therapist/workspace/Workspace'))
+const CaseSummary = React.lazy(() => import('./pages/therapist/CaseSummary'))
 
 // Client stack (mobile-first)
-const ClientHome               = lazyWithRetry(() => import('./pages/client/ClientHome'))
-const ClientAssessments        = lazyWithRetry(() => import('./pages/client/Assessments'))
-const ClientAssessmentPlayer   = lazyWithRetry(() => import('./pages/client/AssessmentPlayer'))
-const ClientProfile            = lazyWithRetry(() => import('./pages/client/Profile'))
-
-// Support / Tickets (the dashboard links here)
-const SupportTickets           = lazyWithRetry(() => import('./pages/SupportTickets'))
+const ClientHome = React.lazy(() => import('./pages/client/ClientHome'))
+const ClientAssessments = React.lazy(() => import('./pages/client/Assessments'))
+const ClientAssessmentPlayer = React.lazy(() => import('./pages/client/AssessmentPlayer'))
+const ClientProfile = React.lazy(() => import('./pages/client/Profile'))
 
 const LoadingSpinner = ({ message = 'Loading...' }: { message?: string }) => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -101,6 +70,12 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+// in App routes
+<Route
+  path="/therapist/archives"
+  element={<ProtectedRoute role="therapist"><CaseArchives/></ProtectedRoute>}
+/>
+
 export default function App() {
   const { user, profile, loading, error } = useAuth()
 
@@ -147,7 +122,6 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="/therapist/assessments"
               element={
@@ -202,16 +176,6 @@ export default function App() {
               }
             />
 
-            {/* Support / Tickets page the dashboard navigates to */}
-            <Route
-              path="/support/tickets"
-              element={
-                <ProtectedRoute role="therapist">
-                  <SupportTickets />
-                </ProtectedRoute>
-              }
-            />
-
             {/* Client stack */}
             <Route
               path="/client"
@@ -251,7 +215,7 @@ export default function App() {
               path="/"
               element={
                 user && profile
-                  ? <Navigate to={profile.role === 'therapist' || profile.role === 'admin' || profile.role === 'supervisor' ? '/therapist' : '/client'} replace />
+                  ? <Navigate to={profile.role === 'therapist' ? '/therapist' : '/client'} replace />
                   : <Navigate to="/login" replace />
               }
             />

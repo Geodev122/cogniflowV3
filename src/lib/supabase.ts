@@ -22,9 +22,9 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce',
-  },
+    detectSessionInUrl: true, // allow handling of magic-link callback if used
+    flowType: 'pkce'
+  }
 })
 
 /**
@@ -69,6 +69,7 @@ export async function run<T>(
 }
 
 function normalizePgError(error: PostgrestError): Error {
+  // You can customize user-facing messages here if desired.
   const msg = `[supabase] ${error.code ?? 'ERR'}: ${error.message}`
   const e = new Error(msg)
   ;(e as any).hint = error.hint
