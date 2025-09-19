@@ -1,4 +1,3 @@
-//pages/SupportTickets.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge,
@@ -12,6 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -30,8 +30,13 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
+  SheetTrigger,
   Textarea,
-} from "@/components/ui"; // If you don't have a barrel, import shadcn components directly.
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui"; // <-- adapt to your shadcn/ui barrel or import directly per component
 import {
   AlertCircle,
   Bug,
@@ -80,7 +85,7 @@ export type TicketListItem = {
   assignee_name: string | null;
   latest_message_preview: string | null;
   message_created_at: string | null;
-  tags?: string[];
+  tags?: string[]; // optional if you expose via API
 };
 
 export type TicketMessage = {

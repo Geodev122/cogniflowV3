@@ -1,8 +1,9 @@
+// src/components/therapist/ProtectedRoute.tsx
 import React from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 
-export type Role = 'therapist' | 'client' | 'admin' | 'supervisor'
+type Role = 'therapist' | 'client'
 
 type Props = {
   /** Require a specific role to access this route */
@@ -18,7 +19,7 @@ type Props = {
  * ProtectedRoute
  * - Waits for `useAuth()` to finish
  * - Redirects to /login if no user
- * - If `role` is specified, ensures `profile.role` matches; therapist routes accept admin/supervisor too
+ * - If `role` is specified, ensures `profile.role` matches; otherwise redirects to that role's home
  * - On errors: shows a simple retry block
  */
 export const ProtectedRoute: React.FC<Props> = ({
@@ -67,7 +68,7 @@ export const ProtectedRoute: React.FC<Props> = ({
     return <Navigate to={redirectTo} state={{ from: location }} replace />
   }
 
-  // No profile yet (rare, but guard)
+  // No profile yet (should be rare with your hook, but guard anyway)
   if (!profile) {
     return (
       <div className="min-h-screen grid place-items-center bg-gray-50">
@@ -79,17 +80,11 @@ export const ProtectedRoute: React.FC<Props> = ({
     )
   }
 
-  // Role check: therapist routes also allow admin & supervisor
-  if (role) {
-    const ok =
-      role === 'therapist'
-        ? ['therapist', 'admin', 'supervisor'].includes(profile.role)
-        : profile.role === role
-    if (!ok) {
-      const home =
-        profile.role === 'client' ? '/client' : '/therapist'
-      return <Navigate to={home} replace />
-    }
+  // Role mismatch routing
+  if (role && profile.role !== role) {
+    // Send to their home area (therapist/client)
+    const home = profile.role === 'therapist' ? '/therapist' : '/client'
+    return <Navigate to={home} replace />
   }
 
   // All good
