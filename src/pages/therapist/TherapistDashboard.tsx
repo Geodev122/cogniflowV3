@@ -9,6 +9,27 @@ import {
 } from 'lucide-react'
 import { TherapistOnboarding } from '../../components/therapist/TherapistOnboarding'
 
+// Minimal ErrorBoundary to prevent white screen on render errors
+class DashboardErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error?: Error }> {
+  constructor(props: any) { super(props); this.state = { hasError: false } }
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error } }
+  componentDidCatch(error: Error, info: any) { console.error('Dashboard render error:', error, info) }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+          <div className="max-w-xl text-center">
+            <h2 className="text-lg font-semibold text-red-700">Something went wrong</h2>
+            <p className="text-sm text-gray-600 mt-2">An error occurred while loading your dashboard. Please refresh the page or contact support if the problem persists.</p>
+            <pre className="mt-4 text-xs text-red-600 whitespace-pre-wrap">{String(this.state.error?.message)}</pre>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 // Lazy chunks (robust default selection to avoid undefined default)
 const SessionManagement = React.lazy(() =>
   import('../../pages/therapist/SessionManagement').then(m => ({ default: (m as any).default ?? m }))
@@ -109,16 +130,6 @@ export default function TherapistDashboard() {
     navigate('/client', { replace: true })
   }, [profile, navigate])
 
-  // Add error boundary for dashboard data loading
-  useEffect(() => {
-    if (profile?.id && !loading) {
-      // Add a small delay to ensure profile is fully loaded
-      const timer = setTimeout(() => {
-        fetchDashboardData()
-      }, 100)
-      return () => clearTimeout(timer)
-    }
-  }, [profile?.id, loading, fetchDashboardData])
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -397,6 +408,19 @@ export default function TherapistDashboard() {
       setLoading(false)
     }
   }, [profile])
+
+  // Safe effect: fetch dashboard data once profile is available
+  useEffect(() => {
+    if (!profile?.id) return
+    let mounted = true
+    const timer = setTimeout(() => {
+      fetchDashboardData().catch(err => {
+        console.error('fetchDashboardData error (init):', err)
+        if (mounted) setDashboardError(err instanceof Error ? err.message : String(err))
+      })
+    }, 100)
+    return () => { mounted = false; clearTimeout(timer) }
+  }, [profile?.id, fetchDashboardData])
 
   // Remove the immediate fetchDashboardData call - we'll handle it with the delay above
 
@@ -833,6 +857,7 @@ export default function TherapistDashboard() {
   }
 
   return (
+    <DashboardErrorBoundary>
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-white shadow-sm border-b border-gray-200">
@@ -1160,5 +1185,6 @@ export default function TherapistDashboard() {
         </div>
       )}
     </div>
+    </DashboardErrorBoundary>
   )
 }
