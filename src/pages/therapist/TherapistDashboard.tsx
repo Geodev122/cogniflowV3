@@ -475,12 +475,24 @@ export default function TherapistDashboard() {
               })}
             </p>
           </div>
-          {profileLive && (
+          <div className="flex items-center space-x-3">
+            {profileLive && (
             <div className="hidden sm:flex items-center space-x-2 bg-green-500 bg-opacity-20 text-green-100 px-4 py-2 rounded-full">
               <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse" />
               <span className="text-sm font-medium">Profile Live</span>
             </div>
-          )}
+            )}
+
+            {/* Open Workspace CTA */}
+            <button
+              onClick={() => navigate('/therapist/workspace')}
+              className="inline-flex items-center space-x-2 px-3 py-2 bg-white bg-opacity-90 text-sm font-medium rounded-lg shadow hover:shadow-md border border-gray-200"
+              title="Open Workspace"
+            >
+              <Play className="w-4 h-4 text-blue-600" />
+              <span className="text-blue-600">Open Workspace</span>
+            </button>
+          </div>
         </div>
       </div>
 
