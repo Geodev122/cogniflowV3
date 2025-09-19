@@ -8,12 +8,25 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { MobileShell } from '../../components/client/MobileShell'
 
-type NextAppt = { id: string; when: string; type?: string | null; therapist_name?: string }
-type MiniAssessment = { id: string; title: string; status: string; due_date?: string | null; abbrev?: string | null }
+type NextAppt = {
+  id: string
+  when: string
+  type?: string | null
+  therapist_name?: string
+}
+
+type MiniAssessment = {
+  id: string
+  title: string
+  status: string
+  due_date?: string | null
+  abbrev?: string | null
+}
 
 export default function ClientHome() {
   const navigate = useNavigate()
   const { profile } = useAuth()
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [nextAppt, setNextAppt] = useState<NextAppt | null>(null)
@@ -22,17 +35,24 @@ export default function ClientHome() {
 
   useEffect(() => {
     let cancel = false
+
     const load = async () => {
-      if (!profile) return
-      setLoading(true); setError(null)
+      if (!profile?.id) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setError(null)
+
       try {
-        // Next appointment today → future
+        // ---- Next appointment (soonest future)
         const nowIso = new Date().toISOString()
         const { data: appts, error: apptErr } = await supabase
           .from('appointments')
           .select(`
-            id, start_time, end_time, appointment_date, appointment_type, therapist_id,
-            therapist:profiles!appointments_therapist_id_fkey(first_name,last_name)
+            id, start_time, appointment_date, appointment_type, therapist_id,
+            therapist:profiles!appointments_therapist_id_fkey(first_name, last_name)
           `)
           .eq('client_id', profile.id)
           .gte('start_time', nowIso)
@@ -40,62 +60,83 @@ export default function ClientHome() {
           .limit(1)
 
         if (apptErr) throw apptErr
+
         if (!cancel) {
-          const a = appts?.[0]
-          const appointmentTime = a?.start_time || a?.appointment_date
-          setNextAppt(a ? {
-            id: a.id,
-            when: appointmentTime ? new Date(appointmentTime).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : '—',
-            type: a.appointment_type,
-            therapist_name: `${a?.therapist?.first_name || ''} ${a?.therapist?.last_name || ''}`.trim() || undefined
-          } : null)
+          const a: any = appts?.[0]
+          const appointmentTime: string | undefined = a?.start_time || a?.appointment_date || undefined
+          const when = appointmentTime
+            ? new Date(appointmentTime).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
+            : '—'
+
+          setNextAppt(
+            a
+              ? {
+                  id: a.id,
+                  when,
+                  type: a?.appointment_type ?? null,
+                  therapist_name: `${a?.therapist?.first_name || ''} ${a?.therapist?.last_name || ''}`.trim() || undefined
+                }
+              : null
+          )
         }
 
-        // Top assessments (assigned/in_progress first)
+        // ---- Recent/assigned assessments
         const { data: inst, error: instErr } = await supabase
           .from('assessment_instances')
           .select('id, title, status, due_date, template_id, assigned_at')
           .eq('client_id', profile.id)
           .order('assigned_at', { ascending: false })
           .limit(8)
+
         if (instErr) throw instErr
 
-        let abbrevMap = new Map<string, string>()
-        const tplIds = Array.from(new Set((inst || []).map(r => r.template_id))).filter(Boolean) as string[]
+        // Map template abbreviations
+        const tplIds = Array.from(new Set((inst ?? []).map((r: any) => r.template_id))).filter(Boolean) as string[]
+        const abbrevMap = new Map<string, string>()
         if (tplIds.length) {
           const { data: tpls } = await supabase
             .from('assessment_templates')
             .select('id, abbreviation')
             .in('id', tplIds)
-          tpls?.forEach(t => abbrevMap.set(t.id, t.abbreviation || ''))
+          tpls?.forEach((t: any) => abbrevMap.set(t.id, t.abbreviation || ''))
         }
 
-        const sorted = (inst || []).sort((a, b) => {
-          const score = (v: string) => v === 'assigned' ? 0 : v === 'in_progress' ? 1 : 2
+        const sorted = [...(inst ?? [])].sort((a: any, b: any) => {
+          const score = (v: string) => (v === 'assigned' ? 0 : v === 'in_progress' ? 1 : 2)
           return score(a.status) - score(b.status)
         })
 
         if (!cancel) {
-          setAssess(sorted.map(i => ({
-            id: i.id,
-            title: i.title || 'Assessment',
-            status: i.status,
-            due_date: i.due_date,
-            abbrev: abbrevMap.get(i.template_id) || null
-          })))
+          setAssess(
+            sorted.map((i: any) => ({
+              id: i.id,
+              title: i.title || 'Assessment',
+              status: i.status,
+              due_date: i.due_date,
+              abbrev: i.template_id ? abbrevMap.get(i.template_id) || null : null
+            }))
+          )
         }
-          id, start_time, end_time, appointment_type, therapist_id,
-        // Optional: count alerts from latest results
-        const ids = (inst || []).map(i => i.id)
+
+        // ---- Alerts count (from latest results)
+        const ids = (inst ?? []).map((i: any) => i.id)
         if (ids.length) {
           const { data: results } = await supabase
             .from('assessment_results')
-            .select('alerts')
+            .select('alerts, instance_id, created_at')
             .in('instance_id', ids)
             .order('created_at', { ascending: false })
             .limit(20)
-          const count = (results || []).reduce((acc, r: any) => acc + (Array.isArray(r.alerts) ? r.alerts.length : 0), 0)
-        const appointmentTime = a?.start_time
+
+          if (!cancel) {
+            const count = (results ?? []).reduce((acc: number, r: any) => {
+              const n = Array.isArray(r?.alerts) ? r.alerts.length : 0
+              return acc + n
+            }, 0)
+            setAlertsCount(count)
+          }
+        } else if (!cancel) {
+          setAlertsCount(0)
         }
       } catch (e: any) {
         console.error('[ClientHome] load error', e)
@@ -104,8 +145,11 @@ export default function ClientHome() {
         if (!cancel) setLoading(false)
       }
     }
+
     load()
-    return () => { cancel = true }
+    return () => {
+      cancel = true
+    }
   }, [profile])
 
   return (
@@ -139,7 +183,9 @@ export default function ClientHome() {
                 <div className="text-[12px] text-gray-500">Assignments</div>
                 <ClipboardList className="w-4 h-4 text-blue-600" />
               </div>
-              <div className="mt-1 text-xl font-semibold">{assess.filter(a => a.status !== 'completed').length}</div>
+              <div className="mt-1 text-xl font-semibold">
+                {assess.filter((a) => a.status !== 'completed').length}
+              </div>
               <div className="text-[11px] text-gray-500">to complete</div>
             </button>
             <button
@@ -162,17 +208,23 @@ export default function ClientHome() {
                 <Calendar className="w-4 h-4 text-purple-600" />
                 <div className="text-sm font-medium text-gray-900">Your next session</div>
               </div>
-              <button className="text-xs text-blue-700" onClick={() => navigate('/client/appointments')}>See all</button>
+              <button className="text-xs text-blue-700" onClick={() => navigate('/client/appointments')}>
+                See all
+              </button>
             </div>
             <div className="p-4">
               {!nextAppt ? (
                 <div className="text-sm text-gray-600">No upcoming appointments.</div>
               ) : (
-                <button onClick={() => navigate('/client/appointments')} className="w-full flex items-center justify-between text-left">
+                <button
+                  onClick={() => navigate('/client/appointments')}
+                  className="w-full flex items-center justify-between text-left"
+                >
                   <div>
                     <div className="font-medium text-gray-900">{nextAppt.when}</div>
                     <div className="text-xs text-gray-600">
-                      {nextAppt.type || 'Session'}{nextAppt.therapist_name ? ` • with ${nextAppt.therapist_name}` : ''}
+                      {nextAppt.type || 'Session'}
+                      {nextAppt.therapist_name ? ` • with ${nextAppt.therapist_name}` : ''}
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
@@ -201,7 +253,6 @@ export default function ClientHome() {
                 <div className="mt-1 text-sm font-medium">Assignments</div>
                 <div className="text-[11px] text-gray-500">Fill now</div>
               </button>
-              {/* Therapist Finder entry points (list/map/swipe to be built in Phase 2) */}
               <button
                 onClick={() => navigate('/client/find-therapist?mode=list')}
                 className="border border-gray-200 rounded-lg p-3 text-left active:scale-[0.99]"
@@ -220,7 +271,6 @@ export default function ClientHome() {
               </button>
             </div>
 
-            {/* Single prominent CTA for swipe matchmaking */}
             <button
               onClick={() => navigate('/client/find-therapist?mode=swipe')}
               className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 text-white py-3 font-medium active:scale-[0.99]"
@@ -232,12 +282,14 @@ export default function ClientHome() {
 
           {/* Recent assignments */}
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
-            <div className="px-4 py-3 border-b border-gray-100 text-sm font-medium text-gray-900">Recent assignments</div>
+            <div className="px-4 py-3 border-b border-gray-100 text-sm font-medium text-gray-900">
+              Recent assignments
+            </div>
             <div className="divide-y">
               {assess.length === 0 && (
                 <div className="p-4 text-sm text-gray-600">No recent assignments.</div>
               )}
-              {assess.slice(0, 4).map(a => (
+              {assess.slice(0, 4).map((a) => (
                 <button
                   key={a.id}
                   onClick={() => navigate(`/client/assessments?instanceId=${a.id}`)}
@@ -246,15 +298,19 @@ export default function ClientHome() {
                   <div>
                     <div className="text-sm font-medium text-gray-900">{a.title}</div>
                     <div className="text-[11px] text-gray-600">
-                      {(a.abbrev ? `${a.abbrev} • ` : '') + (a.status === 'completed'
-                        ? 'Completed'
-                        : (a.due_date ? `Due ${new Date(a.due_date).toLocaleDateString()}` : 'Assigned'))}
+                      {(a.abbrev ? `${a.abbrev} • ` : '') +
+                        (a.status === 'completed'
+                          ? 'Completed'
+                          : a.due_date
+                          ? `Due ${new Date(a.due_date).toLocaleDateString()}`
+                          : 'Assigned')}
                     </div>
                   </div>
-                  {a.status === 'completed'
-                    ? <span className="text-xs bg-green-100 text-green-700 rounded-full px-2 py-0.5">done</span>
-                    : <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">open</span>
-                  }
+                  {a.status === 'completed' ? (
+                    <span className="text-xs bg-green-100 text-green-700 rounded-full px-2 py-0.5">done</span>
+                  ) : (
+                    <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">open</span>
+                  )}
                 </button>
               ))}
             </div>

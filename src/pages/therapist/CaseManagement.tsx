@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import {
   FileText, ClipboardList, Stethoscope, Activity, Pill, BookOpen,
-  User, Hash, ShieldAlert, Play, Flag, ChevronRight, Users, Timer, GitBranch
+  User, Hash, ShieldAlert, Play, Flag, ChevronRight, Users, Timer, GitBranch, RefreshCw
 } from 'lucide-react'
 
 import { supabase } from '../../lib/supabase'
@@ -28,6 +28,12 @@ type CaseHeader = {
   assigned_therapists?: Array<{ therapist_id: string, first_name?: string | null, last_name?: string | null }>
 }
 
+type CasePickerItem = {
+  id: string
+  case_number: string | null
+  client: { first_name: string | null; last_name: string | null } | null
+}
+
 const tabs = [
   { to: 'intake',       label: 'Intake',        icon: FileText,       tip: 'View/annotate client intake' },
   { to: 'formulation',  label: 'Formulation',   icon: ClipboardList,  tip: 'Symptoms & clinical model' },
@@ -43,17 +49,39 @@ export default function CaseManagement() {
   const { profile } = useAuth()
 
   const [header, setHeader] = useState<CaseHeader | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!!caseId)
   const [error, setError] = useState<string | null>(null)
 
-  const base = useMemo(() => `/therapist/cases/${caseId ?? ''}`, [caseId])
+  const [listLoading, setListLoading] = useState(false)
+  const [cases, setCases] = useState<CasePickerItem[]>([])
+
+  const base = useMemo(() => caseId ? `/therapist/cases/${caseId}` : '/therapist/cases', [caseId])
+
+  const loadCaseList = useCallback(async () => {
+    if (!profile?.id) return
+    try {
+      setListLoading(true)
+      const { data, error } = await supabase
+        .from('cases')
+        .select(`
+          id, case_number,
+          client:profiles!cases_client_id_fkey(first_name, last_name)
+        `)
+        .eq('therapist_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(40)
+      if (error) throw error
+      setCases((data ?? []) as any)
+    } catch (e) {
+      console.error('[CaseManagement] case list error:', e)
+      setCases([])
+    } finally {
+      setListLoading(false)
+    }
+  }, [profile?.id])
 
   const loadHeader = useCallback(async () => {
-    if (!caseId) {
-      setLoading(false)
-      setError('No caseId in route.')
-      return
-    }
+    if (!caseId) { setLoading(false); return }
     setLoading(true)
     setError(null)
     try {
@@ -120,16 +148,10 @@ export default function CaseManagement() {
   }, [caseId])
 
   useEffect(() => { void loadHeader() }, [loadHeader])
+  useEffect(() => { if (!caseId) loadCaseList() }, [caseId, loadCaseList])
 
-  const launchWorkspace = () => {
-    if (!caseId) return
-    navigate(`/cases/${caseId}/workspace`)
-  }
-
-  const openSummary = () => {
-    if (!caseId) return
-    navigate(`/therapist/cases/${caseId}/summary`)
-  }
+  const launchWorkspace = () => { if (caseId) navigate(`/therapist/workspace/${caseId}`) }
+  const openSummary = () => { if (caseId) navigate(`/therapist/cases/${caseId}/summary`) }
 
   const flagForSupervision = async () => {
     if (!profile?.id || !caseId) return
@@ -186,12 +208,45 @@ export default function CaseManagement() {
     return 'bg-blue-100 text-blue-700'
   }, [header?.status])
 
+  // When no caseId→ show a compact case picker (embedded mode / tab from dashboard)
   if (!caseId) {
     return (
       <div className="p-6">
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3">
-          Missing <code>:caseId</code> in route. Open this from a case link (e.g. <code>/therapist/cases/123/intervention</code>).
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Case Management</h2>
+          <button onClick={loadCaseList} className="text-sm px-3 py-2 border rounded inline-flex items-center gap-1">
+            <RefreshCw className="w-4 h-4" /> Refresh
+          </button>
         </div>
+        {listLoading ? (
+          <div className="text-sm text-gray-500">Loading cases…</div>
+        ) : cases.length === 0 ? (
+          <div className="text-sm text-gray-500">No active cases found.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {cases.map(c => {
+              const name = `${c.client?.first_name ?? ''} ${c.client?.last_name ?? ''}`.trim() || 'Client'
+              const tag  = c.case_number ? `Case ${c.case_number}` : `Case ${c.id.slice(0,6)}…`
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => navigate(`/therapist/cases/${c.id}/intake`)}
+                  className="p-4 bg-white border rounded-lg text-left hover:bg-gray-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-50 grid place-items-center">
+                      <User className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900">{name}</div>
+                      <div className="text-xs text-gray-500">{tag}</div>
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
     )
   }
@@ -215,7 +270,7 @@ export default function CaseManagement() {
   const caseTag = header.case_number ? `Case ${header.case_number}` : `Case ${header.id.slice(0,6)}…`
 
   return (
-    <div className="h-full grid grid-rows-[auto_auto_1fr]">
+    <div className="h-full grid grid-rows-[auto_auto_1fr] overflow-x-hidden">
       {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-3">
@@ -271,7 +326,7 @@ export default function CaseManagement() {
               to={`${base}/${to}`}
               title={tip}
               className={({ isActive }) =>
-                `inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm border ${
+                `inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm border whitespace-nowrap ${
                   isActive
                     ? 'bg-blue-50 text-blue-700 border-blue-200'
                     : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
