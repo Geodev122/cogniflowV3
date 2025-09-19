@@ -104,7 +104,17 @@ class ErrorBoundary extends React.Component<
 export default function App() {
   const { user, profile, loading, error } = useAuth()
 
-  if (loading) return <LoadingSpinner message="Initializing Thera-PY..." />
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Initializing Thera-PY...</p>
+          <p className="text-sm text-gray-500 mt-2">Please wait while we load your session</p>
+        </div>
+      </div>
+    )
+  }
 
   if (error) {
     return (
@@ -118,6 +128,9 @@ export default function App() {
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Connection Error</h2>
           <p className="text-gray-600 mb-4">{error}</p>
+          <div className="text-sm text-gray-500 mb-4">
+            This might be a temporary issue. Please try refreshing the page.
+          </div>
           <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

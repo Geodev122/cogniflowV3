@@ -69,14 +69,19 @@ export const useAuth = () => {
     const initializeAuth = async () => {
       try {
         setError(null)
-        const sessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Session timeout')), 12000)
-        )
-        const result = (await Promise.race([sessionPromise, timeoutPromise])) as any
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
         if (!mounted) return
 
-        const sessionUser: User | null = result?.data?.session?.user ?? null
+        if (sessionError) {
+          console.error('[useAuth] session error:', sessionError)
+          setError('Failed to get session')
+          setUser(null)
+          setProfile(null)
+          setLoading(false)
+          return
+        }
+
+        const sessionUser: User | null = sessionData?.session?.user ?? null
         if (sessionUser) {
           setUser(sessionUser)
           await fetchProfile(sessionUser)
@@ -87,7 +92,7 @@ export const useAuth = () => {
       } catch (e) {
         console.error('[useAuth] initializeAuth error', e)
         if (mounted) {
-          setError('Failed to initialize authentication')
+          setError(`Authentication error: ${e instanceof Error ? e.message : 'Unknown error'}`)
           setUser(null)
           setProfile(null)
         }
@@ -105,6 +110,7 @@ export const useAuth = () => {
       window.clearTimeout(debounce)
       debounce = window.setTimeout(async () => {
         try {
+          setError(null)
           if (session?.user) {
             setUser(session.user)
             await fetchProfile(session.user)
@@ -114,7 +120,7 @@ export const useAuth = () => {
           }
         } catch (e) {
           console.error('[useAuth] onAuthStateChange error', e)
-          setError('Authentication error occurred')
+          setError(`Auth state change error: ${e instanceof Error ? e.message : 'Unknown error'}`)
         }
       }, 120)
     })

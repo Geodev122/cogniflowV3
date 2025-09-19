@@ -109,6 +109,17 @@ export default function TherapistDashboard() {
     navigate('/client', { replace: true })
   }, [profile, navigate])
 
+  // Add error boundary for dashboard data loading
+  useEffect(() => {
+    if (profile?.id && !loading) {
+      // Add a small delay to ensure profile is fully loaded
+      const timer = setTimeout(() => {
+        fetchDashboardData()
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [profile?.id, loading, fetchDashboardData])
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     const raw = localStorage.getItem('tdb_sidebar_collapsed')
@@ -219,16 +230,24 @@ export default function TherapistDashboard() {
       setDashboardError(null)
       setLoading(true)
 
-      const { data: clientRelations } = await supabase
+      const { data: clientRelations, error: relationsError } = await supabase
         .from('therapist_client_relations')
         .select('client_id')
         .eq('therapist_id', profile.id)
 
-      const { data: activeCases } = await supabase
+      if (relationsError) {
+        console.warn('[TherapistDashboard] client relations error:', relationsError)
+      }
+
+      const { data: activeCases, error: casesError } = await supabase
         .from('cases')
         .select('id')
         .eq('therapist_id', profile.id)
         .eq('status', 'active')
+
+      if (casesError) {
+        console.warn('[TherapistDashboard] cases error:', casesError)
+      }
 
       const now = new Date()
       const yyyy = now.getFullYear()
@@ -237,7 +256,7 @@ export default function TherapistDashboard() {
       const dayStart = `${yyyy}-${mm}-${dd}T00:00:00`
       const dayEnd   = `${yyyy}-${mm}-${dd}T23:59:59`
 
-      const { data: appts } = await supabase
+      const { data: appts, error: apptsError } = await supabase
         .from('appointments')
         .select('id, start_time, end_time, status, notes, client_id, title, case_id')
         .eq('therapist_id', profile.id)
@@ -245,12 +264,20 @@ export default function TherapistDashboard() {
         .lte('start_time', dayEnd)
         .order('start_time', { ascending: true })
 
-      const { data: inst } = await supabase
+      if (apptsError) {
+        console.warn('[TherapistDashboard] appointments error:', apptsError)
+      }
+
+      const { data: inst, error: instError } = await supabase
         .from('assessment_instances')
         .select('id, template_id, client_id, title, status, assigned_at, completed_at')
         .eq('therapist_id', profile.id)
         .order('assigned_at', { ascending: false })
         .limit(12)
+
+      if (instError) {
+        console.warn('[TherapistDashboard] assessment instances error:', instError)
+      }
 
       const inProgressCount = (inst || []).filter(i => i.status === 'in_progress').length
 
@@ -302,12 +329,16 @@ export default function TherapistDashboard() {
       let insights: CaseInsight[] = []
       if (inst && inst.length) {
         const recentIds = inst.map(i => i.id)
-        const { data: scores } = await supabase
+        const { data: scores, error: scoresError } = await supabase
           .from('assessment_scores')
           .select('instance_id, severity_level, interpretation_description')
           .in('instance_id', recentIds)
           .order('calculated_at', { ascending: false })
           .limit(50)
+
+        if (scoresError) {
+          console.warn('[TherapistDashboard] assessment scores error:', scoresError)
+        }
 
         const byInstance = new Map<string, any>((scores || []).map(s => [s.instance_id, s]))
         insights = recent3
@@ -361,13 +392,13 @@ export default function TherapistDashboard() {
       setCaseInsights(insights || [])
     } catch (e) {
       console.error('dashboard fetch error:', e)
-      setDashboardError('Could not load dashboard data.')
+      setDashboardError(`Could not load dashboard data: ${e instanceof Error ? e.message : 'Unknown error'}`)
     } finally {
       setLoading(false)
     }
   }, [profile])
 
-  useEffect(() => { if (profile?.id) fetchDashboardData() }, [profile?.id, fetchDashboardData])
+  // Remove the immediate fetchDashboardData call - we'll handle it with the delay above
 
   const handleSignOut = async () => {
     setIsSigningOut(true)
@@ -401,19 +432,405 @@ export default function TherapistDashboard() {
     )
   }
 
+  // Add comprehensive Overview component
   const Overview = () => (
     <div className="h-full overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
-      {/* ... (unchanged content from your version) ... */}
-      {/* Keeping your Overview body exactly as provided in your message to avoid diff noise */}
-      {/* The full Overview component body remains identical to your last version */}
-      {/* SNIP FOR BREVITY — paste your Overview content here unchanged */}
+      {/* Welcome Header */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-2xl p-6 sm:p-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold mb-2">
+              Welcome back, {profile?.first_name || 'Doctor'}!
+            </h1>
+            <p className="text-blue-100 text-sm sm:text-base">
+              {new Date().toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+              })}
+            </p>
+          </div>
+          {profileLive && (
+            <div className="hidden sm:flex items-center space-x-2 bg-green-500 bg-opacity-20 text-green-100 px-4 py-2 rounded-full">
+              <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse" />
+              <span className="text-sm font-medium">Profile Live</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Error Display */}
+      {dashboardError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <div className="flex items-start space-x-3">
+            <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-red-900">Dashboard Error</h4>
+              <p className="text-sm text-red-800 mt-1">{dashboardError}</p>
+              <button
+                onClick={fetchDashboardData}
+                className="mt-2 text-sm text-red-700 hover:text-red-900 underline"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Clients</p>
+              <p className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.totalClients}</p>
+            </div>
+            <Users className="w-8 h-8 text-blue-600" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Active Cases</p>
+              <p className="text-2xl sm:text-3xl font-bold text-green-600">{stats.activeCases}</p>
+            </div>
+            <FileText className="w-8 h-8 text-green-600" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Today's Sessions</p>
+              <p className="text-2xl sm:text-3xl font-bold text-purple-600">{stats.patientsToday}</p>
+            </div>
+            <Calendar className="w-8 h-8 text-purple-600" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Profile Complete</p>
+              <p className="text-2xl sm:text-3xl font-bold text-amber-600">{stats.profileCompletion}%</p>
+            </div>
+            <User className="w-8 h-8 text-amber-600" />
+          </div>
+        </div>
+      </div>
+
+      {/* Profile Completion */}
+      {stats.profileCompletion < 100 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+          <div className="flex items-start space-x-4">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="w-6 h-6 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-medium text-amber-900">Complete Your Profile</h3>
+              <p className="text-amber-800 mt-1">
+                Your profile is {stats.profileCompletion}% complete. Complete all steps to go live and start receiving clients.
+              </p>
+              <div className="mt-4">
+                <div className="flex justify-between text-sm text-amber-700 mb-2">
+                  <span>Progress</span>
+                  <span>{stats.profileCompletion}%</span>
+                </div>
+                <div className="w-full bg-amber-200 rounded-full h-2">
+                  <div 
+                    className="bg-amber-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${stats.profileCompletion}%` }}
+                  />
+                </div>
+              </div>
+              <div className="mt-4 space-y-2">
+                {onboardingSteps.map((step) => (
+                  <div key={step.id} className="flex items-center space-x-2">
+                    {step.completed ? (
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <div className="w-4 h-4 border-2 border-amber-400 rounded-full" />
+                    )}
+                    <span className={`text-sm ${step.completed ? 'text-green-800' : 'text-amber-800'}`}>
+                      {step.title}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowOnboardingModal(true)}
+                className="mt-4 inline-flex items-center px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Complete Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Today's Schedule */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Today's Schedule</h3>
+            <button
+              onClick={() => goto('sessions')}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              View all sessions
+            </button>
+          </div>
+        </div>
+        <div className="p-6">
+          {todaySessions.length === 0 ? (
+            <div className="text-center py-8">
+              <Calendar className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No sessions today</h3>
+              <p className="mt-1 text-sm text-gray-500">Your schedule is clear for today.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {todaySessions.map((session) => (
+                <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                      <User className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-gray-900">{session.client_name}</h4>
+                      <p className="text-sm text-gray-600">{session.time} • {session.type}</p>
+                      {session.notes && (
+                        <p className="text-xs text-gray-500 mt-1">{session.notes}</p>
+                      )}
+                    </div>
+                  </div>
+                  {session.case_id && (
+                    <button
+                      onClick={() => navigate(`/therapist/workspace/${session.case_id}`)}
+                      className="inline-flex items-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      <Play className="w-4 h-4 mr-1" />
+                      Start Session
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Recent Assessments */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Assessments</h3>
+            <button
+              onClick={() => navigate('/therapist/assessments')}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              View all assessments
+            </button>
+          </div>
+        </div>
+        <div className="p-6">
+          {recentAssessments.length === 0 ? (
+            <div className="text-center py-8">
+              <Brain className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No recent assessments</h3>
+              <p className="mt-1 text-sm text-gray-500">Assign assessments to start tracking client progress.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {recentAssessments.map((assessment) => (
+                <div key={assessment.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <h4 className="font-medium text-gray-900">{assessment.title}</h4>
+                    <p className="text-sm text-gray-600">
+                      {assessment.clientName} • {assessment.abbrev}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {assessment.status === 'completed' 
+                        ? `Completed ${assessment.completed_at ? new Date(assessment.completed_at).toLocaleDateString() : ''}`
+                        : `Assigned ${assessment.assigned_at ? new Date(assessment.assigned_at).toLocaleDateString() : ''}`
+                      }
+                    </p>
+                  </div>
+                  <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                    assessment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                    assessment.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {assessment.status.replace('_', ' ')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Case Insights */}
+      {caseInsights.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Clinical Insights</h3>
+          </div>
+          <div className="p-6">
+            <div className="space-y-4">
+              {caseInsights.map((insight, index) => (
+                <div key={index} className={`p-4 rounded-lg border-l-4 ${
+                  insight.priority === 'high' ? 'bg-red-50 border-red-400' :
+                  insight.priority === 'medium' ? 'bg-amber-50 border-amber-400' :
+                  'bg-blue-50 border-blue-400'
+                }`}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-medium text-gray-900">{insight.client_name}</h4>
+                      <p className="text-sm text-gray-700 mt-1">{insight.insight}</p>
+                      <p className="text-xs text-gray-600 mt-2">{insight.recommendation}</p>
+                    </div>
+                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                      insight.priority === 'high' ? 'bg-red-100 text-red-800' :
+                      insight.priority === 'medium' ? 'bg-amber-100 text-amber-800' :
+                      'bg-blue-100 text-blue-800'
+                    }`}>
+                      {insight.priority} priority
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Actions */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
+        </div>
+        <div className="p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <button
+              onClick={() => goto('clienteles')}
+              className="flex items-center space-x-3 p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+            >
+              <Users className="w-6 h-6 text-blue-600" />
+              <div className="text-left">
+                <div className="font-medium text-gray-900">Manage Clients</div>
+                <div className="text-sm text-gray-600">View and add clients</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => goto('cases')}
+              className="flex items-center space-x-3 p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+            >
+              <FileText className="w-6 h-6 text-green-600" />
+              <div className="text-left">
+                <div className="font-medium text-gray-900">Case Management</div>
+                <div className="text-sm text-gray-600">Review active cases</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => navigate('/therapist/assessments')}
+              className="flex items-center space-x-3 p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+            >
+              <Brain className="w-6 h-6 text-purple-600" />
+              <div className="text-left">
+                <div className="font-medium text-gray-900">Assessments</div>
+                <div className="text-sm text-gray-600">Assign and review</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => goto('sessions')}
+              className="flex items-center space-x-3 p-4 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+            >
+              <Calendar className="w-6 h-6 text-indigo-600" />
+              <div className="text-left">
+                <div className="font-medium text-gray-900">Schedule Sessions</div>
+                <div className="text-sm text-gray-600">Manage appointments</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => goto('metrics')}
+              className="flex items-center space-x-3 p-4 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors"
+            >
+              <BarChart3 className="w-6 h-6 text-teal-600" />
+              <div className="text-left">
+                <div className="font-medium text-gray-900">Progress Metrics</div>
+                <div className="text-sm text-gray-600">Track outcomes</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => goto('resources')}
+              className="flex items-center space-x-3 p-4 bg-rose-50 rounded-lg hover:bg-rose-100 transition-colors"
+            >
+              <Library className="w-6 h-6 text-rose-600" />
+              <div className="text-left">
+                <div className="font-medium text-gray-900">Resource Library</div>
+                <div className="text-sm text-gray-600">Access materials</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Activity */}
+      {recentActivities.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
+          </div>
+          <div className="p-6">
+            <div className="space-y-4">
+              {recentActivities.map((activity) => (
+                <div key={activity.id} className="flex items-center space-x-4">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    activity.type === 'client' ? 'bg-blue-100' :
+                    activity.type === 'supervision' ? 'bg-purple-100' :
+                    'bg-gray-100'
+                  }`}>
+                    <Activity className={`w-5 h-5 ${
+                      activity.type === 'client' ? 'text-blue-600' :
+                      activity.type === 'supervision' ? 'text-purple-600' :
+                      'text-gray-600'
+                    }`} />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">{activity.title}</h4>
+                    <p className="text-sm text-gray-600">{activity.description}</p>
+                    <p className="text-xs text-gray-500">{activity.time}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading your dashboard...</p>
+          <p className="text-sm text-gray-500 mt-2">Preparing your workspace</p>
+        </div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading your dashboard...</p>
+        </div>
       </div>
     )
   }

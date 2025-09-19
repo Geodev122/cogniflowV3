@@ -37,7 +37,8 @@ export const ProtectedRoute: React.FC<Props> = ({
         <div className="min-h-screen grid place-items-center bg-gray-50">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-3" />
-            <p className="text-gray-600">Checking your session…</p>
+            <p className="text-gray-600">Checking your session...</p>
+            <p className="text-sm text-gray-500 mt-2">This should only take a moment</p>
           </div>
         </div>
       )
@@ -51,6 +52,9 @@ export const ProtectedRoute: React.FC<Props> = ({
         <div className="bg-white border border-gray-200 rounded-xl p-6 text-center max-w-md">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Connection error</h2>
           <p className="text-sm text-gray-600 mb-4">{error}</p>
+          <div className="text-xs text-gray-500 mb-4">
+            Please check your internet connection and try again.
+          </div>
           <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
@@ -73,7 +77,8 @@ export const ProtectedRoute: React.FC<Props> = ({
       <div className="min-h-screen grid place-items-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-3" />
-          <p className="text-gray-600">Loading your profile…</p>
+          <p className="text-gray-600">Loading your profile...</p>
+          <p className="text-sm text-gray-500 mt-2">Setting up your workspace</p>
         </div>
       </div>
     )

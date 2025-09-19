@@ -24,6 +24,12 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: true,
     flowType: 'pkce',
+    debug: import.meta.env.DEV, // Enable debug logging in development
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'thera-py-web',
+    },
   },
 })
 
