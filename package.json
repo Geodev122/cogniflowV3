@@ -9,6 +9,8 @@
     "build:analyze": "vite build --mode analyze",
     "preview": "vite preview",
     "lint": "eslint .",
+  "cypress:open": "cypress open",
+  "cypress:run": "cypress run",
     "migrate:archive": "powershell ./supabase/scripts/archive_old_migrations.ps1",
     "migrate:validate": "powershell ./supabase/scripts/validate_migrations.ps1",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",

@@ -23,6 +23,7 @@ type ClientRow = {
   created_at: string
   role: string
   patient_code: string | null
+  referral_source?: string | null
 }
 
 /* -------------------------------------------------------------------------- */
@@ -66,19 +67,33 @@ export const Clienteles: React.FC = () => {
   const [rows, setRows] = useState<ClientRow[]>([])
   const [myIds, setMyIds] = useState<Set<string>>(new Set())
   const [refreshKey, setRefreshKey] = useState(0)
+  const [assignedMap, setAssignedMap] = useState<Record<string,string>>({}) // clientId -> assignmentStatus
+  const [requestingMap, setRequestingMap] = useState<Record<string, boolean>>({})
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null)
+  // Auto-dismiss toast after a short delay
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3500)
+    return () => clearTimeout(t)
+  }, [toast])
 
   const searchDebounce = useRef<number | null>(null)
 
   const fetchMineIds = useCallback(async () => {
     if (!profile?.id) return setMyIds(new Set())
     try {
+      // Use assignments table: accepted assignments indicate assigned clients
       const { data, error: e } = await supabase
-        .from('therapist_client_relations')
-        .select('client_id')
+        .from('assignments')
+        .select('client_id, status')
         .eq('therapist_id', profile.id)
 
       if (e) throw e
-      setMyIds(new Set((data || []).map(d => d.client_id)))
+      const ids = new Set<string>()
+      const map: Record<string,string> = {}
+      (data || []).forEach((r: any) => { ids.add(r.client_id); map[r.client_id] = r.status })
+      setMyIds(ids)
+      setAssignedMap(map)
     } catch (e) {
       console.warn('[Clienteles] relations error', e)
       setMyIds(new Set())
@@ -89,38 +104,24 @@ export const Clienteles: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
-      let query = supabase
-        .from('profiles')
-        .select('id, first_name, last_name, email, phone, whatsapp_number, city, country, created_at, role, patient_code')
-        .eq('role', 'client') as any
+      // Use RPC to fetch public client info (public.get_clients_public)
+      let rpc = supabase.rpc('get_clients_public') as any
 
-      if (scope === 'mine') {
-        const ids = Array.from(myIds)
-        if (ids.length === 0) {
-          setRows([])
-          setLoading(false)
-          return
-        }
-        query = query.in('id', ids)
-      }
-
+      // Client-side filtering/search for public fields
       if (q.trim().length > 0) {
-        const like = `%${q.trim()}%`
-        query = query.or(
-          [
-            `first_name.ilike.${like}`,
-            `last_name.ilike.${like}`,
-            `email.ilike.${like}`,
-            `city.ilike.${like}`
-          ].join(',')
-        )
+        // fetch all and filter in-memory (small set expected) — or enhance RPC to accept search
+        const { data, error: e } = await rpc
+        if (e) throw e
+        const like = q.trim().toLowerCase()
+        const filtered = (data || []).filter((r: any) => {
+          return (r.initials || '').toLowerCase().includes(like) || (r.referral_source || '').toLowerCase().includes(like) || (r.city || '').toLowerCase().includes(like)
+        })
+        setRows(filtered as ClientRow[])
+      } else {
+        const { data, error: e } = await rpc
+        if (e) throw e
+        setRows((data || []) as ClientRow[])
       }
-
-      query = query.order('created_at', { ascending: false }).limit(200)
-
-      const { data, error: e } = await query
-      if (e) throw e
-      setRows((data || []) as ClientRow[])
     } catch (e: any) {
       console.error('[Clienteles] fetchRows', e)
       setError('Could not load clients.')
@@ -166,6 +167,53 @@ export const Clienteles: React.FC = () => {
   const assignAssessment = (r: ClientRow) => navigate(`/therapist/assessments?clientId=${encodeURIComponent(r.id)}`)
   const messageClient = (r: ClientRow) => navigate(`/therapist/comms?clientId=${encodeURIComponent(r.id)}`)
   const isMine = (id: string) => myIds.has(id)
+  const getAssignmentStatus = (id: string) => assignedMap[id] || null
+
+  const requestAssignment = async (clientId: string) => {
+    if (!profile?.id) {
+      setToast({ type: 'error', message: 'Not signed in' })
+      return
+    }
+    setRequestingMap(m => ({ ...m, [clientId]: true }))
+    try {
+      const { error } = await supabase.from('assignments').insert({ therapist_id: profile.id, client_id: clientId })
+      if (error) throw error
+      setAssignedMap(m => ({ ...m, [clientId]: 'pending' }))
+      setToast({ type: 'success', message: 'Assignment request sent.' })
+    } catch (err: any) {
+      console.error('[Clienteles] requestAssignment', err)
+      setToast({ type: 'error', message: err?.message || 'Failed to request assignment' })
+    } finally {
+      setRequestingMap(m => ({ ...m, [clientId]: false }))
+    }
+  }
+
+  const createCaseForClient = async (clientId: string) => {
+    if (!profile?.id) {
+      setToast({ type: 'error', message: 'Not authenticated' })
+      return
+    }
+    try {
+      const { data, error } = await supabase.rpc('create_case_for_client', { p_client_id: clientId, p_case_number: null, p_initial_payload: {} })
+      if (error) throw error
+      // rpc returns the new uuid — handle scalar or array
+      const newCaseId = Array.isArray(data) ? (data[0] as any) : (data as any)
+      setToast({ type: 'success', message: 'Case created' })
+      if (newCaseId) {
+        navigate(`/therapist/cases/${encodeURIComponent(String(newCaseId))}`)
+      } else {
+        // fallback to listing for the client
+        navigate(`/therapist/cases?clientId=${encodeURIComponent(clientId)}`)
+      }
+    } catch (err: any) {
+      console.error('[Clienteles] createCaseForClient', err)
+      if (String(err?.message || '').includes('assignment_not_accepted')) {
+        setToast({ type: 'error', message: 'Assignment not accepted — cannot create case.' })
+      } else {
+        setToast({ type: 'error', message: err?.message || 'Could not create case' })
+      }
+    }
+  }
 
   /* ----------------------------- Create Modal ----------------------------- */
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -174,6 +222,7 @@ export const Clienteles: React.FC = () => {
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [referralSource, setReferralSource] = useState('')
 
   const resetCreateForm = () => {
     setFirstName(''); setLastName(''); setEmail(''); setPhone('')
@@ -246,6 +295,18 @@ export const Clienteles: React.FC = () => {
 
       const targetId = existingProfileId || newUserId
       if (!targetId) throw new Error('Could not resolve client id.')
+
+      // Create a client record in the new `clients` table and keep profiles as lightweight
+      const { error: clientErr } = await supabase.from('clients').upsert({
+        id: targetId,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        email: email.toLowerCase(),
+        whatsapp_number: cleanPhone,
+        referral_source: referralSource || null,
+        created_at: new Date().toISOString()
+      }, { onConflict: 'id' })
+      if (clientErr) throw clientErr
 
       const { error: upsertErr } = await supabase.from('profiles').upsert({
         id: targetId,
@@ -369,7 +430,7 @@ export const Clienteles: React.FC = () => {
                   const mine = isMine(r.id)
                   const name = fullName(r)
                   return (
-                    <li key={r.id} className="p-4 space-y-2">
+                    <li key={r.id} data-test-client-row className="p-4 space-y-2">
                       <div className="flex items-center gap-3">
                         <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold flex-shrink-0">
                           {toInitials(r.first_name, r.last_name)}
@@ -441,6 +502,27 @@ export const Clienteles: React.FC = () => {
                         >
                           Email Intake
                         </button>
+
+                        {/* Assignment/Create Case */}
+                        {isMine(r.id) || getAssignmentStatus(r.id) === 'accepted' ? (
+                          <button
+                            onClick={() => createCaseForClient(r.id)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs"
+                          >
+                            Create Case
+                          </button>
+                        ) : getAssignmentStatus(r.id) === 'pending' ? (
+                          <button className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-300 text-gray-700 rounded text-xs" disabled>Request Pending</button>
+                        ) : (
+                          <button
+                            data-test-request-btn
+                            onClick={() => requestAssignment(r.id)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-500 text-white rounded hover:bg-amber-600 text-xs"
+                            disabled={!!requestingMap[r.id]}
+                          >
+                            {requestingMap[r.id] ? 'Sending...' : 'Request Assignment'}
+                          </button>
+                        )}
                       </div>
                     </li>
                   )
@@ -537,6 +619,29 @@ export const Clienteles: React.FC = () => {
                                 <span className="hidden 2xl:inline">Email Intake</span>
                                 <span className="inline 2xl:hidden">Mail</span>
                               </button>
+
+                              {/* Assignment/Create Case */}
+                              {isMine(r.id) || getAssignmentStatus(r.id) === 'accepted' ? (
+                                <button
+                                  onClick={() => createCaseForClient(r.id)}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  <span className="hidden xl:inline">Create Case</span>
+                                </button>
+                              ) : getAssignmentStatus(r.id) === 'pending' ? (
+                                <button className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-300 text-gray-700 rounded" disabled>Request Pending</button>
+                              ) : (
+                                <button
+                                  data-test-request-btn
+                                  onClick={() => requestAssignment(r.id)}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-500 text-white rounded hover:bg-amber-600"
+                                  disabled={!!requestingMap[r.id]}
+                                >
+                                  <ShieldCheck className="w-4 h-4" />
+                                  <span className="hidden xl:inline">{requestingMap[r.id] ? 'Sending...' : 'Request Assignment'}</span>
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -619,6 +724,14 @@ export const Clienteles: React.FC = () => {
                       />
                       <p className="mt-1 text-[11px] text-gray-500">Use international format if possible (e.g., +15551234567).</p>
                     </div>
+                    <div>
+                      <label htmlFor="referralSource" className="block text-sm font-medium text-gray-700">Referral Source</label>
+                      <input
+                        id="referralSource" type="text" placeholder="e.g. clinic, self, online"
+                        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                        value={referralSource} onChange={e => setReferralSource(e.target.value)}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -639,6 +752,17 @@ export const Clienteles: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed right-4 bottom-6 z-50 max-w-sm w-[90vw] sm:w-auto`}> 
+          <div className={`px-4 py-3 rounded shadow-lg text-sm ${toast.type === 'success' ? 'bg-green-600 text-white' : toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-800 text-white'}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div className="truncate">{toast.message}</div>
+              <button onClick={() => setToast(null)} className="ml-2 opacity-80 hover:opacity-100">Dismiss</button>
             </div>
           </div>
         </div>
