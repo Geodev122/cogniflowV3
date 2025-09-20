@@ -14,11 +14,25 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
+ * Defensive safeFetch wrapper for browser client: strip role-like headers
+ */
+const safeFetch = (input: RequestInfo, init?: RequestInit) => {
+  const nextInit: RequestInit = { ...(init || {}) }
+  const headers = new Headers(nextInit.headers as HeadersInit)
+  headers.delete('role')
+  headers.delete('Role')
+  headers.delete('x-postgrest-role')
+  nextInit.headers = headers
+  return fetch(input, nextInit)
+}
+
+/**
  * Singleton Supabase browser client.
  * - PKCE flow for SPA
  * - Persist session in storage, auto-refresh enabled
  */
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  fetch: safeFetch,
   auth: {
     autoRefreshToken: true,
     persistSession: true,
