@@ -14,6 +14,7 @@ type Tab = {
 
 const TABS: Tab[] = [
   { id: 'home',        name: 'Home',        path: '/client',               icon: Home },
+  { id: 'overview',    name: 'Overview',    path: '/client',               icon: Home },
   { id: 'assessments', name: 'Assess',      path: '/client/assessments',   icon: ClipboardList },
   { id: 'appointments',name: 'Schedule',    path: '/client/appointments',  icon: Calendar },
   { id: 'resources',   name: 'Learn',       path: '/client/resources',     icon: BookOpen },
@@ -27,7 +28,7 @@ export const MobileShell: React.FC<{ title?: string; children: React.ReactNode }
 
   const active = React.useMemo(() => {
     const found = TABS.find(t => location.pathname === t.path || location.pathname.startsWith(t.path + '/'))
-    return found?.id ?? 'home'
+    return found?.id ?? 'overview'
   }, [location.pathname])
 
   return (
@@ -56,8 +57,11 @@ export const MobileShell: React.FC<{ title?: string; children: React.ReactNode }
 
       {/* Bottom nav */}
       <nav className="sticky bottom-0 z-20 bg-white border-t border-gray-200">
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-4">
           {TABS.map(t => {
+            // Skip duplicate home/overview - only show one
+            if (t.id === 'home') return null
+            
             const Icon = t.icon
             const isActive = active === t.id
             return (
@@ -71,7 +75,7 @@ export const MobileShell: React.FC<{ title?: string; children: React.ReactNode }
                 <span className="text-[11px] mt-0.5">{t.name}</span>
               </button>
             )
-          })}
+          }).filter(Boolean)}
         </div>
       </nav>
     </div>

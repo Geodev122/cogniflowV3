@@ -105,22 +105,52 @@ export const Clienteles: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
-      // Use RPC to fetch public client info (public.get_clients_public)
-      let rpc = supabase.rpc('get_clients_public') as any
+      let data: any[] = []
+      let error: any = null
 
-      // fetch all public rows and then normalize to ClientRow shape
-      const { data, error: e } = await rpc
+      if (scope === 'mine' && profile?.id) {
+        // Fetch my clients through relations
+        const { data: relations, error: relErr } = await supabase
+          .from('therapist_client_relations')
+          .select(`
+            client_id,
+            client:profiles!therapist_client_relations_client_id_fkey(
+              id, first_name, last_name, email, phone, whatsapp_number,
+              city, country, created_at, role, patient_code
+            )
+          `)
+          .eq('therapist_id', profile.id)
+
+        if (relErr) throw relErr
+        data = (relations || []).map((r: any) => r.client).filter(Boolean)
+      } else {
+        // Try RPC first, fallback to direct query
+        try {
+          const { data: rpcData, error: rpcErr } = await supabase.rpc('get_clients_public')
+          if (rpcErr) throw rpcErr
+          data = rpcData || []
+        } catch (rpcError) {
+          console.warn('[Clienteles] RPC failed, trying direct query:', rpcError)
+          // Fallback to direct profiles query for public client info
+          const { data: profilesData, error: profilesErr } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, email, phone, whatsapp_number, city, country, created_at, role, patient_code')
+            .eq('role', 'client')
+            .order('created_at', { ascending: false })
+          
+          if (profilesErr) throw profilesErr
+          data = profilesData || []
+        }
+      }
+
       if (e) throw e
       const raw: any[] = (data || [])
 
       const normalized: ClientRow[] = raw.map(r => {
-        // the RPC may return initials or partial fields; map them into the ClientRow contract
-        const first = r.first_name || (r.initials ? r.initials.split('').slice(0,1).join('') : null)
-        const last = r.last_name || (r.initials ? r.initials.split('').slice(1).join('') : null)
         return {
           id: r.id,
-          first_name: first,
-          last_name: last,
+          first_name: r.first_name,
+          last_name: r.last_name,
           email: r.email || null,
           phone: r.phone || null,
           whatsapp_number: r.whatsapp_number || r.phone || null,
@@ -137,19 +167,17 @@ export const Clienteles: React.FC = () => {
       if (q.trim().length > 0) {
         const like = q.trim().toLowerCase()
         const filtered = normalized.filter(r => {
-          return (toInitials(r.first_name, r.last_name) || '').toLowerCase().includes(like)
+          const name = `${r.first_name || ''} ${r.last_name || ''}`.trim().toLowerCase()
+          const initials = toInitials(r.first_name, r.last_name).toLowerCase()
+          return name.includes(like)
+            || initials.includes(like)
+            || (r.email || '').toLowerCase().includes(like)
             || (r.referral_source || '').toLowerCase().includes(like)
             || (r.city || '').toLowerCase().includes(like)
         })
         setRows(filtered)
       } else {
-        // apply scope: if scope === 'mine' only show myIds
-        if (scope === 'mine') {
-          const filtered = normalized.filter(r => myIds.has(r.id))
-          setRows(filtered)
-        } else {
-          setRows(normalized)
-        }
+        setRows(normalized)
       }
     }
     catch (e: any) {
@@ -159,7 +187,7 @@ export const Clienteles: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }, [scope, q, myIds])
+  }, [scope, q, myIds, profile?.id])
 
   // Initial + manual refresh
   useEffect(() => { fetchMineIds() }, [fetchMineIds, refreshKey])
