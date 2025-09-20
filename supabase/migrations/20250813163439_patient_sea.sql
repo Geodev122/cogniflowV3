@@ -312,28 +312,9 @@ INSERT INTO profiles (
 (
   '11111111-1111-1111-1111-111111111111',
   'client',
-  'John',
-  'Smith',
-  'john.smith@example.com',
-  'PT123457',
-  '+1 (555) 234-5678',
-  'f7cb820b-f73e-4bfe-9571-261c7eef79e0',
-  true,
-  NOW() - INTERVAL '30 days'
-),
-(
-  '22222222-2222-2222-2222-222222222222',
-  'client',
-  'Emily',
-  'Davis',
-  'emily.davis@example.com',
-  'PT789012',
-  '+1 (555) 345-6789',
-  'f7cb820b-f73e-4bfe-9571-261c7eef79e0',
-  true,
-  NOW() - INTERVAL '45 days'
-) ON CONFLICT (id) DO UPDATE SET
-  created_by_therapist = EXCLUDED.created_by_therapist,
+  /* Archived: original content moved to supabase/migrations/archived/20250813163439_patient_sea.sql */
+
+  -- File archived on 2025-09-20. See archived copy for full content.
   patient_code = EXCLUDED.patient_code,
   whatsapp_number = EXCLUDED.whatsapp_number;
 

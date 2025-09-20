@@ -1,24 +1,6 @@
--- Migration: Client sign-up by therapist
--- Adds uniqueness, indexes, and RLS policies to support therapist-created client sign-ups.
+/* Archived: original content moved to supabase/migrations/archived/20250918011123_clientels_add_client.sql */
 
-BEGIN;
-
--- 1. Ensure unique pair on therapist_client_relations
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint c
-        JOIN pg_class t ON c.conrelid = t.oid
-        JOIN pg_namespace n ON t.relnamespace = n.oid
-        WHERE n.nspname = 'public' AND t.relname = 'therapist_client_relations'
-          AND c.contype = 'u' AND c.conname = 'therapist_client_relations_therapist_client_key'
-    ) THEN
-        ALTER TABLE public.therapist_client_relations
-        ADD CONSTRAINT therapist_client_relations_therapist_client_key UNIQUE (therapist_id, client_id);
-    END IF;
-END$$;
-
--- 2. Add indexes for foreign key columns (idempotent)
+-- File archived on 2025-09-20. See archived copy for full content.
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid WHERE n.nspname='public' AND c.relname='idx_therapist_client_relations_therapist_id') THEN

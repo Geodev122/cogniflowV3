@@ -9,6 +9,8 @@
     "build:analyze": "vite build --mode analyze",
     "preview": "vite preview",
     "lint": "eslint .",
+    "migrate:archive": "powershell ./supabase/scripts/archive_old_migrations.ps1",
+    "migrate:validate": "powershell ./supabase/scripts/validate_migrations.ps1",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "clean": "rm -rf dist node_modules/.vite",
     "reinstall": "npm run clean && npm install"

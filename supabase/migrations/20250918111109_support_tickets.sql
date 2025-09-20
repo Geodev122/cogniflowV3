@@ -1,44 +1,6 @@
--- db/support_tickets.sql
--- Support / Tickets module (new)
--- Idempotent and wired to existing profiles table, with safe fallbacks.
-BEGIN;
+/* Archived: original content moved to supabase/migrations/archived/20250918111109_support_tickets.sql */
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;  -- gen_random_uuid()
-
--- ---------------------------------------------------------------------
--- Reference tables
--- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.support_ticket_categories (
-  key         TEXT PRIMARY KEY,                 -- e.g. 'billing'
-  name        TEXT NOT NULL,
-  description TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS public.support_ticket_tags (
-  key        TEXT PRIMARY KEY,                  -- e.g. 'phq9'
-  label      TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- ---------------------------------------------------------------------
--- Tickets
--- ---------------------------------------------------------------------
-CREATE SEQUENCE IF NOT EXISTS public.support_ticket_seq;
-
-CREATE TABLE IF NOT EXISTS public.support_tickets (
-  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  ticket_number    TEXT UNIQUE,                 -- SUP-YYYY-#####
-  requester_id     UUID NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
-  assignee_id      UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-  category_key     TEXT REFERENCES public.support_ticket_categories(key) ON DELETE SET NULL,
-  status           TEXT NOT NULL DEFAULT 'open'
-                     CHECK (status IN ('open','pending','resolved','closed')),
-  priority         TEXT NOT NULL DEFAULT 'medium'
-                     CHECK (priority IN ('low','medium','high','urgent')),
-  subject          TEXT NOT NULL,
-  description      TEXT NOT NULL,
+-- File archived on 2025-09-20. See archived copy for full content.
   metadata         JSONB NOT NULL DEFAULT '{}'::jsonb,
   last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   closed_at        TIMESTAMPTZ,

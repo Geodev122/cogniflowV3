@@ -41,10 +41,6 @@ BEGIN
     WHERE p.id = user_id;
   ELSE
     -- Return empty result if no access
-    RETURN;
-  END IF;
-END;
-$$;
+    /* Archived: original content moved to supabase/migrations/archived/20250806161906_quiet_shore.sql */
 
--- Grant execute permission to authenticated users
-GRANT EXECUTE ON FUNCTION get_user_profile_safe(uuid) TO authenticated;
+    -- File archived on 2025-09-20. See archived copy for full content.

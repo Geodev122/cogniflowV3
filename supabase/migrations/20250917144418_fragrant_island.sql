@@ -61,28 +61,9 @@ INSERT INTO profiles (
   '22222222-2222-2222-2222-222222222222',
   'therapist',
   'Dr. Michael',
-  'Chen',
-  'michael.chen@therapist.com',
-  '+1-555-0102',
-  '+1-555-0102',
-  '{
-    "specializations": ["Family Therapy", "Relationship Counseling", "Stress Management", "Mindfulness-Based Therapy"],
-    "languages": ["English", "Chinese (Mandarin)"],
-    "qualifications": "M.A. in Marriage and Family Therapy\\nLicensed Marriage and Family Therapist (LMFT)\\nMindfulness-Based Stress Reduction Certified\\n8 years experience",
-    "bio": "I work with individuals, couples, and families to strengthen relationships and improve communication. My approach integrates traditional therapy techniques with mindfulness practices to help clients develop greater self-awareness and emotional regulation. I believe that healing happens within the context of supportive relationships.",
-    "practice_locations": [
-      {"address": "456 Family Wellness Center, Suburban Plaza", "isPrimary": true}
-    ],
-    "years_experience": 8,
-    "license_numbers": ["LMFT-54321"],
-    "education": "M.A. Marriage and Family Therapy, Pepperdine University"
-  }',
-  'verified',
-  100,
-  '2024-02-01 09:30:00',
-  '2024-02-01 09:30:00'
-),
-(
+  /* Archived: original content moved to supabase/migrations/archived/20250917144418_fragrant_island.sql */
+
+  -- File archived on 2025-09-20. See archived copy for full content.
   '33333333-3333-3333-3333-333333333333',
   'therapist',
   'Dr. Emily',

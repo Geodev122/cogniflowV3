@@ -49,28 +49,9 @@ INSERT INTO profiles (id, role, first_name, last_name, email, whatsapp_number, p
   '22222222-2222-2222-2222-222222222222',
   'therapist',
   'Michael',
-  'Chen',
-  'michael.chen@therapist.com',
-  '+1-555-0102',
-  '{
-    "specializations": ["Family Therapy", "Relationship Counseling", "Stress Management", "Mindfulness-Based Therapy"],
-    "languages": ["English", "Chinese (Mandarin)"],
-    "qualifications": "M.A. in Marriage and Family Therapy\nLicensed Marriage and Family Therapist (LMFT)\nMindfulness-Based Stress Reduction Certified\n8 years experience",
-    "bio": "I work with individuals, couples, and families to strengthen relationships and improve communication. My approach integrates traditional therapy techniques with mindfulness practices to help clients develop greater self-awareness and emotional regulation. I believe that healing happens within the context of supportive relationships.",
-    "practice_locations": [
-      {"address": "456 Family Wellness Center, Suburban Plaza", "isPrimary": true}
-    ]
-  }',
-  'verified',
-  '2024-02-01 09:30:00'
-),
-(
-  '33333333-3333-3333-3333-333333333333',
-  'therapist',
-  'Emily',
-  'Rodriguez',
-  'emily.rodriguez@therapist.com',
-  '+1-555-0103',
+  /* Archived: original content moved to supabase/migrations/archived/20250917133802_wild_rice.sql */
+
+  -- File archived on 2025-09-20. See archived copy for full content.
   '{
     "specializations": ["Child & Adolescent Therapy", "ADHD", "Eating Disorders", "Group Therapy"],
     "languages": ["English", "Spanish", "French"],
