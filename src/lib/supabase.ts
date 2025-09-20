@@ -19,9 +19,26 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const safeFetch = (input: RequestInfo, init?: RequestInit) => {
   const nextInit: RequestInit = { ...(init || {}) }
   const headers = new Headers(nextInit.headers as HeadersInit)
-  headers.delete('role')
-  headers.delete('Role')
-  headers.delete('x-postgrest-role')
+
+  // Aggressively remove any role-like headers injected by extensions/proxies
+  // that could cause PostgREST to attempt SET ROLE '<role>' and fail when
+  // that DB role does not exist (common in preview/proxy environments).
+  // Remove common variants and any header that looks like a PostgREST role header.
+  const toDelete: string[] = []
+  headers.forEach((v, k) => {
+    const lk = k.toLowerCase()
+    if (lk === 'role' || lk === 'x-postgrest-role' || lk.includes('postgrest-role')) {
+      toDelete.push(k)
+    }
+  })
+  toDelete.forEach(h => headers.delete(h))
+
+  // Set a conservative default PostgREST role for browser requests. This prevents
+  // PostgREST from trying to SET ROLE to custom DB roles (like 'therapist') that
+  // may not exist in the target environment. If you have an edge/proxy that
+  // must forward a role, handle it server-side where you control roles.
+  headers.set('x-postgrest-role', 'authenticated')
+
   nextInit.headers = headers
   return fetch(input, nextInit)
 }
@@ -43,6 +60,10 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   global: {
     headers: {
       'X-Client-Info': 'thera-py-web',
+      // Default PostgREST role for client requests. This avoids PostgREST trying
+      // to set a DB role like 'therapist' which might not exist in some envs
+      // and would cause errors like "role \"therapist\" does not exist".
+      'x-postgrest-role': 'authenticated'
     },
   },
 })
