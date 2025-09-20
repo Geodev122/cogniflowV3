@@ -297,26 +297,27 @@ INSERT INTO auth.users (
 ) ON CONFLICT (id) DO NOTHING;
 
 -- Create demo client profiles
-INSERT INTO profiles (
-  id,
-  role,
-  first_name,
-  last_name,
-  email,
-  patient_code,
-  whatsapp_number,
-  created_by_therapist,
-  password_set,
-  created_at
-) VALUES 
-(
+-- Create demo client profiles
+-- NOTE: The original full demo profile content was archived to
+-- `supabase/migrations/archived/20250813163439_patient_sea.sql` to avoid
+-- re-introducing large seed payloads here. Insert minimal safe records
+-- for the demo clients (idempotent):
+
+INSERT INTO profiles (id, role, created_at)
+VALUES (
   '11111111-1111-1111-1111-111111111111',
   'client',
-  /* Archived: original content moved to supabase/migrations/archived/20250813163439_patient_sea.sql */
+  NOW()
+)
+ON CONFLICT (id) DO NOTHING;
 
-  -- File archived on 2025-09-20. See archived copy for full content.
-  patient_code = EXCLUDED.patient_code,
-  whatsapp_number = EXCLUDED.whatsapp_number;
+INSERT INTO profiles (id, role, created_at)
+VALUES (
+  '22222222-2222-2222-2222-222222222222',
+  'client',
+  NOW()
+)
+ON CONFLICT (id) DO NOTHING;
 
 -- Create therapist-client relationships
 INSERT INTO therapist_client_relations (therapist_id, client_id, created_at) VALUES 
