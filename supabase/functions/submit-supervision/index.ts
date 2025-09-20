@@ -27,11 +27,39 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Defensive: inspect and log incoming headers to detect any Role-like headers
   try {
-    // Initialize Supabase client
+    const incomingHeaders: Record<string,string> = {}
+    for (const [k,v] of req.headers.entries()) incomingHeaders[k] = v
+    console.info('submit-supervision incoming headers:', incomingHeaders)
+    if (incomingHeaders['role'] || incomingHeaders['x-postgrest-role']) {
+      console.warn('Detected role-like header in submit-supervision; stripping for safety', {
+        role: incomingHeaders['role'] ?? null,
+        x_postgrest_role: incomingHeaders['x-postgrest-role'] ?? null
+      })
+    }
+  } catch (e) {
+    console.warn('Failed to read headers in submit-supervision debug:', e)
+  }
+
+  try {
+    // Safe fetch wrapper: strip role-like headers from outgoing requests to PostgREST
+    const safeFetch = (input: RequestInfo, init?: RequestInit) => {
+      const nextInit: RequestInit = { ...(init || {}) }
+      const headers = new Headers(nextInit.headers as HeadersInit)
+      headers.delete('role')
+      headers.delete('Role')
+      headers.delete('x-postgrest-role')
+      nextInit.headers = headers
+      return fetch(input, nextInit)
+    }
+
+    // Initialize Supabase client (use service role key) and ensure outgoing requests
+    // do not contain any role-like headers that PostgREST would treat as SET ROLE.
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { fetch: safeFetch }
     )
 
     // Get user from auth header
