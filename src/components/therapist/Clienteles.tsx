@@ -82,16 +82,17 @@ export const Clienteles: React.FC = () => {
   const fetchMineIds = useCallback(async () => {
     if (!profile?.id) return setMyIds(new Set())
     try {
-      // Use assignments table: accepted assignments indicate assigned clients
-      const { data, error: e } = await supabase
-        .from('assignments')
-        .select('client_id, status')
-        .eq('therapist_id', profile.id)
+      // include therapist_client_relations as a source of 'my clients' as well
+      const [{ data: aData, error: aErr }, { data: rData, error: rErr }] = await Promise.all([
+        supabase.from('assignments').select('client_id, status').eq('therapist_id', profile.id),
+        supabase.from('therapist_client_relations').select('client_id').eq('therapist_id', profile.id)
+      ])
 
-      if (e) throw e
+      if (aErr && rErr) throw (aErr || rErr)
       const ids = new Set<string>()
       const map: Record<string,string> = {}
-      (data || []).forEach((r: any) => { ids.add(r.client_id); map[r.client_id] = r.status })
+      ;(aData || []).forEach((r: any) => { ids.add(r.client_id); map[r.client_id] = r.status })
+      ;(rData || []).forEach((rr: any) => { if (rr.client_id) ids.add(rr.client_id) })
       setMyIds(ids)
       setAssignedMap(map)
     } catch (e) {
@@ -107,22 +108,51 @@ export const Clienteles: React.FC = () => {
       // Use RPC to fetch public client info (public.get_clients_public)
       let rpc = supabase.rpc('get_clients_public') as any
 
-      // Client-side filtering/search for public fields
+      // fetch all public rows and then normalize to ClientRow shape
+      const { data, error: e } = await rpc
+      if (e) throw e
+      const raw: any[] = (data || [])
+
+      const normalized: ClientRow[] = raw.map(r => {
+        // the RPC may return initials or partial fields; map them into the ClientRow contract
+        const first = r.first_name || (r.initials ? r.initials.split('').slice(0,1).join('') : null)
+        const last = r.last_name || (r.initials ? r.initials.split('').slice(1).join('') : null)
+        return {
+          id: r.id,
+          first_name: first,
+          last_name: last,
+          email: r.email || null,
+          phone: r.phone || null,
+          whatsapp_number: r.whatsapp_number || r.phone || null,
+          city: r.city || null,
+          country: r.country || null,
+          created_at: r.created_at || new Date().toISOString(),
+          role: r.role || 'client',
+          patient_code: r.patient_code || null,
+          referral_source: r.referral_source || null
+        }
+      })
+
+      // client-side filtering/search for public fields
       if (q.trim().length > 0) {
-        // fetch all and filter in-memory (small set expected) — or enhance RPC to accept search
-        const { data, error: e } = await rpc
-        if (e) throw e
         const like = q.trim().toLowerCase()
-        const filtered = (data || []).filter((r: any) => {
-          return (r.initials || '').toLowerCase().includes(like) || (r.referral_source || '').toLowerCase().includes(like) || (r.city || '').toLowerCase().includes(like)
+        const filtered = normalized.filter(r => {
+          return (toInitials(r.first_name, r.last_name) || '').toLowerCase().includes(like)
+            || (r.referral_source || '').toLowerCase().includes(like)
+            || (r.city || '').toLowerCase().includes(like)
         })
-        setRows(filtered as ClientRow[])
+        setRows(filtered)
       } else {
-        const { data, error: e } = await rpc
-        if (e) throw e
-        setRows((data || []) as ClientRow[])
+        // apply scope: if scope === 'mine' only show myIds
+        if (scope === 'mine') {
+          const filtered = normalized.filter(r => myIds.has(r.id))
+          setRows(filtered)
+        } else {
+          setRows(normalized)
+        }
       }
-    } catch (e: any) {
+    }
+    catch (e: any) {
       console.error('[Clienteles] fetchRows', e)
       setError('Could not load clients.')
       setRows([])
