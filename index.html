@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!-- Viewport & safe areas for modern phones -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- App identity -->
+    <title>Thera-PY - CBT Practice Management Application</title>
+    <meta name="description" content="Thera-PY helps therapists and patients manage CBT practice: assessments, sessions, progress, and secure communication." />
+
+    <!-- PWA basics -->
+    <meta name="theme-color" content="#0ea5e9" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Favicon / icons (ensure these exist in /public) -->
+    <link rel="icon" type="image/png" href="/thera-py-icon.png" />
+    <!-- Recommended: maskable + regular icons for Android -->
+    <link rel="icon" href="/icons/icon-192.png" sizes="192x192" />
+    <link rel="icon" href="/icons/icon-512.png" sizes="512x512" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" sizes="180x180" />
+
+    <!-- iOS standalone / status bar styling -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Thera-PY" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Social (optional but nice) -->
+    <meta property="og:title" content="Thera-PY" />
+    <meta property="og:description" content="CBT practice management for therapists and patients." />
+    <meta property="og:type" content="website" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Prevent flashing on install prompts / standalone -->
+    <style>
+      html, body, #root { height: 100%; }
+      body { margin: 0; background: #f8fafc; }
+    </style>
+  </head>
+  <body>
+    <noscript>Thera-PY requires JavaScript to run.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

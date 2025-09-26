@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------- Base: global look & feel ---------- */
+@layer base {
+  html, body, #root {
+    height: 100%;
+    background-color: theme('colors.neutral.50'); /* soft app bg */
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: theme('colors.neutral.900');
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  /* Force light inputs everywhere (fixes black fields) */
+  input, select, textarea {
+    @apply bg-white text-neutral-900;
+  }
+
+  /* Calmer, consistent focus ring */
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary-300 ring-offset-2 ring-offset-white;
+  }
+}
+
+/* ---------- Components: tokens you can reuse ---------- */
+@layer components {
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium
+           transition-colors active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-primary-500 text-white hover:bg-primary-600;
+  }
+  .btn-accent {
+    @apply btn bg-accent-500 text-white hover:bg-indigo-600;
+  }
+  .btn-ghost {
+    @apply btn border border-neutral-200 bg-white text-neutral-800 hover:bg-neutral-100;
+  }
+  .btn-danger {
+    @apply btn bg-rose-500 text-white hover:bg-rose-600;
+  }
+
+  /* Cards & inputs */
+  .card {
+    @apply bg-white border border-neutral-200 rounded-2xl shadow-soft;
+  }
+  .input {
+    @apply w-full bg-white text-neutral-900 placeholder-neutral-400 border border-neutral-200 rounded-xl px-3 py-2
+           focus:ring-2 focus:ring-primary-200 focus:border-primary-400;
+  }
+
+  .section-title {
+    @apply text-sm font-medium text-neutral-900;
+  }
+
+  /* ---------- Logo styles (cleaned & consolidated) ---------- */
+  .logo-text {
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  /* Use this for text-based logo */
+  .logo-name-text {
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #1f2937; /* neutral-800 */
+  }
+
+  /* Use this for the image asset height */
+  .logo-name-img {
+    height: 1.5rem;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.10));
+  }
+
+  .logo-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .logo-image {
+    width: 2.5rem;
+    height: 2.5rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.10));
+  }
+
+  .logo-image-large {
+    width: 5rem;
+    height: 5rem;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+  }
+
+  .logo-image-medium {
+    width: 4rem;
+    height: 4rem;
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.12));
+  }
+
+  .logo-name-large {
+    height: 3rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+  }
+
+  .logo-name-medium {
+    height: 2.5rem;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.12));
+  }
+
+  .logo-text-large { font-size: 1.875rem; line-height: 1.2; }
+  .logo-text-medium { font-size: 1.5rem; line-height: 1.2; }
+  .logo-text-small { font-size: 1.25rem; line-height: 1.2; }
+}
+
+/* ---------- Utility tweaks ---------- */
+/* If anything used `backdrop-blur-md`, make it gentler */
+.blur-md, .backdrop-blur-md {
+  --tw-backdrop-blur: blur(6px);
+}

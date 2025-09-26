@@ -1,0 +1,1 @@
+export { ProtectedRoute as default, ProtectedRoute } from './therapist/ProtectedRoute'
