@@ -24,11 +24,11 @@ export const useAuth = () => {
 
   const buildFallbackProfile = (u: User): Profile => ({
     id: u.id,
-    // Prefer role present in user_metadata (JWT custom claim) if available
-    role: (u.user_metadata?.role || (u.user_metadata && (u.user_metadata as any).role) || 'Client') as AppRole,
-    first_name: u.user_metadata?.first_name || 'User',
-    last_name: u.user_metadata?.last_name || '',
-    email: u.email || '',
+    // Prefer role present in user_metadata (JWT custom claim) if available (case-insensitive)
+    role: ((u.user_metadata && ((u.user_metadata as any).role || (u.user_metadata as any).user_role)) || 'Client') as AppRole,
+    first_name: (u.user_metadata && ((u.user_metadata as any).first_name || (u.user_metadata as any).given_name)) || 'User',
+    last_name: (u.user_metadata && ((u.user_metadata as any).last_name || (u.user_metadata as any).family_name)) || '',
+    email: u.email || (u.user_metadata && (u.user_metadata as any).email) || '',
     whatsapp_number: null,
     professional_details: null,
     verification_status: null,
@@ -50,14 +50,16 @@ export const useAuth = () => {
       }
 
       if (data) {
-        // normalize DB shape to expected Profile
+        // normalize DB shape to expected Profile (tolerant to differing column names)
         const p = data as any
+        const roleVal = (p.user_role || p.role || p.role_name || p.userRole || '').toString()
+        const normalizedRole = roleVal ? (['Therapist','Client','Admin','Supervisor'].find(r => r.toLowerCase() === roleVal.toLowerCase()) || roleVal) : 'Client'
         setProfile({
           id: String(p.id),
-          role: p.user_role as AppRole,
-          first_name: p.first_name || '',
-          last_name: p.last_name || '',
-          email: u.email || '',
+          role: normalizedRole as AppRole,
+          first_name: p.first_name || p.given_name || '',
+          last_name: p.last_name || p.family_name || '',
+          email: p.email || u.email || '',
           whatsapp_number: p.whatsapp_number || null,
           professional_details: p.professional_details || null,
           verification_status: p.verification_status || null,
