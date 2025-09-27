@@ -34,7 +34,15 @@ const safeFetch = (input: RequestInfo, init?: RequestInit) => {
   const toDelete: string[] = []
   headers.forEach((v, k) => {
     const lk = k.toLowerCase()
-    if (lk === 'role' || lk === 'x-postgrest-role' || lk.includes('postgrest-role')) {
+    if (
+      lk === 'role' ||
+      lk === 'x-postgrest-role' ||
+      lk === 'x-role' ||
+      lk.includes('postgrest-role') ||
+      lk.includes('user-role') ||
+      lk.includes('supabase-role') ||
+      /role/i.test(lk)
+    ) {
       toDelete.push(k)
     }
   })
@@ -44,7 +52,12 @@ const safeFetch = (input: RequestInfo, init?: RequestInit) => {
   // PostgREST from trying to SET ROLE to custom DB roles (like 'therapist') that
   // may not exist in the target environment. If you have an edge/proxy that
   // must forward a role, handle it server-side where you control roles.
-  headers.set('x-postgrest-role', 'authenticated')
+  if (!headers.has('x-postgrest-role')) headers.set('x-postgrest-role', 'authenticated')
+
+  if (toDelete.length && import.meta.env.DEV) {
+    console.warn('[safeFetch] removed role-like headers:', toDelete, 'for request', input)
+    try { console.debug('[safeFetch] remaining headers:', Array.from(headers.entries())) } catch (_) {}
+  }
 
   nextInit.headers = headers
   return fetch(input, nextInit)

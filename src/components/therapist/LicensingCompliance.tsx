@@ -32,7 +32,24 @@ export const LicensingCompliance: React.FC = () => {
         .eq('therapist_id', profile.id)
         .order('created_at', { ascending: false })
       if (e) throw e
-      setRows(data || [])
+      const rows = (data || []) as any[]
+
+      // If any rows have verified_by ids, fetch their profile names to show a friendly verifier label
+      const verifierIds = Array.from(new Set(rows.filter(r => r.verified_by).map(r => r.verified_by)))
+      let verifierMap: Record<string, string> = {}
+      if (verifierIds.length > 0) {
+        const { data: profiles, error: pe } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', verifierIds)
+        if (!pe && profiles) {
+          verifierMap = Object.fromEntries(profiles.map((p: any) => [p.id, p.full_name || `${p.id}`]))
+        }
+      }
+
+      // Attach verifier_name to rows for display
+      const annotated = rows.map(r => ({ ...r, verifier_name: r.verified_by ? verifierMap[r.verified_by] || r.verified_by : null }))
+      setRows(annotated)
     } catch (e: any) {
       setError('Could not load licenses')
     } finally { setLoading(false) }
