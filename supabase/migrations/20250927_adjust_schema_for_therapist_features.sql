@@ -13,7 +13,14 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'therapist') THEN
-    CREATE ROLE therapist NOLOGIN;
+    -- Try to create the role, but swallow permission errors so the migration
+    -- remains safe to run in managed environments where CREATE ROLE is
+    -- restricted (for example, Supabase managed Postgres instances).
+    BEGIN
+      CREATE ROLE therapist NOLOGIN;
+    EXCEPTION WHEN others THEN
+      RAISE NOTICE 'Skipping CREATE ROLE therapist (insufficient privileges or role already managed externally): %', SQLERRM;
+    END;
   END IF;
 END
 $$;
