@@ -52,9 +52,9 @@ END$$;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_user_role') THEN
-    CREATE OR REPLACE FUNCTION public.get_user_role() RETURNS text LANGUAGE sql STABLE SECURITY DEFINER AS $$
+    CREATE OR REPLACE FUNCTION public.get_user_role() RETURNS text LANGUAGE sql STABLE SECURITY DEFINER AS $fn$
       SELECT p.user_role FROM public.profiles p WHERE p.user_id = auth.uid() LIMIT 1;
-    $$;
+    $fn$;
   END IF;
 END$$;
 
@@ -62,10 +62,10 @@ END$$;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='profiles') THEN
-    EXECUTE 'ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY';
+  EXECUTE $sql$ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY$sql$;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='user_roles') THEN
-    EXECUTE 'ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY';
+  EXECUTE $sql$ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY$sql$;
   END IF;
 END$$;
 
@@ -102,7 +102,7 @@ END$$;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'public_create_profile_for_auth_user') THEN
-    CREATE OR REPLACE FUNCTION public.public_create_profile_for_auth_user() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+    CREATE OR REPLACE FUNCTION public.public_create_profile_for_auth_user() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $fn$
     BEGIN
       -- Only create if a profile does not already exist
       IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE user_id = NEW.id) THEN
@@ -111,7 +111,7 @@ BEGIN
       END IF;
       RETURN NEW;
     END;
-    $$;
+    $fn$;
   END IF;
 
   -- create trigger if not exists
@@ -119,9 +119,9 @@ BEGIN
     SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid JOIN pg_namespace n ON c.relnamespace = n.oid
     WHERE t.tgname = 'trg_create_profile_on_auth_user' AND n.nspname = 'auth'
   ) THEN
-    EXECUTE 'CREATE TRIGGER trg_create_profile_on_auth_user
+    EXECUTE $sql$CREATE TRIGGER trg_create_profile_on_auth_user
       AFTER INSERT ON auth.users
-      FOR EACH ROW EXECUTE PROCEDURE public.public_create_profile_for_auth_user();';
+      FOR EACH ROW EXECUTE PROCEDURE public.public_create_profile_for_auth_user();$sql$;
   END IF;
 END$$;
 
@@ -153,7 +153,7 @@ END$$;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'public.log_role_change') THEN
-    CREATE OR REPLACE FUNCTION public.log_role_change() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+    CREATE OR REPLACE FUNCTION public.log_role_change() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $fn$
     BEGIN
       IF (TG_OP = 'UPDATE') THEN
         IF (OLD.user_role IS DISTINCT FROM NEW.user_role) THEN
@@ -163,14 +163,14 @@ BEGIN
       END IF;
       RETURN NEW;
     END;
-    $$;
+    $fn$;
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid JOIN pg_namespace n ON c.relnamespace = n.oid
     WHERE t.tgname = 'trg_log_profile_role_change' AND n.nspname = 'public'
   ) THEN
-    EXECUTE 'CREATE TRIGGER trg_log_profile_role_change AFTER UPDATE ON public.profiles FOR EACH ROW WHEN (OLD.user_role IS DISTINCT FROM NEW.user_role) EXECUTE PROCEDURE public.log_role_change()';
+  EXECUTE $sql$CREATE TRIGGER trg_log_profile_role_change AFTER UPDATE ON public.profiles FOR EACH ROW WHEN (OLD.user_role IS DISTINCT FROM NEW.user_role) EXECUTE PROCEDURE public.log_role_change()$sql$;
   END IF;
 END$$;
 
@@ -183,22 +183,22 @@ BEGIN;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='therapist_licenses') THEN
-    EXECUTE 'ALTER TABLE public.therapist_licenses ENABLE ROW LEVEL SECURITY';
+  EXECUTE $sql$ALTER TABLE public.therapist_licenses ENABLE ROW LEVEL SECURITY$sql$;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname=''public'' AND tablename=''therapist_licenses'' AND policyname=''licenses_select_owner_admin_supervisor'') THEN
-      EXECUTE 'CREATE POLICY licenses_select_owner_admin_supervisor ON public.therapist_licenses FOR SELECT USING ((therapist_id::text = auth.uid()) OR (public.get_user_role() = ''Admin'') OR (public.get_user_role() = ''Supervisor''))';
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='therapist_licenses' AND policyname='licenses_select_owner_admin_supervisor') THEN
+  EXECUTE $sql$CREATE POLICY licenses_select_owner_admin_supervisor ON public.therapist_licenses FOR SELECT USING ((therapist_id::text = auth.uid()::text) OR (public.get_user_role() = 'Admin') OR (public.get_user_role() = 'Supervisor'))$sql$;
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='therapist_licenses' AND policyname='licenses_insert_owner') THEN
-      EXECUTE 'CREATE POLICY licenses_insert_owner ON public.therapist_licenses FOR INSERT WITH CHECK ((therapist_id::text = auth.uid()) OR (public.get_user_role() = ''Admin''))';
+  EXECUTE $sql$CREATE POLICY licenses_insert_owner ON public.therapist_licenses FOR INSERT WITH CHECK ((therapist_id::text = auth.uid()::text) OR (public.get_user_role() = 'Admin'))$sql$;
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='therapist_licenses' AND policyname='licenses_update_owner_admin') THEN
-      EXECUTE 'CREATE POLICY licenses_update_owner_admin ON public.therapist_licenses FOR UPDATE USING (therapist_id::text = auth.uid() OR public.get_user_role() = ''Admin'') WITH CHECK (therapist_id::text = auth.uid() OR public.get_user_role() = ''Admin'')';
+  EXECUTE $sql$CREATE POLICY licenses_update_owner_admin ON public.therapist_licenses FOR UPDATE USING (therapist_id::text = auth.uid()::text OR public.get_user_role() = 'Admin') WITH CHECK (therapist_id::text = auth.uid()::text OR public.get_user_role() = 'Admin')$sql$;
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='therapist_licenses' AND policyname='licenses_delete_owner_admin') THEN
-      EXECUTE 'CREATE POLICY licenses_delete_owner_admin ON public.therapist_licenses FOR DELETE USING (therapist_id::text = auth.uid() OR public.get_user_role() = ''Admin'')';
+  EXECUTE $sql$CREATE POLICY licenses_delete_owner_admin ON public.therapist_licenses FOR DELETE USING (therapist_id::text = auth.uid()::text OR public.get_user_role() = 'Admin')$sql$;
     END IF;
   END IF;
 END$$;
@@ -207,18 +207,18 @@ END$$;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='ce_completions') THEN
-    EXECUTE 'ALTER TABLE public.ce_completions ENABLE ROW LEVEL SECURITY';
+  EXECUTE $sql$ALTER TABLE public.ce_completions ENABLE ROW LEVEL SECURITY$sql$;
 
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='ce_completions' AND policyname='ce_select_owner_admin') THEN
-      EXECUTE 'CREATE POLICY ce_select_owner_admin ON public.ce_completions FOR SELECT USING ((therapist_id::text = auth.uid()) OR (public.get_user_role() = ''Admin''))';
+  EXECUTE $sql$CREATE POLICY ce_select_owner_admin ON public.ce_completions FOR SELECT USING ((therapist_id::text = auth.uid()::text) OR (public.get_user_role() = 'Admin'))$sql$;
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='ce_completions' AND policyname='ce_insert_owner') THEN
-      EXECUTE 'CREATE POLICY ce_insert_owner ON public.ce_completions FOR INSERT WITH CHECK ((therapist_id::text = auth.uid()) OR (public.get_user_role() = ''Admin''))';
+  EXECUTE $sql$CREATE POLICY ce_insert_owner ON public.ce_completions FOR INSERT WITH CHECK ((therapist_id::text = auth.uid()::text) OR (public.get_user_role() = 'Admin'))$sql$;
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='ce_completions' AND policyname='ce_update_owner_admin') THEN
-      EXECUTE 'CREATE POLICY ce_update_owner_admin ON public.ce_completions FOR UPDATE USING (therapist_id::text = auth.uid() OR public.get_user_role() = ''Admin'') WITH CHECK (therapist_id::text = auth.uid() OR public.get_user_role() = ''Admin'')';
+  EXECUTE $sql$CREATE POLICY ce_update_owner_admin ON public.ce_completions FOR UPDATE USING (therapist_id::text = auth.uid()::text OR public.get_user_role() = 'Admin') WITH CHECK (therapist_id::text = auth.uid()::text OR public.get_user_role() = 'Admin')$sql$;
     END IF;
   END IF;
 END$$;
@@ -227,18 +227,18 @@ END$$;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='messages') THEN
-    EXECUTE 'ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY';
+  EXECUTE $sql$ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY$sql$;
 
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='messages' AND policyname='messages_select_participant_admin') THEN
-      EXECUTE 'CREATE POLICY messages_select_participant_admin ON public.messages FOR SELECT USING ((sender_id::text = auth.uid()) OR (recipient_id::text = auth.uid()) OR (public.get_user_role() = ''Admin''))';
+  EXECUTE $sql$CREATE POLICY messages_select_participant_admin ON public.messages FOR SELECT USING ((sender_id::text = auth.uid()::text) OR (recipient_id::text = auth.uid()::text) OR (public.get_user_role() = 'Admin'))$sql$;
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='messages' AND policyname='messages_insert_participant') THEN
-      EXECUTE 'CREATE POLICY messages_insert_participant ON public.messages FOR INSERT WITH CHECK ((sender_id::text = auth.uid()) OR (recipient_id::text = auth.uid()) OR (public.get_user_role() = ''Admin''))';
+  EXECUTE $sql$CREATE POLICY messages_insert_participant ON public.messages FOR INSERT WITH CHECK ((sender_id::text = auth.uid()::text) OR (recipient_id::text = auth.uid()::text) OR (public.get_user_role() = 'Admin'))$sql$;
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='messages' AND policyname='messages_delete_owner_admin') THEN
-      EXECUTE 'CREATE POLICY messages_delete_owner_admin ON public.messages FOR DELETE USING (sender_id::text = auth.uid() OR public.get_user_role() = ''Admin'')';
+  EXECUTE $sql$CREATE POLICY messages_delete_owner_admin ON public.messages FOR DELETE USING (sender_id::text = auth.uid()::text OR public.get_user_role() = 'Admin')$sql$;
     END IF;
   END IF;
 END$$;

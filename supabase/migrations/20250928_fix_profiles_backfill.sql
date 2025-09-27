@@ -16,7 +16,7 @@ DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_sche
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_user_id_fkey') THEN BEGIN ALTER TABLE public.profiles ADD CONSTRAINT profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id); EXCEPTION WHEN others THEN RAISE NOTICE 'Could not add FK constraint profiles_user_id_fkey yet: %', SQLERRM; END; END IF; END $$;
 
 -- 7) Create unique index on user_id if possible 
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'ux_profiles_user_id') THEN IF (SELECT count() FROM (SELECT user_id FROM public.profiles WHERE user_id IS NOT NULL GROUP BY user_id HAVING count() > 1) t) = 0 THEN EXECUTE 'CREATE UNIQUE INDEX ux_profiles_user_id ON public.profiles(user_id)'; ELSE RAISE NOTICE 'Skipping unique index creation: duplicate user_id values exist'; END IF; END IF; END $$;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'ux_profiles_user_id') THEN IF (SELECT count() FROM (SELECT user_id FROM public.profiles WHERE user_id IS NOT NULL GROUP BY user_id HAVING count() > 1) t) = 0 THEN EXECUTE $sql$CREATE UNIQUE INDEX ux_profiles_user_id ON public.profiles(user_id)$sql$; ELSE RAISE NOTICE 'Skipping unique index creation: duplicate user_id values exist'; END IF; END IF; END $$;
 
 -- 8) Optionally set NOT NULL on user_id if there are no nulls 
 DO $$ BEGIN IF (SELECT count(*) FROM public.profiles WHERE user_id IS NULL) = 0 THEN BEGIN ALTER TABLE public.profiles ALTER COLUMN user_id SET NOT NULL; EXCEPTION WHEN others THEN RAISE NOTICE 'Could not set user_id NOT NULL: %', SQLERRM; END; ELSE RAISE NOTICE 'user_id contains NULLs; NOT NULL not set'; END IF; END $$;
