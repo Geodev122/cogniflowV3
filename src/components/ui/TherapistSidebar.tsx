@@ -1,5 +1,5 @@
 import React from 'react'
-import { ChevronLeft, ChevronRight, Calendar, ShieldCheck, CalendarDays } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar, ShieldCheck, CalendarDays, Eye } from 'lucide-react'
 
 type Props = {
   sidebarCollapsed: boolean
@@ -47,7 +47,7 @@ export default function TherapistSidebar({ sidebarCollapsed, setSidebarCollapsed
       <div className="flex-1 overflow-y-auto p-3">
         <nav className="space-y-6">
           <div className="mb-2">
-            {[{ id: 'clienteles', name: 'Clienteles', icon: null }].map(item => {
+            {[{ id: 'overview', name: 'Overview', icon: Eye }].map(item => {
               const Icon = item.icon as any
               const isActive = active === item.id
               return (
@@ -60,7 +60,9 @@ export default function TherapistSidebar({ sidebarCollapsed, setSidebarCollapsed
                   aria-current={isActive ? 'page' : undefined}
                   title={sidebarCollapsed ? item.name : undefined}
                 >
-                  <div className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-400'}`} />
+                  <div className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-400'}`}>
+                    {Icon ? <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} /> : null}
+                  </div>
                   {!sidebarCollapsed && <span className="font-medium">{item.name}</span>}
                 </button>
               )
