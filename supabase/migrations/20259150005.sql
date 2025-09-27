@@ -309,103 +309,209 @@ alter table public.admin_announcements enable row level security;
 alter table public.tickets enable row level security;
 alter table public.user_last_seen enable row level security;
 
-drop policy if exists "profiles self and assigned read" on public.profiles;
-create policy "profiles self and assigned read" on public.profiles
-for select using (
-  auth.uid() = id
-  or exists (
-    select 1 from public.therapist_client_relations r
-    where r.therapist_id = auth.uid() and r.client_id = profiles.id
-  )
-  or (select role from public.profiles where id = auth.uid()) = 'therapist' and profiles.id = auth.uid()
-);
+-- Defensive: ensure any existing policies that may have been created by
+-- prior runs or other migrations are dropped before we (re)create them below.
+do $$
+begin
+  execute 'drop policy if exists "profiles self and assigned read" on public.profiles';
+  execute 'drop policy if exists "profiles self update" on public.profiles';
 
-drop policy if exists "profiles self update" on public.profiles;
-create policy "profiles self update" on public.profiles
-for update using (auth.uid() = id);
+  execute 'drop policy if exists "tcr read own edges" on public.therapist_client_relations';
+  execute 'drop policy if exists "tcr therapist manage" on public.therapist_client_relations';
+  execute 'drop policy if exists "tcr therapist delete" on public.therapist_client_relations';
 
-drop policy if exists "tcr read own edges" on public.therapist_client_relations;
-create policy "tcr read own edges" on public.therapist_client_relations
-for select using (auth.uid() = therapist_id or auth.uid() = client_id);
+  execute 'drop policy if exists "templates read all" on public.assessment_templates';
+  execute 'drop policy if exists "templates manage creators" on public.assessment_templates';
 
-drop policy if exists "tcr therapist manage" on public.therapist_client_relations;
-create policy "tcr therapist manage" on public.therapist_client_relations
-for insert with check (auth.uid() = therapist_id);
-create policy "tcr therapist delete" on public.therapist_client_relations
-for delete using (auth.uid() = therapist_id);
+  execute 'drop policy if exists "instances read therapist or client" on public.assessment_instances';
+  execute 'drop policy if exists "instances insert therapist" on public.assessment_instances';
+  execute 'drop policy if exists "instances update owners" on public.assessment_instances';
+  execute 'drop policy if exists "instances delete therapist" on public.assessment_instances';
 
-drop policy if exists "templates read all" on public.assessment_templates;
-create policy "templates read all" on public.assessment_templates
-for select using (true);
+  execute 'drop policy if exists "responses read owners" on public.assessment_responses';
+  execute 'drop policy if exists "responses upsert owners" on public.assessment_responses';
 
-drop policy if exists "templates manage creators" on public.assessment_templates;
-create policy "templates manage creators" on public.assessment_templates
-for all using (created_by = auth.uid() or (select role from public.profiles where id = auth.uid()) = 'therapist')
-with check (created_by = auth.uid() or (select role from public.profiles where id = auth.uid()) = 'therapist');
+  execute 'drop policy if exists "results read owners" on public.assessment_results';
+  execute 'drop policy if exists "results write therapist" on public.assessment_results';
 
-drop policy if exists "instances read therapist or client" on public.assessment_instances;
-create policy "instances read therapist or client" on public.assessment_instances
-for select using (therapist_id = auth.uid() or client_id = auth.uid());
+  execute 'drop policy if exists "cases read therapist or client" on public.cases';
+  execute 'drop policy if exists "cases manage therapist" on public.cases';
 
-drop policy if exists "instances insert therapist" on public.assessment_instances;
-create policy "instances insert therapist" on public.assessment_instances
-for insert with check (therapist_id = auth.uid());
+  execute 'drop policy if exists "appts read therapist or client" on public.appointments';
+  execute 'drop policy if exists "appts manage therapist" on public.appointments';
 
-drop policy if exists "instances update owners" on public.assessment_instances;
-create policy "instances update owners" on public.assessment_instances
-for update using (therapist_id = auth.uid() or client_id = auth.uid());
+  execute 'drop policy if exists "docs read owner or therapist" on public.documents';
+  execute 'drop policy if exists "docs owner manage" on public.documents';
 
-drop policy if exists "instances delete therapist" on public.assessment_instances;
-create policy "instances delete therapist" on public.assessment_instances
-for delete using (therapist_id = auth.uid());
+  execute 'drop policy if exists "resources read by visibility" on public.resources';
+  execute 'drop policy if exists "resources manage therapist" on public.resources';
 
-drop policy if exists "responses read owners" on public.assessment_responses;
-create policy "responses read owners" on public.assessment_responses
-for select using (
-  exists(select 1 from public.assessment_instances ai where ai.id = assessment_responses.instance_id and (ai.client_id = auth.uid() or ai.therapist_id = auth.uid()))
-);
+  execute 'drop policy if exists "announcements read" on public.admin_announcements';
+  execute 'drop policy if exists "announcements manage therapist" on public.admin_announcements';
 
-drop policy if exists "responses upsert owners" on public.assessment_responses;
-create policy "responses upsert owners" on public.assessment_responses
-for all using (
-  exists(select 1 from public.assessment_instances ai where ai.id = assessment_responses.instance_id and (ai.client_id = auth.uid() or ai.therapist_id = auth.uid()))
-)
-with check (
-  exists(select 1 from public.assessment_instances ai where ai.id = assessment_responses.instance_id and (ai.client_id = auth.uid() or ai.therapist_id = auth.uid()))
-);
+  execute 'drop policy if exists "tickets read own" on public.tickets';
+  execute 'drop policy if exists "tickets manage own" on public.tickets';
 
-drop policy if exists "results read owners" on public.assessment_results;
-create policy "results read owners" on public.assessment_results
-for select using (
-  exists(select 1 from public.assessment_instances ai where ai.id = assessment_results.instance_id and (ai.client_id = auth.uid() or ai.therapist_id = auth.uid()))
-);
+  execute 'drop policy if exists "uls self manage" on public.user_last_seen';
+exception when others then null; end$$;
 
-drop policy if exists "results write therapist" on public.assessment_results;
-create policy "results write therapist" on public.assessment_results
-for all using (
-  exists(select 1 from public.assessment_instances ai where ai.id = assessment_results.instance_id and ai.therapist_id = auth.uid())
-)
-with check (
-  exists(select 1 from public.assessment_instances ai where ai.id = assessment_results.instance_id and ai.therapist_id = auth.uid())
-);
+-- Create policies only if they don't already exist (avoid DROP to reduce lock contention)
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles self and assigned read') then
+    execute $q$create policy "profiles self and assigned read" on public.profiles
+    for select using (
+      auth.uid() = id
+      or exists (
+        select 1 from public.therapist_client_relations r
+        where r.therapist_id = auth.uid() and r.client_id = profiles.id
+      )
+      or ((coalesce(current_setting('jwt.claims.role', true), public.get_user_role())::text) ILIKE 'therapist') and profiles.id = auth.uid()
+    );$q$;
+  end if;
+end$$;
 
-drop policy if exists "cases read therapist or client" on public.cases;
-create policy "cases read therapist or client" on public.cases
-for select using (therapist_id = auth.uid() or client_id = auth.uid());
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'profiles self update') then
+    execute $q$create policy "profiles self update" on public.profiles
+    for update using (auth.uid() = id);$q$;
+  end if;
+end$$;
 
-drop policy if exists "cases manage therapist" on public.cases;
-create policy "cases manage therapist" on public.cases
-for all using (therapist_id = auth.uid())
-with check (therapist_id = auth.uid());
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'therapist_client_relations' and policyname = 'tcr read own edges') then
+    execute $q$create policy "tcr read own edges" on public.therapist_client_relations
+    for select using (auth.uid() = therapist_id or auth.uid() = client_id);$q$;
+  end if;
+end$$;
 
-drop policy if exists "appts read therapist or client" on public.appointments;
-create policy "appts read therapist or client" on public.appointments
-for select using (therapist_id = auth.uid() or client_id = auth.uid());
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'therapist_client_relations' and policyname = 'tcr therapist manage') then
+    execute $q$create policy "tcr therapist manage" on public.therapist_client_relations
+    for insert with check (auth.uid() = therapist_id);$q$;
+  end if;
+end$$;
 
-drop policy if exists "appts manage therapist" on public.appointments;
-create policy "appts manage therapist" on public.appointments
-for all using (therapist_id = auth.uid())
-with check (therapist_id = auth.uid());
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'therapist_client_relations' and policyname = 'tcr therapist delete') then
+    execute $q$create policy "tcr therapist delete" on public.therapist_client_relations
+    for delete using (auth.uid() = therapist_id);$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'assessment_templates' and policyname = 'templates read all') then
+    execute $q$create policy "templates read all" on public.assessment_templates
+    for select using (true);$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'assessment_templates' and policyname = 'templates manage creators') then
+    execute $q$create policy "templates manage creators" on public.assessment_templates
+    for all using (created_by = auth.uid() or (coalesce(current_setting('jwt.claims.role', true), public.get_user_role())::text) ILIKE 'therapist')
+    with check (created_by = auth.uid() or (coalesce(current_setting('jwt.claims.role', true), public.get_user_role())::text) ILIKE 'therapist');$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'assessment_instances' and policyname = 'instances read therapist or client') then
+    execute $q$create policy "instances read therapist or client" on public.assessment_instances
+    for select using (therapist_id = auth.uid() or client_id = auth.uid());$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'assessment_instances' and policyname = 'instances insert therapist') then
+    execute $q$create policy "instances insert therapist" on public.assessment_instances
+    for insert with check (therapist_id = auth.uid());$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'assessment_instances' and policyname = 'instances update owners') then
+    execute $q$create policy "instances update owners" on public.assessment_instances
+    for update using (therapist_id = auth.uid() or client_id = auth.uid());$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'assessment_instances' and policyname = 'instances delete therapist') then
+    execute $q$create policy "instances delete therapist" on public.assessment_instances
+    for delete using (therapist_id = auth.uid());$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'assessment_responses' and policyname = 'responses read owners') then
+    execute $q$create policy "responses read owners" on public.assessment_responses
+    for select using (
+      exists(select 1 from public.assessment_instances ai where ai.id = assessment_responses.instance_id and (ai.client_id = auth.uid() or ai.therapist_id = auth.uid()))
+    );$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'assessment_responses' and policyname = 'responses upsert owners') then
+    execute $q$create policy "responses upsert owners" on public.assessment_responses
+    for all using (
+      exists(select 1 from public.assessment_instances ai where ai.id = assessment_responses.instance_id and (ai.client_id = auth.uid() or ai.therapist_id = auth.uid()))
+    )
+    with check (
+      exists(select 1 from public.assessment_instances ai where ai.id = assessment_responses.instance_id and (ai.client_id = auth.uid() or ai.therapist_id = auth.uid()))
+    );$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'assessment_results' and policyname = 'results read owners') then
+    execute $q$create policy "results read owners" on public.assessment_results
+    for select using (
+      exists(select 1 from public.assessment_instances ai where ai.id = assessment_results.instance_id and (ai.client_id = auth.uid() or ai.therapist_id = auth.uid()))
+    );$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'assessment_results' and policyname = 'results write therapist') then
+    execute $q$create policy "results write therapist" on public.assessment_results
+    for all using (
+      exists(select 1 from public.assessment_instances ai where ai.id = assessment_results.instance_id and ai.therapist_id = auth.uid())
+    )
+    with check (
+      exists(select 1 from public.assessment_instances ai where ai.id = assessment_results.instance_id and ai.therapist_id = auth.uid())
+    );$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'cases' and policyname = 'cases read therapist or client') then
+    execute $q$create policy "cases read therapist or client" on public.cases
+    for select using (therapist_id = auth.uid() or client_id = auth.uid());$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'cases' and policyname = 'cases manage therapist') then
+    execute $q$create policy "cases manage therapist" on public.cases
+    for all using (therapist_id = auth.uid())
+    with check (therapist_id = auth.uid());$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'appointments' and policyname = 'appts read therapist or client') then
+    execute $q$create policy "appts read therapist or client" on public.appointments
+    for select using (therapist_id = auth.uid() or client_id = auth.uid());$q$;
+  end if;
+end$$;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'appointments' and policyname = 'appts manage therapist') then
+    execute $q$create policy "appts manage therapist" on public.appointments
+    for all using (therapist_id = auth.uid())
+    with check (therapist_id = auth.uid());$q$;
+  end if;
+end$$;
 
 do $$ begin
   if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'documents') then
@@ -420,6 +526,7 @@ do $$ begin
   execute $q$create policy "docs owner manage" on public.documents for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());$q$;
   end if;
 exception when others then null; end$$;
+
 
 -- Create the resources visibility policy only when the column exists.
 do $$
@@ -437,7 +544,7 @@ begin
     execute $q$create policy "resources read by visibility" on public.resources
     for select using (
       visibility = 'public'
-      or ((select role from public.profiles where id = auth.uid()) = 'therapist' and visibility in ('therapist','public'))
+  or ((coalesce(current_setting('jwt.claims.role', true), public.get_user_role())::text) ILIKE 'therapist' and visibility in ('therapist','public'))
       or (visibility = 'client')
     );$q$;
   end if;
@@ -445,8 +552,8 @@ exception when others then null; end$$;
 
 drop policy if exists "resources manage therapist" on public.resources;
 create policy "resources manage therapist" on public.resources
-for all using ((select role from public.profiles where id = auth.uid()) = 'therapist')
-with check ((select role from public.profiles where id = auth.uid()) = 'therapist');
+for all using ((coalesce(current_setting('jwt.claims.role', true), public.get_user_role())::text) ILIKE 'therapist')
+with check ((coalesce(current_setting('jwt.claims.role', true), public.get_user_role())::text) ILIKE 'therapist');
 
 drop policy if exists "announcements read" on public.admin_announcements;
 create policy "announcements read" on public.admin_announcements
@@ -454,8 +561,8 @@ for select using (true);
 
 drop policy if exists "announcements manage therapist" on public.admin_announcements;
 create policy "announcements manage therapist" on public.admin_announcements
-for all using ((select role from public.profiles where id = auth.uid()) = 'therapist')
-with check ((select role from public.profiles where id = auth.uid()) = 'therapist');
+for all using ((coalesce(current_setting('jwt.claims.role', true), public.get_user_role())::text) ILIKE 'therapist')
+with check ((coalesce(current_setting('jwt.claims.role', true), public.get_user_role())::text) ILIKE 'therapist');
 
 drop policy if exists "tickets read own" on public.tickets;
 create policy "tickets read own" on public.tickets
