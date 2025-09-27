@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import {
-  Shield, Upload, FileText, Calendar, CheckCircle, AlertTriangle,
-  Clock, Award, GraduationCap, Plus, Eye, Download, Trash2,
-  RefreshCw, Filter, Search, BookOpen, TrendingUp
-} from 'lucide-react'
+import { Shield, Upload, FileText, Calendar, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, Clock, Award, GraduationCap, Plus, Eye, Download, Trash2, RefreshCw, ListFilter as Filter, Search, BookOpen, TrendingUp } from 'lucide-react'
 
 type LicenseStatus = 'submitted' | 'under_review' | 'approved' | 'rejected' | 'expired'
 type CertificationType = 'therapeutic_approach' | 'intervention' | 'specialization' | 'other'

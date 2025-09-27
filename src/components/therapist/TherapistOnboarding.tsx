@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import {
-  User, MapPin, Phone, Mail, Briefcase, GraduationCap,
-  Award, FileText, Camera, CheckCircle, ArrowRight, ArrowLeft,
-  Upload, X, Plus, Trash2, AlertTriangle, Clock, Shield
-} from 'lucide-react'
+import { User, MapPin, Phone, Mail, Briefcase, GraduationCap, Award, FileText, Camera, CircleCheck as CheckCircle, ArrowRight, ArrowLeft, Upload, X, Plus, Trash2, TriangleAlert as AlertTriangle, Clock, Shield } from 'lucide-react'
 
 interface OnboardingProps {
   onComplete: () => void
