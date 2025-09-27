@@ -1,6 +1,7 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
+import { ToastProvider } from './components/ui/Toast'
 import { ProtectedRoute } from './components/therapist/ProtectedRoute'
 
 // Auth (therapist-facing auth screens)
@@ -146,8 +147,9 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <Router>
-        <React.Suspense fallback={<LoadingSpinner message="Loading page..." />}>
+      <ToastProvider>
+        <Router>
+          <React.Suspense fallback={<LoadingSpinner message="Loading page..." />}>
           <Routes>
             {/* Auth */}
             <Route path="/login" element={<Login />} />
@@ -294,6 +296,7 @@ export default function App() {
           </Routes>
         </React.Suspense>
       </Router>
+      </ToastProvider>
     </ErrorBoundary>
   )
 }

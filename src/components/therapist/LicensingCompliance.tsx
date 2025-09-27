@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { IdCard, Loader2, AlertTriangle, Upload, Download, Bell, Trash2, Eye } from 'lucide-react'
+import { useToast } from '../ui/Toast'
 
 export const LicensingCompliance: React.FC = () => {
   const { profile } = useAuth()
@@ -13,9 +14,11 @@ export const LicensingCompliance: React.FC = () => {
   const [ceTotal, setCeTotal] = useState<number | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<any | null>(null)
   const [ceHours, setCeHours] = useState<number | ''>('')
   const [ceCourse, setCeCourse] = useState<string>('')
   const [ceSubmitting, setCeSubmitting] = useState(false)
+  const { push } = useToast()
 
   const load = useCallback(async () => {
     if (!profile?.id) return
@@ -68,9 +71,9 @@ export const LicensingCompliance: React.FC = () => {
       if (ins) throw ins
       setFile(null); setExpires('')
       await load()
-      alert('License uploaded.')
+      push({ message: 'License uploaded', type: 'success' })
     } catch (e: any) {
-      alert(e?.message || 'Upload failed')
+      push({ message: e?.message || 'Upload failed', type: 'error' })
     }
   }
 
@@ -79,9 +82,13 @@ export const LicensingCompliance: React.FC = () => {
     setPreviewUrl(url)
   }
 
-  const handleDelete = async (row: any) => {
+  const handleDelete = (row: any) => {
     if (!profile?.id) return
-    if (!confirm('Delete this license file? This cannot be undone.')) return
+    setConfirmDelete(row)
+  }
+
+  const performDelete = async (row: any) => {
+    if (!profile?.id || !row) return
     try {
       setDeleting(row.id)
       // remove from storage
@@ -90,9 +97,10 @@ export const LicensingCompliance: React.FC = () => {
       const { error } = await supabase.from('therapist_licenses').delete().eq('id', row.id)
       if (error) throw error
       await load()
+      push({ message: 'License deleted', type: 'success' })
     } catch (e: any) {
-      alert(e?.message || 'Delete failed')
-    } finally { setDeleting(null) }
+      push({ message: e?.message || 'Delete failed', type: 'error' })
+    } finally { setDeleting(null); setConfirmDelete(null) }
   }
 
   const daysLeft = (d?: string | null) => {
@@ -195,30 +203,33 @@ export const LicensingCompliance: React.FC = () => {
           <div className="text-sm text-gray-600">Add CE completion (manual entry)</div>
           <div className="text-sm text-gray-700">Total: {ceTotal === null ? '—' : ceTotal} hrs</div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <input type="number" min={0.25} step={0.25} value={ceHours as any} onChange={(e) => setCeHours(e.target.value === '' ? '' : Number(e.target.value))} className="px-3 py-2 border rounded text-sm" placeholder="Hours (e.g. 1.5)" />
-          <input type="text" value={ceCourse} onChange={(e) => setCeCourse(e.target.value)} className="px-3 py-2 border rounded text-sm" placeholder="Course ID / Title (optional)" />
-          <div />
-          <div className="text-right">
-            <button onClick={async () => {
-              if (!profile?.id || !ceHours) return alert('Enter hours')
-              try {
-                setCeSubmitting(true)
-                const payload: any = { therapist_id: profile.id, hours: ceHours }
-                if (ceCourse) payload.course_id = ceCourse
-                const { error } = await supabase.from('ce_completions').insert(payload)
-                if (error) throw error
-                // refresh total
-                const { data } = await supabase.from('ce_completions').select('hours').eq('therapist_id', profile.id)
-                const total = (data || []).reduce((s: number, r: any) => s + (r.hours || 0), 0)
-                setCeTotal(total)
-                setCeHours(''); setCeCourse('')
-                alert('CE completion recorded')
-              } catch (e: any) { alert(e?.message || 'Failed to record CE') }
-              finally { setCeSubmitting(false) }
-            }} disabled={ceSubmitting || !ceHours} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">{ceSubmitting ? 'Saving...' : 'Add CE'}</button>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input type="number" min={0.25} step={0.25} value={ceHours as any} onChange={(e) => setCeHours(e.target.value === '' ? '' : Number(e.target.value))} className="px-3 py-2 border rounded text-sm" placeholder="Hours (e.g. 1.5)" />
+            <input type="text" value={ceCourse} onChange={(e) => setCeCourse(e.target.value)} className="px-3 py-2 border rounded text-sm" placeholder="Course ID / Title (optional)" />
+            <div />
+            <div className="text-right">
+              <button onClick={async () => {
+                if (!profile?.id || !ceHours) {
+                  push({ message: 'Enter hours', type: 'error' })
+                  return
+                }
+                try {
+                  setCeSubmitting(true)
+                  const payload: any = { therapist_id: profile.id, hours: ceHours }
+                  if (ceCourse) payload.course_id = ceCourse
+                  const { error } = await supabase.from('ce_completions').insert(payload)
+                  if (error) throw error
+                  // refresh total
+                  const { data } = await supabase.from('ce_completions').select('hours').eq('therapist_id', profile.id)
+                  const total = (data || []).reduce((s: number, r: any) => s + (r.hours || 0), 0)
+                  setCeTotal(total)
+                  setCeHours(''); setCeCourse('')
+                  push({ message: 'CE completion recorded', type: 'success' })
+                } catch (e: any) { push({ message: e?.message || 'Failed to record CE', type: 'error' }) }
+                finally { setCeSubmitting(false) }
+              }} disabled={ceSubmitting || !ceHours} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">{ceSubmitting ? 'Saving...' : 'Add CE'}</button>
+            </div>
           </div>
-        </div>
       </div>
       {previewUrl && (
         <div className="fixed inset-0 bg-black/50 grid place-items-center z-50" onClick={() => setPreviewUrl(null)}>
@@ -226,6 +237,18 @@ export const LicensingCompliance: React.FC = () => {
             <div className="flex justify-end"><button onClick={() => setPreviewUrl(null)} className="text-sm text-gray-600">Close</button></div>
             <div className="mt-2">
               <iframe src={previewUrl} className="w-full h-[70vh] border" title="Preview" />
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/40 grid place-items-center z-50">
+          <div className="bg-white w-full max-w-md p-4 rounded shadow" role="dialog" aria-modal="true">
+            <div className="text-lg font-medium mb-2">Delete license?</div>
+            <div className="text-sm text-gray-600 mb-4">This action cannot be undone. Are you sure you want to remove <span className="font-mono">{confirmDelete.file_path}</span>?</div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmDelete(null)} className="px-3 py-1 rounded border">Cancel</button>
+              <button onClick={() => performDelete(confirmDelete)} disabled={deleting === confirmDelete.id} className="px-3 py-1 rounded bg-red-600 text-white">{deleting === confirmDelete.id ? 'Deleting...' : 'Delete'}</button>
             </div>
           </div>
         </div>

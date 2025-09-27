@@ -1,17 +1,41 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../hooks/useAuth'
 
 export default function QuickChatPanel({ open, onClose, initialRecipient }: { open: boolean, onClose: () => void, initialRecipient?: string }) {
-  const [messages, setMessages] = useState<{ id: string, text: string, fromMe: boolean }[]>([])
+  const { profile } = useAuth()
+  const [messages, setMessages] = useState<{ id: string, body: string, sender_id?: string }[]>([])
   const [text, setText] = useState('')
+
+  useEffect(() => {
+    if (!open || !profile?.id) return
+    let mounted = true
+    ;(async () => {
+      const { data, error } = await supabase.from('messages').select('*').or(`sender_id.eq.${profile.id},recipient_id.eq.${profile.id}`).order('created_at', { ascending: true }).limit(200)
+      if (error) { console.warn('Load messages error', error); return }
+      if (!mounted) return
+      setMessages((data || []).map((d: any) => ({ id: d.id, body: d.body, sender_id: d.sender_id })))
+    })()
+    return () => { mounted = false }
+  }, [open, profile?.id])
 
   if (!open) return null
 
-  const send = () => {
-    if (!text.trim()) return
-    setMessages(m => [...m, { id: String(Date.now()), text: text.trim(), fromMe: true }])
+  const send = async () => {
+    if (!text.trim() || !profile?.id) return
+    // optimistic UI
+    const tempId = String(Date.now())
+    setMessages(m => [...m, { id: tempId, body: text.trim(), sender_id: profile.id }])
+    const toInsert = { sender_id: profile.id, recipient_id: null, body: text.trim() }
     setText('')
-    // placeholder: connect to real messaging API later
-    setTimeout(() => setMessages(m => [...m, { id: String(Date.now()+1), text: 'Auto-reply: Received', fromMe: false }]), 600)
+    try {
+      const { error, data } = await supabase.from('messages').insert(toInsert).select().single()
+      if (error) throw error
+      // replace temp message with saved one
+      setMessages(m => m.map(msg => msg.id === tempId ? { id: data.id, body: data.body, sender_id: data.sender_id } : msg))
+    } catch (e) {
+      console.warn('Failed to send', e)
+    }
   }
 
   return (
@@ -22,9 +46,9 @@ export default function QuickChatPanel({ open, onClose, initialRecipient }: { op
       </div>
       <div className="p-3 h-56 overflow-y-auto space-y-2">
         {messages.length === 0 ? (
-          <div className="text-xs text-gray-400">No messages yet. Use this for quick notes or connect to a chat later.</div>
+          <div className="text-xs text-gray-400">No messages yet.</div>
         ) : messages.map(m => (
-          <div key={m.id} className={`p-2 rounded ${m.fromMe ? 'bg-blue-50 self-end text-right' : 'bg-gray-50'}`}>{m.text}</div>
+          <div key={m.id} className={`p-2 rounded ${m.sender_id === profile?.id ? 'bg-blue-50 self-end text-right' : 'bg-gray-50'}`}>{m.body}</div>
         ))}
       </div>
       <div className="p-3 border-t flex gap-2">
