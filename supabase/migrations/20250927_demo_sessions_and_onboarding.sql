@@ -6,6 +6,7 @@ BEGIN;
 -- create minimal auth.users demo rows to satisfy FK for demo profiles
 -- NOTE: restricted to approved demo UUIDs only (do NOT add other demo users here)
 
+
 -- 1) Ensure full_name column exists on profiles
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS full_name text;
@@ -23,6 +24,7 @@ LEFT JOIN public.profiles p ON p.id = u.id
 WHERE p.id IS NULL;
 
 
+
 -- 5) Create support_sessions
 CREATE TABLE IF NOT EXISTS public.support_sessions (
   id uuid PRIMARY KEY,
@@ -37,7 +39,6 @@ CREATE TABLE IF NOT EXISTS public.support_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_support_sessions_therapist_id ON public.support_sessions (therapist_id);
 CREATE INDEX IF NOT EXISTS idx_support_sessions_client_id ON public.support_sessions (client_id);
-
 
 
 -- 7) Create therapist_onboardings
