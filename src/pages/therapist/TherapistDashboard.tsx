@@ -645,28 +645,36 @@ export default function TherapistDashboard() {
           ) : (
             <div className="space-y-4">
               {todaySessions.map((session) => (
-                <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                <div key={session.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-start sm:items-center space-x-4">
+                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
                       <User className="w-6 h-6 text-blue-600" />
                     </div>
                     <div>
                       <h4 className="font-medium text-gray-900">{session.client_name}</h4>
                       <p className="text-sm text-gray-600">{session.time} • {session.type}</p>
                       {session.notes && (
-                        <p className="text-xs text-gray-500 mt-1">{session.notes}</p>
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{session.notes}</p>
                       )}
                     </div>
                   </div>
-                  {session.case_id && (
-                    <button
-                      onClick={() => navigate(`/therapist/workspace/${session.case_id}`)}
-                      className="inline-flex items-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                      <Play className="w-4 h-4 mr-1" />
-                      Start Session
-                    </button>
-                  )}
+                  <div className="mt-3 sm:mt-0 flex items-center gap-2">
+                    {session.case_id && (
+                      <button
+                        onClick={() => navigate(`/therapist/workspace/${session.case_id}`)}
+                        className="inline-flex items-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        <Play className="w-4 h-4 mr-1" />
+                        <span className="hidden sm:inline">Start</span>
+                        <span className="sm:hidden">Go</span>
+                      </button>
+                    )}
+                    {session.notes && (
+                      <button onClick={() => alert(session.notes)} className="inline-flex items-center px-3 py-2 text-sm bg-white border rounded-lg hover:bg-gray-50">
+                        Notes
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

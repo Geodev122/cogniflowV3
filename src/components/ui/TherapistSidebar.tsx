@@ -1,5 +1,5 @@
 import React from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar, ShieldCheck, CalendarDays } from 'lucide-react'
 
 type Props = {
   sidebarCollapsed: boolean
@@ -17,7 +17,9 @@ type Props = {
 
 export default function TherapistSidebar({ sidebarCollapsed, setSidebarCollapsed, active, goto, openGroups, toggleGroup, navGroups, isAdmin }: Props) {
   return (
-    <aside className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 fixed left-0 top-16 bottom-0 transition-all duration-300 shadow-lg z-30`}>
+    <>
+      {/* Desktop / tablet sidebar */}
+      <aside className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 fixed left-0 top-16 bottom-0 transition-all duration-300 shadow-lg z-30`}>
       <div className="flex-shrink-0 border-b border-gray-100">
         <div className="p-4 flex items-center justify-between">
           {!sidebarCollapsed && (
@@ -113,5 +115,29 @@ export default function TherapistSidebar({ sidebarCollapsed, setSidebarCollapsed
         </div>
       )}
     </aside>
+      {/* Mobile bottom nav (visible on small screens) */}
+      <nav className="md:hidden fixed left-0 right-0 bottom-0 bg-white border-t border-gray-200 shadow-inner z-40">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="flex items-center justify-between py-2">
+            <button onClick={() => goto('overview')} className={`flex-1 flex flex-col items-center py-2 ${active === 'overview' ? 'text-blue-600' : 'text-gray-600'}`}>
+              <div className="w-6 h-6"><ChevronLeft className="w-6 h-6" /></div>
+              <div className="text-xs mt-1">Overview</div>
+            </button>
+            <button onClick={() => goto('sessions')} className={`flex-1 flex flex-col items-center py-2 ${active === 'sessions' ? 'text-blue-600' : 'text-gray-600'}`}>
+              <div className="w-6 h-6"><Calendar className="w-6 h-6" /></div>
+              <div className="text-xs mt-1">Sessions</div>
+            </button>
+            <button onClick={() => goto('licensing')} className={`flex-1 flex flex-col items-center py-2 ${active === 'licensing' ? 'text-blue-600' : 'text-gray-600'}`}>
+              <div className="w-6 h-6"><ShieldCheck className="w-6 h-6" /></div>
+              <div className="text-xs mt-1">Compliance</div>
+            </button>
+            <button onClick={() => goto('membership')} className={`flex-1 flex flex-col items-center py-2 ${active === 'membership' ? 'text-blue-600' : 'text-gray-600'}`}>
+              <div className="w-6 h-6"><CalendarDays className="w-6 h-6" /></div>
+              <div className="text-xs mt-1">Membership</div>
+            </button>
+          </div>
+        </div>
+      </nav>
+    </>
   )
 }
