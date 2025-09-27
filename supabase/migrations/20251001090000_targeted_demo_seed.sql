@@ -23,6 +23,12 @@ DECLARE
   include_user_id boolean;
   user_id_nullable boolean;
   u record;
+  -- client_activities helpers (added to avoid column-not-found errors when seeding)
+  ca_has_kind boolean;
+  ca_has_type boolean;
+  ca_col_list text;
+  ca_val_list text;
+  ca_stmt text;
 BEGIN
   IF NOT has_profiles THEN
     RAISE NOTICE 'profiles table not found, skipping targeted demo seed.';
@@ -345,14 +351,22 @@ BEGIN
 
   -- Seed client_activities (in-between session tasks) for clients
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='client_activities') THEN
+    -- Detect which optional columns exist so we only attempt to insert them
+    ca_has_kind := EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='client_activities' AND column_name='kind');
+    ca_has_type := EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='client_activities' AND column_name='type');
+    ca_col_list := 'id, client_id, case_id, session_phase, title, details, payload, occurred_at, created_by, created_at';
+    ca_val_list := 'gen_random_uuid(), c.id, cas.id, ''between_sessions'', ''Demo homework: breathing practice'', ''Complete 5-minute breathing daily'', jsonb_build_object(''duration_minutes'',5), now(), t.id, now()';
+    IF ca_has_kind THEN
+      ca_col_list := replace(ca_col_list, 'session_phase, title', 'session_phase, kind, title');
+      ca_val_list := replace(ca_val_list, '''between_sessions'', ''Demo homework: breathing practice''', '''between_sessions'', ''homework'', ''Demo homework: breathing practice''');
+    END IF;
+    IF ca_has_type THEN
+      ca_col_list := replace(ca_col_list, 'title, details', 'title, type, details');
+      ca_val_list := replace(ca_val_list, '''Demo homework: breathing practice'', ''Complete 5-minute breathing daily''', '''Demo homework: breathing practice'', ''exercise'', ''Complete 5-minute breathing daily''');
+    END IF;
+    ca_stmt := format('INSERT INTO public.client_activities (%s) SELECT %s FROM public.profiles c JOIN public.profiles t ON COALESCE(t.user_id::text,t.id::text) = %L LEFT JOIN public.cases cas ON cas.client_id = c.id WHERE COALESCE(c.user_id::text,c.id::text) IN (%s) ON CONFLICT (id) DO NOTHING', ca_col_list, ca_val_list, 'fb1f33f3-b392-4c99-b4cf-77075df22886', '''3de362a5-692a-4fe6-9c3a-54f9ef9f3d71'',''44444444-4444-4444-4444-444444444444'',''22222222-2222-2222-2222-222222222222''');
     BEGIN
-      INSERT INTO public.client_activities (id, client_id, case_id, session_phase, kind, type, title, details, payload, occurred_at, created_by, created_at)
-      SELECT gen_random_uuid(), c.id, cas.id, 'between_sessions', 'homework', 'exercise', 'Demo homework: breathing practice', 'Complete 5-minute breathing daily', jsonb_build_object('duration_minutes',5), now(), t.id, now()
-      FROM public.profiles c
-      JOIN public.profiles t ON COALESCE(t.user_id::text,t.id::text) = 'fb1f33f3-b392-4c99-b4cf-77075df22886'
-      LEFT JOIN public.cases cas ON cas.client_id = c.id
-      WHERE COALESCE(c.user_id::text,c.id::text) IN ('3de362a5-692a-4fe6-9c3a-54f9ef9f3d71','44444444-4444-4444-4444-444444444444','22222222-2222-2222-2222-222222222222')
-      ON CONFLICT (id) DO NOTHING;
+      EXECUTE ca_stmt;
     EXCEPTION WHEN others THEN
       RAISE NOTICE 'Could not insert client_activities demo rows: %', SQLERRM;
     END;
