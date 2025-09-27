@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
-type AppRole = 'therapist' | 'client' | 'admin' | 'supervisor'
+type AppRole = 'Therapist' | 'Client' | 'Admin' | 'Supervisor'
 
 interface Profile {
   id: string
@@ -24,7 +24,7 @@ export const useAuth = () => {
 
   const buildFallbackProfile = (u: User): Profile => ({
     id: u.id,
-    role: (u.user_metadata?.role || 'client') as AppRole,
+    role: (u.user_metadata?.role || 'Client') as AppRole,
     first_name: u.user_metadata?.first_name || 'User',
     last_name: u.user_metadata?.last_name || '',
     email: u.email || '',
@@ -36,10 +36,11 @@ export const useAuth = () => {
   const fetchProfile = useCallback(async (u: User) => {
     try {
       // First try DB
+      // profiles table uses a separate identity PK; query by user_id
       const { data, error: dbErr } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', u.id)
+        .eq('user_id', u.id)
         .maybeSingle()
 
       if (dbErr) {
@@ -48,7 +49,18 @@ export const useAuth = () => {
       }
 
       if (data) {
-        setProfile(data as Profile)
+        // normalize DB shape to expected Profile
+        const p = data as any
+        setProfile({
+          id: String(p.id),
+          role: p.user_role as AppRole,
+          first_name: p.first_name || '',
+          last_name: p.last_name || '',
+          email: u.email || '',
+          whatsapp_number: p.whatsapp_number || null,
+          professional_details: p.professional_details || null,
+          verification_status: p.verification_status || null,
+        })
         setError(null)
         return
       }
@@ -162,14 +174,13 @@ export const useAuth = () => {
       if (e) throw e
 
       if (data.user) {
+        // Insert authoritative profile row. Use user_id reference to auth.users id
         const { error: profileErr } = await supabase
           .from('profiles')
           .insert({
-            id: data.user.id,
-            email,
-            first_name: firstName,
-            last_name: lastName,
-            role,
+            user_id: data.user.id,
+            user_role: role,
+            created_at: new Date().toISOString(),
           })
         if (profileErr) throw profileErr
       }

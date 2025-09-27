@@ -1,0 +1,65 @@
+-- Rollback: remove policies/triggers/tables added by 20250927_add_roles_and_profiles.sql
+-- This rollback is conservative: it will only DROP objects if they exist and will not drop tables if they contain data.
+
+BEGIN;
+
+-- Drop trigger on auth.users if exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid JOIN pg_namespace n ON c.relnamespace = n.oid
+    WHERE t.tgname = 'trg_create_profile_on_auth_user' AND n.nspname = 'auth'
+  ) THEN
+    EXECUTE 'DROP TRIGGER IF EXISTS trg_create_profile_on_auth_user ON auth.users';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'public_create_profile_for_auth_user') THEN
+    EXECUTE 'DROP FUNCTION IF EXISTS public.public_create_profile_for_auth_user()';
+  END IF;
+END$$;
+
+-- Drop policies on profiles
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='profiles' AND policyname='profiles_select_owner_admin_supervisor') THEN
+    EXECUTE 'DROP POLICY IF EXISTS profiles_select_owner_admin_supervisor ON public.profiles';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='profiles' AND policyname='profiles_insert_own') THEN
+    EXECUTE 'DROP POLICY IF EXISTS profiles_insert_own ON public.profiles';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='profiles' AND policyname='profiles_update_owner_admin') THEN
+    EXECUTE 'DROP POLICY IF EXISTS profiles_update_owner_admin ON public.profiles';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='profiles' AND policyname='profiles_delete_owner_admin') THEN
+    EXECUTE 'DROP POLICY IF EXISTS profiles_delete_owner_admin ON public.profiles';
+  END IF;
+END$$;
+
+-- Disable RLS on profiles if empty
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='profiles') THEN
+    IF (SELECT count(*) FROM public.profiles) = 0 THEN
+      EXECUTE 'ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY';
+      EXECUTE 'DROP TABLE IF EXISTS public.profiles';
+    END IF;
+  END IF;
+END$$;
+
+-- Drop user_roles and roles if empty
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='user_roles') THEN
+    IF (SELECT count(*) FROM public.user_roles) = 0 THEN
+      EXECUTE 'ALTER TABLE public.user_roles DISABLE ROW LEVEL SECURITY';
+      EXECUTE 'DROP TABLE IF EXISTS public.user_roles';
+    END IF;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='roles') THEN
+    IF (SELECT count(*) FROM public.roles) = 0 THEN
+      EXECUTE 'DROP TABLE IF EXISTS public.roles';
+    END IF;
+  END IF;
+END$$;
+
+COMMIT;
