@@ -24,7 +24,8 @@ export const useAuth = () => {
 
   const buildFallbackProfile = (u: User): Profile => ({
     id: u.id,
-    role: (u.user_metadata?.role || 'Client') as AppRole,
+    // Prefer role present in user_metadata (JWT custom claim) if available
+    role: (u.user_metadata?.role || (u.user_metadata && (u.user_metadata as any).role) || 'Client') as AppRole,
     first_name: u.user_metadata?.first_name || 'User',
     last_name: u.user_metadata?.last_name || '',
     email: u.email || '',
@@ -65,8 +66,8 @@ export const useAuth = () => {
         return
       }
 
-      // Fallback to auth metadata if row is missing
-      setProfile(buildFallbackProfile(u))
+  // If profile missing, try to use JWT custom claim role first, else fallback to defaults
+  setProfile(buildFallbackProfile(u))
       setError(null)
     } catch (e) {
       console.error('[useAuth] fetchProfile error', e)

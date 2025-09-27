@@ -131,3 +131,116 @@ END$$;
 -- SELECT u.id, 'Client' FROM auth.users u LEFT JOIN public.profiles p ON p.user_id = u.id WHERE p.user_id IS NULL;
 
 COMMIT;
+
+-- Audit logging for role changes: record who changed a role and when
+BEGIN;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='role_changes') THEN
+    CREATE TABLE public.role_changes (
+      id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+      user_id uuid NOT NULL,
+      old_role text,
+      new_role text,
+      changed_by uuid,
+      changed_at timestamptz DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_role_changes_user_id ON public.role_changes(user_id);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'public.log_role_change') THEN
+    CREATE OR REPLACE FUNCTION public.log_role_change() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+    BEGIN
+      IF (TG_OP = 'UPDATE') THEN
+        IF (OLD.user_role IS DISTINCT FROM NEW.user_role) THEN
+          INSERT INTO public.role_changes (user_id, old_role, new_role, changed_by)
+            VALUES (NEW.user_id, OLD.user_role, NEW.user_role, auth.uid());
+        END IF;
+      END IF;
+      RETURN NEW;
+    END;
+    $$;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid JOIN pg_namespace n ON c.relnamespace = n.oid
+    WHERE t.tgname = 'trg_log_profile_role_change' AND n.nspname = 'public'
+  ) THEN
+    EXECUTE 'CREATE TRIGGER trg_log_profile_role_change AFTER UPDATE ON public.profiles FOR EACH ROW WHEN (OLD.user_role IS DISTINCT FROM NEW.user_role) EXECUTE PROCEDURE public.log_role_change()';
+  END IF;
+END$$;
+
+COMMIT;
+
+-- Additional RLS examples for common user-owned tables in this project
+BEGIN;
+
+-- therapist_licenses: owners (therapist_id) + Admin/Supervisor can select/update/delete
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='therapist_licenses') THEN
+    EXECUTE 'ALTER TABLE public.therapist_licenses ENABLE ROW LEVEL SECURITY';
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname=''public'' AND tablename=''therapist_licenses'' AND policyname=''licenses_select_owner_admin_supervisor'') THEN
+      EXECUTE 'CREATE POLICY licenses_select_owner_admin_supervisor ON public.therapist_licenses FOR SELECT USING ((therapist_id::text = auth.uid()) OR (public.get_user_role() = ''Admin'') OR (public.get_user_role() = ''Supervisor''))';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='therapist_licenses' AND policyname='licenses_insert_owner') THEN
+      EXECUTE 'CREATE POLICY licenses_insert_owner ON public.therapist_licenses FOR INSERT WITH CHECK ((therapist_id::text = auth.uid()) OR (public.get_user_role() = ''Admin''))';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='therapist_licenses' AND policyname='licenses_update_owner_admin') THEN
+      EXECUTE 'CREATE POLICY licenses_update_owner_admin ON public.therapist_licenses FOR UPDATE USING (therapist_id::text = auth.uid() OR public.get_user_role() = ''Admin'') WITH CHECK (therapist_id::text = auth.uid() OR public.get_user_role() = ''Admin'')';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='therapist_licenses' AND policyname='licenses_delete_owner_admin') THEN
+      EXECUTE 'CREATE POLICY licenses_delete_owner_admin ON public.therapist_licenses FOR DELETE USING (therapist_id::text = auth.uid() OR public.get_user_role() = ''Admin'')';
+    END IF;
+  END IF;
+END$$;
+
+-- ce_completions: owners (therapist_id) + Admin can manage
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='ce_completions') THEN
+    EXECUTE 'ALTER TABLE public.ce_completions ENABLE ROW LEVEL SECURITY';
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='ce_completions' AND policyname='ce_select_owner_admin') THEN
+      EXECUTE 'CREATE POLICY ce_select_owner_admin ON public.ce_completions FOR SELECT USING ((therapist_id::text = auth.uid()) OR (public.get_user_role() = ''Admin''))';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='ce_completions' AND policyname='ce_insert_owner') THEN
+      EXECUTE 'CREATE POLICY ce_insert_owner ON public.ce_completions FOR INSERT WITH CHECK ((therapist_id::text = auth.uid()) OR (public.get_user_role() = ''Admin''))';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='ce_completions' AND policyname='ce_update_owner_admin') THEN
+      EXECUTE 'CREATE POLICY ce_update_owner_admin ON public.ce_completions FOR UPDATE USING (therapist_id::text = auth.uid() OR public.get_user_role() = ''Admin'') WITH CHECK (therapist_id::text = auth.uid() OR public.get_user_role() = ''Admin'')';
+    END IF;
+  END IF;
+END$$;
+
+-- messages: sender/recipient access + Admin access for moderation
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='messages') THEN
+    EXECUTE 'ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY';
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='messages' AND policyname='messages_select_participant_admin') THEN
+      EXECUTE 'CREATE POLICY messages_select_participant_admin ON public.messages FOR SELECT USING ((sender_id::text = auth.uid()) OR (recipient_id::text = auth.uid()) OR (public.get_user_role() = ''Admin''))';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='messages' AND policyname='messages_insert_participant') THEN
+      EXECUTE 'CREATE POLICY messages_insert_participant ON public.messages FOR INSERT WITH CHECK ((sender_id::text = auth.uid()) OR (recipient_id::text = auth.uid()) OR (public.get_user_role() = ''Admin''))';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='messages' AND policyname='messages_delete_owner_admin') THEN
+      EXECUTE 'CREATE POLICY messages_delete_owner_admin ON public.messages FOR DELETE USING (sender_id::text = auth.uid() OR public.get_user_role() = ''Admin'')';
+    END IF;
+  END IF;
+END$$;
+
+COMMIT;
