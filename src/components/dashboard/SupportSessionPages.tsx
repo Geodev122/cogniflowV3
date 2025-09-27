@@ -1,19 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  MessageCircle, 
-  Phone, 
-  Video, 
-  Clock, 
-  User, 
-  Calendar,
-  Search,
-  Filter,
-  Plus,
-  ChevronDown,
-  Star,
-  CheckCircle,
-  AlertCircle
-} from 'lucide-react';
+import { MessageCircle, Phone, Video, Clock, User, Calendar, Search, ListFilter as Filter, Plus, ChevronDown, Star, CircleCheck as CheckCircle, CircleAlert as AlertCircle } from 'lucide-react';
 
 interface SupportSession {
   id: string;

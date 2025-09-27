@@ -1,19 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Upload, 
-  FileText, 
-  Calendar, 
-  Award, 
-  CheckCircle, 
-  AlertTriangle, 
-  Plus,
-  Download,
-  Eye,
-  Trash2,
-  GraduationCap,
-  Shield,
-  Clock
-} from 'lucide-react';
+import { Upload, FileText, Calendar, Award, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, Plus, Download, Eye, Trash2, GraduationCap, Shield, Clock } from 'lucide-react';
 
 interface ComplianceRecord {
   id: string;

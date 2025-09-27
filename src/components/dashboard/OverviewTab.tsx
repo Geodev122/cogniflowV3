@@ -1,16 +1,5 @@
 import React from 'react';
-import { 
-  Users, 
-  Calendar, 
-  TrendingUp, 
-  Clock, 
-  DollarSign, 
-  Award,
-  AlertTriangle,
-  CheckCircle,
-  BookOpen,
-  FileText
-} from 'lucide-react';
+import { Users, Calendar, TrendingUp, Clock, DollarSign, Award, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, BookOpen, FileText } from 'lucide-react';
 
 interface OverviewTabProps {
   className?: string;
