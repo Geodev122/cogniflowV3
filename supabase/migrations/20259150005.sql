@@ -17,6 +17,34 @@ do $$ begin
   create type public.appointment_type as enum ('in_person','video','phone','other');
 exception when duplicate_object then null; end $$;
 
+
+
+-- Ensure legacy or partial schemas have the client_activities.type column
+-- Defensive: run only when the table exists and column is missing. Keeps seeds safe.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'client_activities'
+  ) then
+    execute 'alter table public.client_activities add column if not exists "type" text not null default ''exercise''';
+  end if;
+exception when others then
+  raise notice 'client_activities.type ensure step skipped or failed: %', SQLERRM;
+end$$;
+
+-- Also ensure client_activities.kind exists (some older schemas use a separate 'kind' column)
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'client_activities'
+  ) then
+    execute 'alter table public.client_activities add column if not exists "kind" text not null default ''homework''';
+  end if;
+exception when others then
+  raise notice 'client_activities.kind ensure step skipped or failed: %', SQLERRM;
+end$$;
 -- ====== HELPERS ======
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$
@@ -124,8 +152,6 @@ create table if not exists public.assessment_results (
 
 -- ====== CASES ======
 create table if not exists public.cases (
-  id uuid primary key default gen_random_uuid(),
-  case_code text not null unique,
   client_id uuid not null references public.profiles(id) on delete cascade,
   therapist_id uuid not null references public.profiles(id) on delete cascade,
   status text not null default 'active',
@@ -133,56 +159,14 @@ create table if not exists public.cases (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index if not exists idx_cases_therapist on public.cases(therapist_id);
-create index if not exists idx_cases_client on public.cases(client_id);
 create index if not exists idx_cases_status on public.cases(status);
 drop trigger if exists trg_cases_updated on public.cases;
-create trigger trg_cases_updated before update on public.cases
+create trigger trg_cases_updated
+before update on public.cases
 for each row execute function public.set_updated_at();
 
 -- ====== APPOINTMENTS ======
-create table if not exists public.appointments (
-  id uuid primary key default gen_random_uuid(),
-  therapist_id uuid not null references public.profiles(id) on delete cascade,
-  client_id uuid not null references public.profiles(id) on delete cascade,
-  appointment_date timestamptz not null,
-  appointment_type public.appointment_type not null default 'other',
-  notes text,
-  created_at timestamptz not null default now()
-);
-create index if not exists idx_appt_therapist on public.appointments(therapist_id);
-create index if not exists idx_appt_client on public.appointments(client_id);
-create index if not exists idx_appt_date on public.appointments(appointment_date);
 
--- ====== DOCUMENTS ======
-create table if not exists public.documents (
-  id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references public.profiles(id) on delete cascade,
-  case_id uuid references public.cases(id) on delete set null,
-  url text not null,
-  type text not null,
-  meta jsonb,
-  created_at timestamptz not null default now()
-);
-create index if not exists idx_docs_owner on public.documents(owner_id);
-create index if not exists idx_docs_case on public.documents(case_id);
-
--- ====== RESOURCES ======
-create table if not exists public.resources (
-  id uuid primary key default gen_random_uuid(),
-  title text not null,
-  kind text not null,
-  tags text[] default '{}',
-  url text,
-  meta jsonb,
-  visibility text not null default 'therapist',
-  created_by uuid references public.profiles(id) on delete set null,
-  created_at timestamptz not null default now()
-);
-create index if not exists idx_resources_kind on public.resources(kind);
-create index if not exists idx_resources_visibility on public.resources(visibility);
-
--- ====== ANNOUNCEMENTS ======
 create table if not exists public.admin_announcements (
   id uuid primary key default gen_random_uuid(),
   title text not null,
@@ -205,7 +189,6 @@ create table if not exists public.tickets (
   created_at timestamptz not null default now()
 );
 
--- ====== LAST SEEN ======
 create table if not exists public.user_last_seen (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -213,14 +196,27 @@ create table if not exists public.user_last_seen (
   seen_at timestamptz not null default now()
 );
 
+-- ====== DOCUMENTS ======
+-- Create documents table if it doesn't exist so policies/indexes later in this file are safe
+create table if not exists public.documents (
+  id uuid primary key default gen_random_uuid(),
+  case_id uuid references public.cases(id) on delete set null,
+  owner_id uuid references public.profiles(id) on delete set null,
+  url text not null,
+  type text not null,
+  meta jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_docs_owner on public.documents(owner_id);
+create index if not exists idx_docs_case on public.documents(case_id);
+
 -- ====== VIEWS & HELPERS ======
 create or replace view public.v_my_clients as
 select r.therapist_id, r.client_id
 from public.therapist_client_relations r;
 
 create or replace view public.v_today_appointments as
-select a.*
-from public.appointments a
+select a.* from public.appointments a
 where a.appointment_date::date = now()::date;
 
 create or replace function public.template_item_count(t_id uuid)
@@ -231,32 +227,32 @@ returns integer language sql stable as $$
 $$;
 
 -- ====== TRIGGERS ======
-create or replace function public.recalc_instance_progress()
-returns trigger language plpgsql as $$
-declare
-  total int;
-  answered int;
-  inst uuid;
-begin
-  if (tg_op = 'DELETE') then
-    inst := old.instance_id;
-  else
-    inst := new.instance_id;
-  end if;
 
-  select public.template_item_count(ai.template_id) into total
-  from public.assessment_instances ai where ai.id = inst;
+CREATE TABLE IF NOT EXISTS public.client_activities (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid references public.profiles(id) on delete cascade,
+  case_id uuid references public.cases(id) on delete set null,
+  session_phase text,
+  "kind" text not null default 'homework',
+  "type" text not null default 'exercise',
+  title text,
+  details text,
+  payload jsonb default '{}'::jsonb,
+  occurred_at timestamptz default now(),
+  reviewed_at timestamptz,
+  reviewed_by uuid references public.profiles(id),
+  created_by uuid references public.profiles(id),
+  created_at timestamptz not null default now()
+);
+create or replace function public.recalc_instance_progress() returns trigger language plpgsql as $$ declare total int; answered int; inst uuid; begin if (tg_op = 'DELETE') then inst := old.instance_id; else inst := new.instance_id; end if;
 
-  select count(*)::int into answered
-  from public.assessment_responses
-  where instance_id = inst;
+select public.template_item_count(ai.template_id) into total from public.assessment_instances ai where ai.id = inst;
 
-  update public.assessment_instances
-  set progress = case when total > 0 then least(100, round((answered::numeric / total::numeric) * 100)) else 0 end
-  where id = inst;
+select count(*)::int into answered from public.assessment_responses where instance_id = inst;
 
-  return null;
-end $$;
+update public.assessment_instances set progress = case when total > 0 then least(100, round((answered::numeric / total::numeric) * 100)) else 0 end where id = inst;
+
+return null; end; $$;
 
 drop trigger if exists trg_resp_progress_i on public.assessment_responses;
 drop trigger if exists trg_resp_progress_u on public.assessment_responses;
@@ -303,7 +299,11 @@ alter table public.assessment_responses enable row level security;
 alter table public.assessment_results enable row level security;
 alter table public.cases enable row level security;
 alter table public.appointments enable row level security;
-alter table public.documents enable row level security;
+do $$ begin
+  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'documents') then
+    execute 'alter table public.documents enable row level security';
+  end if;
+exception when others then null; end$$;
 alter table public.resources enable row level security;
 alter table public.admin_announcements enable row level security;
 alter table public.tickets enable row level security;
@@ -407,25 +407,41 @@ create policy "appts manage therapist" on public.appointments
 for all using (therapist_id = auth.uid())
 with check (therapist_id = auth.uid());
 
-drop policy if exists "docs read owner or therapist" on public.documents;
-create policy "docs read owner or therapist" on public.documents
-for select using (
-  owner_id = auth.uid()
-  or exists(select 1 from public.cases c where c.id = documents.case_id and c.therapist_id = auth.uid())
-);
+do $$ begin
+  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'documents') then
+    execute 'drop policy if exists "docs read owner or therapist" on public.documents';
+  execute $q$create policy "docs read owner or therapist" on public.documents for select using ( owner_id = auth.uid() or exists(select 1 from public.cases c where c.id = documents.case_id and c.therapist_id = auth.uid()) );$q$;
+  end if;
+exception when others then null; end$$;
 
-drop policy if exists "docs owner manage" on public.documents;
-create policy "docs owner manage" on public.documents
-for all using (owner_id = auth.uid())
-with check (owner_id = auth.uid());
+do $$ begin
+  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'documents') then
+    execute 'drop policy if exists "docs owner manage" on public.documents';
+  execute $q$create policy "docs owner manage" on public.documents for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());$q$;
+  end if;
+exception when others then null; end$$;
 
-drop policy if exists "resources read by visibility" on public.resources;
-create policy "resources read by visibility" on public.resources
-for select using (
-  visibility = 'public'
-  or ((select role from public.profiles where id = auth.uid()) = 'therapist' and visibility in ('therapist','public'))
-  or (visibility = 'client')
-);
+-- Create the resources visibility policy only when the column exists.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'resources' and column_name = 'visibility'
+  ) then
+    -- drop existing policy if the table exists
+    if exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'resources') then
+      execute 'drop policy if exists "resources read by visibility" on public.resources';
+    end if;
+
+    -- create the policy using an execute so the parser doesn't evaluate the expression until runtime
+    execute $q$create policy "resources read by visibility" on public.resources
+    for select using (
+      visibility = 'public'
+      or ((select role from public.profiles where id = auth.uid()) = 'therapist' and visibility in ('therapist','public'))
+      or (visibility = 'client')
+    );$q$;
+  end if;
+exception when others then null; end$$;
 
 drop policy if exists "resources manage therapist" on public.resources;
 create policy "resources manage therapist" on public.resources
@@ -477,7 +493,7 @@ begin
     where table_schema = 'public' and table_name = 'client_activities'
   ) then
     -- add the column with a safe default so existing rows are valid
-    execute 'alter table public.client_activities add column if not exists kind text not null default ''homework''';
+    execute 'alter table public.client_activities add column if not exists "kind" text not null default ''homework''';
   end if;
 exception when others then
   -- don't fail migrations on unexpected errors; log a notice for operators

@@ -29,6 +29,7 @@ DECLARE
   ca_col_list text;
   ca_val_list text;
   ca_stmt text;
+  ca_id_list text[];
 BEGIN
   IF NOT has_profiles THEN
     RAISE NOTICE 'profiles table not found, skipping targeted demo seed.';
@@ -364,9 +365,10 @@ BEGIN
       ca_col_list := replace(ca_col_list, 'title, details', 'title, type, details');
       ca_val_list := replace(ca_val_list, '''Demo homework: breathing practice'', ''Complete 5-minute breathing daily''', '''Demo homework: breathing practice'', ''exercise'', ''Complete 5-minute breathing daily''');
     END IF;
-    ca_stmt := format('INSERT INTO public.client_activities (%s) SELECT %s FROM public.profiles c JOIN public.profiles t ON COALESCE(t.user_id::text,t.id::text) = %L LEFT JOIN public.cases cas ON cas.client_id = c.id WHERE COALESCE(c.user_id::text,c.id::text) IN (%s) ON CONFLICT (id) DO NOTHING', ca_col_list, ca_val_list, 'fb1f33f3-b392-4c99-b4cf-77075df22886', '''3de362a5-692a-4fe6-9c3a-54f9ef9f3d71'',''44444444-4444-4444-4444-444444444444'',''22222222-2222-2222-2222-222222222222''');
+    ca_id_list := ARRAY['3de362a5-692a-4fe6-9c3a-54f9ef9f3d71','44444444-4444-4444-4444-444444444444','22222222-2222-2222-2222-222222222222'];
+    ca_stmt := format('INSERT INTO public.client_activities (%s) SELECT %s FROM public.profiles c JOIN public.profiles t ON COALESCE(t.user_id::text,t.id::text) = %L LEFT JOIN public.cases cas ON cas.client_id = c.id WHERE COALESCE(c.user_id::text,c.id::text) = ANY($1) ON CONFLICT (id) DO NOTHING', ca_col_list, ca_val_list, 'fb1f33f3-b392-4c99-b4cf-77075df22886');
     BEGIN
-      EXECUTE ca_stmt;
+      EXECUTE ca_stmt USING ca_id_list;
     EXCEPTION WHEN others THEN
       RAISE NOTICE 'Could not insert client_activities demo rows: %', SQLERRM;
     END;
