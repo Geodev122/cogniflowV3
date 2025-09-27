@@ -10,6 +10,7 @@ export const LicensingCompliance: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [expires, setExpires] = useState<string>('')
+  const [ceTotal, setCeTotal] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     if (!profile?.id) return
@@ -28,6 +29,26 @@ export const LicensingCompliance: React.FC = () => {
   }, [profile?.id])
 
   useEffect(() => { load() }, [load])
+
+  // load CE credit totals
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      if (!profile?.id) return
+      try {
+        const { data, error } = await supabase
+          .from('ce_completions')
+          .select('hours')
+          .eq('therapist_id', profile.id)
+        if (error) throw error
+        const total = (data || []).reduce((s: number, r: any) => s + (r.hours || 0), 0)
+        if (mounted) setCeTotal(total)
+      } catch (e) {
+        // ignore CE load errors - non-critical
+      }
+    })()
+    return () => { mounted = false }
+  }, [profile?.id])
 
   const upload = async () => {
     if (!profile?.id || !file) return
@@ -62,6 +83,10 @@ export const LicensingCompliance: React.FC = () => {
       </div>
 
       <div className="bg-white border rounded-lg shadow-sm p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm text-gray-600">Uploaded licenses</div>
+          <div className="text-sm text-gray-700">CE credits: {ceTotal === null ? '—' : ceTotal}</div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" />
           <input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} className="px-3 py-2 border rounded text-sm" placeholder="Expiry date" />

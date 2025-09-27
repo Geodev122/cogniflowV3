@@ -423,6 +423,14 @@ export default function TherapistDashboard() {
         if (mounted) setDashboardError(err instanceof Error ? err.message : String(err))
       })
     }, 100)
+    // Auto-open onboarding if user just signed up
+    try {
+      const openOnboarding = localStorage.getItem('tdb_open_onboarding')
+      if (openOnboarding === '1') {
+        setShowOnboardingModal(true)
+        localStorage.removeItem('tdb_open_onboarding')
+      }
+    } catch {}
     return () => { mounted = false; clearTimeout(timer) }
   }, [profile?.id, fetchDashboardData])
 
@@ -984,6 +992,20 @@ export default function TherapistDashboard() {
                         </button>
                       )
                     })}
+                  </div>
+
+                  {/* Ensure Overview is present on mobile for discovery */}
+                  <div className="space-y-1">
+                    <button
+                      key="overview-mobile"
+                      onClick={() => { goto('overview'); setMobileMenuOpen(false) }}
+                      className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-all text-sm font-medium ${
+                        active === 'overview' ? 'text-blue-700 bg-blue-50' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <Eye className="w-5 h-5 flex-shrink-0 text-gray-400" />
+                      <span>Overview</span>
+                    </button>
                   </div>
 
                   {navGroups.map(group => (

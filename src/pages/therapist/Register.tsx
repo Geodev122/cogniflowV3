@@ -48,7 +48,11 @@ export const Register: React.FC = () => {
         formData.lastName,
         formData.role
       )
-      navigate('/login')
+      // After signup, navigate to therapist dashboard and auto-open onboarding
+      try {
+        localStorage.setItem('tdb_open_onboarding', '1')
+      } catch {}
+      navigate('/therapist')
     } catch (err: any) {
       setError(err?.message || 'Could not create account')
     } finally {
