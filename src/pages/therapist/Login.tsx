@@ -14,7 +14,8 @@ export const Login: React.FC = () => {
 
   // Redirect if already logged in
   if (user && profile) {
-    return <Navigate to={profile.role === 'therapist' ? '/therapist' : '/client'} />
+    const r = (profile.role ?? '').toString().toLowerCase()
+    return <Navigate to={r === 'therapist' ? '/therapist' : '/client'} />
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

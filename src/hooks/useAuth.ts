@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
-type AppRole = 'Therapist' | 'Client' | 'Admin' | 'Supervisor'
+type AppRole = 'therapist' | 'client' | 'admin' | 'supervisor'
 
 interface Profile {
   id: string
@@ -24,8 +24,9 @@ export const useAuth = () => {
 
   const buildFallbackProfile = (u: User): Profile => ({
     id: u.id,
-    // Prefer role present in user_metadata (JWT custom claim) if available (case-insensitive)
-    role: ((u.user_metadata && ((u.user_metadata as any).role || (u.user_metadata as any).user_role)) || 'Client') as AppRole,
+  // Prefer role present in user_metadata (JWT custom claim) if available (case-insensitive)
+  // Normalize to lowercase to match DB values like 'therapist'/'client'
+  role: (((u.user_metadata && ((u.user_metadata as any).role || (u.user_metadata as any).user_role)) || 'client') as string).toLowerCase() as AppRole,
     first_name: (u.user_metadata && ((u.user_metadata as any).first_name || (u.user_metadata as any).given_name)) || 'User',
     last_name: (u.user_metadata && ((u.user_metadata as any).last_name || (u.user_metadata as any).family_name)) || '',
     email: u.email || (u.user_metadata && (u.user_metadata as any).email) || '',
@@ -53,7 +54,10 @@ export const useAuth = () => {
         // normalize DB shape to expected Profile (tolerant to differing column names)
         const p = data as any
         const roleVal = (p.user_role || p.role || p.role_name || p.userRole || '').toString()
-        const normalizedRole = roleVal ? (['Therapist','Client','Admin','Supervisor'].find(r => r.toLowerCase() === roleVal.toLowerCase()) || roleVal) : 'Client'
+        // Normalize to lowercase values used in the DB (therapist/client/…)
+        const normalizedRole = roleVal
+          ? (['therapist', 'client', 'admin', 'supervisor'].find(r => r.toLowerCase() === roleVal.toLowerCase()) || roleVal.toLowerCase())
+          : 'client'
         setProfile({
           id: String(p.id),
           role: normalizedRole as AppRole,
@@ -164,7 +168,7 @@ export const useAuth = () => {
     password: string,
     firstName: string,
     lastName: string,
-    role: AppRole
+    role: AppRole | string
   ) => {
     setError(null)
     setLoading(true)
@@ -178,11 +182,13 @@ export const useAuth = () => {
 
       if (data.user) {
         // Insert authoritative profile row. Use user_id reference to auth.users id
+        // Ensure we write the role in lowercase to match DB constraints
+        const roleVal = (role as string).toString().toLowerCase()
         const { error: profileErr } = await supabase
           .from('profiles')
           .insert({
             user_id: data.user.id,
-            user_role: role,
+            user_role: roleVal,
             created_at: new Date().toISOString(),
           })
         if (profileErr) throw profileErr

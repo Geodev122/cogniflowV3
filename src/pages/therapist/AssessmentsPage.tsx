@@ -12,7 +12,8 @@ const AssessmentsPage: React.FC = () => {
   const { profile, loading: authLoading } = useAuth()
 
   const isTherapist = useMemo(() => {
-    return profile?.role ? profile.role === 'therapist' : !!profile
+    if (!profile) return false
+    return (profile.role ?? '').toString().toLowerCase() === 'therapist'
   }, [profile])
 
   useEffect(() => {

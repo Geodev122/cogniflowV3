@@ -286,7 +286,7 @@ export default function App() {
               path="/"
               element={
                 user && profile
-                  ? <Navigate to={profile.role === 'therapist' || profile.role === 'admin' || profile.role === 'supervisor' ? '/therapist' : '/client'} replace />
+                  ? <Navigate to={(profile.role ?? '').toString().toLowerCase() === 'therapist' || (profile.role ?? '').toString().toLowerCase() === 'admin' || (profile.role ?? '').toString().toLowerCase() === 'supervisor' ? '/therapist' : '/client'} replace />
                   : <Navigate to="/login" replace />
               }
             />

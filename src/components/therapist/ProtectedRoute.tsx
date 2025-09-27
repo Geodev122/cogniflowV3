@@ -2,7 +2,7 @@ import React from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 
-export type Role = 'Therapist' | 'Client' | 'Admin' | 'Supervisor'
+export type Role = 'Therapist' | 'Client' | 'Admin' | 'Supervisor' | 'therapist' | 'client' | 'admin' | 'supervisor'
 
 type Props = {
   /** Require a specific role to access this route */
@@ -86,13 +86,14 @@ export const ProtectedRoute: React.FC<Props> = ({
 
   // Role check: Therapist routes also allow Admin & Supervisor
   if (role) {
+    const wanted = role.toString().toLowerCase()
+    const actual = (profile.role ?? '').toString().toLowerCase()
     const ok =
-      role === 'Therapist'
-        ? ['Therapist', 'Admin', 'Supervisor'].includes(profile.role)
-        : profile.role === role
+      wanted === 'therapist'
+        ? ['therapist', 'admin', 'supervisor'].includes(actual)
+        : actual === wanted
     if (!ok) {
-      const home =
-        profile.role === 'Client' ? '/client' : '/therapist'
+      const home = actual === 'client' ? '/client' : '/therapist'
       return <Navigate to={home} replace />
     }
   }

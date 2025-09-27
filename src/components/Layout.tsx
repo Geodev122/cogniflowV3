@@ -29,7 +29,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, title }) => {
 
   // Simple role-aware nav items (wire real hrefs later if needed)
   const navItems =
-    profile?.role === 'therapist'
+    (profile?.role ?? '').toString().toLowerCase() === 'therapist'
       ? [
           { label: 'Overview', href: '#' },
           { label: 'Clients', href: '#' },
@@ -87,8 +87,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, title }) => {
               </div>
 
               {/* Role label */}
-              <p className="ml-1 text-xs sm:text-sm text-gray-500 capitalize">
-                {profile?.role === 'therapist' ? 'Therapist Portal' : 'Client Portal'}
+                <p className="ml-1 text-xs sm:text-sm text-gray-500 capitalize">
+                {(profile?.role ?? '').toString().toLowerCase() === 'therapist' ? 'Therapist Portal' : 'Client Portal'}
               </p>
             </div>
 
@@ -166,7 +166,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, title }) => {
                       {profile?.first_name} {profile?.last_name}
                     </div>
                     <div className="text-xs text-gray-500 capitalize truncate">
-                      {profile?.role === 'therapist' ? 'Therapist Portal' : 'Client Portal'}
+                      {(profile?.role ?? '').toString().toLowerCase() === 'therapist' ? 'Therapist Portal' : 'Client Portal'}
                     </div>
                   </div>
                 </div>

@@ -77,7 +77,7 @@ export const useMembership = () => {
       setPlans(plansData)
 
       // Load current subscription (therapists only)
-      if (profile.role === 'therapist') {
+      if ((profile.role ?? '').toString().toLowerCase() === 'therapist') {
         const subData = await WhishPayService.getCurrentSubscription(user.id)
         setSubscription(subData)
 
