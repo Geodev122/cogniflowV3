@@ -4,6 +4,7 @@
 BEGIN;
 
 -- create minimal auth.users demo rows to satisfy FK for demo profiles
+-- NOTE: restricted to approved demo UUIDs only (do NOT add other demo users here)
 INSERT INTO auth.users (id, email, created_at)
 VALUES
   ('22222222-2222-2222-2222-222222222222'::uuid, 'dazzlt.uk@gmail.com', now()),
