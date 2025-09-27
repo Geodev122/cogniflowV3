@@ -22,6 +22,7 @@ export default function TherapistSidebar({ sidebarCollapsed, setSidebarCollapsed
       <aside className={`hidden md:flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 fixed left-0 top-16 bottom-0 transition-all duration-300 shadow-lg z-30`}>
       <div className="flex-shrink-0 border-b border-gray-100">
         <div className="p-4 flex items-center justify-between">
+          {/* Solo top item: Overview (desktop/tablet) */}
           {!sidebarCollapsed && (
             <button
               onClick={() => goto('overview')}
@@ -31,6 +32,7 @@ export default function TherapistSidebar({ sidebarCollapsed, setSidebarCollapsed
               <ChevronLeft className="w-4 h-4 mr-2 text-blue-600" /> Overview
             </button>
           )}
+
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className={`w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center ${sidebarCollapsed ? 'mx-auto' : ''}`}

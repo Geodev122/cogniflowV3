@@ -173,10 +173,8 @@ export default function TherapistDashboard() {
   const [notesInitial, setNotesInitial] = useState<string | undefined>(undefined)
   const [chatOpen, setChatOpen] = useState(false)
 
-  // SOLO nav (no title block)
-  const navSolo = [
-    { id: 'clienteles' as const, name: 'Clienteles', icon: Users },
-  ] as const
+  // We'll show Overview as the solo/top nav in the sidebar component.
+  // Keep clienteles inside the Client Care group (moved below).
 
   const baseGroups: NavGroup[] = [
     {
@@ -185,7 +183,7 @@ export default function TherapistDashboard() {
       expandable: true,
       items: [
         { id: 'archives', name: 'Case Archives', icon: Archive },
-        { id: 'cases', name: 'Case Management', icon: FileText },
+        { id: 'clienteles', name: 'Clienteles', icon: Users },
         { id: 'resources', name: 'Resource Library', icon: Library },
       ]
     },
@@ -197,6 +195,7 @@ export default function TherapistDashboard() {
         { id: 'sessions', name: 'Session Management', icon: Calendar },
         { id: 'metrics', name: 'Progress Metrics', icon: BarChart3 },
         { id: 'continuing-education', name: 'Continuing Education', icon: GraduationCap },
+        { id: 'cases', name: 'Case Management', icon: FileText },
         { id: 'supervision', name: 'Supervision', icon: Headphones },
       ]
     },
