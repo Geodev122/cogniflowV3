@@ -92,13 +92,16 @@ export default function TherapistSidebar({ sidebarCollapsed, setSidebarCollapsed
                     <button
                       key={tab.id}
                       onClick={() => goto(tab.id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goto(tab.id) } }}
                       className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
                         isActive ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow' : 'text-gray-700 hover:bg-gray-50'
                       }`}
                       aria-current={isActive ? 'page' : undefined}
                       title={sidebarCollapsed ? tab.name : undefined}
                     >
-                      <div className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-400'}`} />
+                      <div className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-400'}`}>
+                        {Icon ? <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} /> : null}
+                      </div>
                       {!sidebarCollapsed && <span className="font-medium">{tab.name}</span>}
                     </button>
                   )

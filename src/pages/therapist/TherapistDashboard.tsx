@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { TherapistOnboarding } from '../../components/therapist/TherapistOnboarding'
 import TherapistSidebar from '../../components/ui/TherapistSidebar'
+import SessionNotesModal from '../../components/therapist/SessionNotesModal'
+import QuickChatPanel from '../../components/therapist/QuickChatPanel'
 
 // Minimal ErrorBoundary to prevent white screen on render errors
 class DashboardErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error?: Error }> {
@@ -167,6 +169,9 @@ export default function TherapistDashboard() {
     return VALID_SECTIONS.includes(stored) ? stored : 'overview'
   })()
   const [active, setActive] = useState<SectionId>(initialActive)
+  const [notesOpenFor, setNotesOpenFor] = useState<string | null>(null)
+  const [notesInitial, setNotesInitial] = useState<string | undefined>(undefined)
+  const [chatOpen, setChatOpen] = useState(false)
 
   // SOLO nav (no title block)
   const navSolo = [
@@ -669,11 +674,12 @@ export default function TherapistDashboard() {
                         <span className="sm:hidden">Go</span>
                       </button>
                     )}
-                    {session.notes && (
-                      <button onClick={() => alert(session.notes)} className="inline-flex items-center px-3 py-2 text-sm bg-white border rounded-lg hover:bg-gray-50">
-                        Notes
-                      </button>
-                    )}
+                    <button onClick={() => { setNotesOpenFor(session.id); setNotesInitial(session.notes) }} className="inline-flex items-center px-3 py-2 text-sm bg-white border rounded-lg hover:bg-gray-50">
+                      Notes
+                    </button>
+                    <button onClick={() => { setChatOpen(true) }} className="inline-flex items-center px-3 py-2 text-sm bg-white border rounded-lg hover:bg-gray-50">
+                      Chat
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1140,6 +1146,14 @@ export default function TherapistDashboard() {
           </div>
         </div>
       )}
+      {/* Session notes modal and quick chat panel */}
+      <SessionNotesModal open={!!notesOpenFor} onClose={() => { setNotesOpenFor(null); setNotesInitial(undefined) }} sessionId={notesOpenFor} initialNotes={notesInitial} />
+      <QuickChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+
+      {/* Floating quick chat button */}
+      <div className="fixed right-4 bottom-4 z-50 md:hidden">
+        <button onClick={() => setChatOpen(true)} className="bg-indigo-600 text-white px-4 py-3 rounded-full shadow-lg">Chat</button>
+      </div>
     </div>
     </DashboardErrorBoundary>
   )
