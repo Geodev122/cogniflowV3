@@ -148,14 +148,22 @@ BEGIN
     IF col_list = '' THEN
       RAISE NOTICE 'No suitable profile columns detected; skipping inserts into profiles.';
     ELSE
-      stmt := format('INSERT INTO public.profiles (%s) VALUES (%s) ON CONFLICT DO NOTHING', col_list, val_list);
-      BEGIN
-        EXECUTE stmt;
-      EXCEPTION WHEN foreign_key_violation THEN
-        RAISE NOTICE 'Skipped profile insert due to FK violation for user id %: %', u.user_id, SQLERRM;
-      WHEN others THEN
-        RAISE NOTICE 'Could not insert profile row for %: %', u.user_id, SQLERRM;
-      END;
+      -- If profiles.user_id exists and is NOT NULL but we couldn't include it,
+      -- skip this insert to avoid NOT NULL violation. This can happen when the
+      -- column has an FK to auth.users and the auth user doesn't exist and we
+      -- are configured not to create auth.users here.
+      IF has_user_id AND NOT include_user_id AND NOT user_id_nullable THEN
+        RAISE NOTICE 'Skipping profile insert for % because profiles.user_id is NOT NULL and cannot be safely populated.', u.user_id;
+      ELSE
+        stmt := format('INSERT INTO public.profiles (%s) VALUES (%s) ON CONFLICT DO NOTHING', col_list, val_list);
+        BEGIN
+          EXECUTE stmt;
+        EXCEPTION WHEN foreign_key_violation THEN
+          RAISE NOTICE 'Skipped profile insert due to FK violation for user id %: %', u.user_id, SQLERRM;
+        WHEN others THEN
+          RAISE NOTICE 'Could not insert profile row for %: %', u.user_id, SQLERRM;
+        END;
+      END IF;
     END IF;
   END LOOP;
 
