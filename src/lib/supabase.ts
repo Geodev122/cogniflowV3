@@ -20,6 +20,55 @@ if (!supabaseUrl || !supabaseAnonKey) {
   )
 }
 
+// Also patch the global fetch implementation in the browser so any direct
+// calls to window.fetch (from other components or third-party libs) are
+// protected the same way. This prevents stray role headers from reaching
+// PostgREST and causing errors like: role "therapist" does not exist.
+if (typeof window !== 'undefined') {
+  const globalAny = window as any
+  if (!globalAny.__safeFetchPatched) {
+    const origFetch = window.fetch.bind(window)
+    window.fetch = (input: RequestInfo, init?: RequestInit) => {
+      const nextInit: RequestInit = { ...(init || {}) }
+      const headers = new Headers(nextInit.headers as HeadersInit)
+
+      const toDelete: string[] = []
+      headers.forEach((v, k) => {
+        const lk = k.toLowerCase()
+        if (
+          lk === 'role' ||
+          lk === 'x-postgrest-role' ||
+          lk === 'x-role' ||
+          lk.includes('postgrest-role') ||
+          lk.includes('user-role') ||
+          lk.includes('supabase-role') ||
+          /role/i.test(lk)
+        ) {
+          toDelete.push(k)
+        }
+      })
+
+      const removedHeaders: Array<{ name: string; value: string }> = []
+      toDelete.forEach(h => {
+        try { removedHeaders.push({ name: h, value: headers.get(h) ?? '' }) } catch (_) { removedHeaders.push({ name: h, value: '<could not read>' }) }
+        headers.delete(h)
+      })
+
+      if (!headers.has('x-postgrest-role')) headers.set('x-postgrest-role', 'authenticated')
+      if (toDelete.length && import.meta.env.DEV) {
+        console.warn('[global fetch] removed role-like headers (names):', toDelete, 'for request', input)
+        try { console.debug('[global fetch] removed headers (name/value):', removedHeaders) } catch (_) {}
+      } else if (removedHeaders.some(h => /therapist/i.test(h.value))) {
+        console.error('[global fetch] removed header containing "therapist":', removedHeaders.filter(h => /therapist/i.test(h.value)), 'for request', input)
+      }
+
+      nextInit.headers = headers
+      return origFetch(input, nextInit)
+    }
+    globalAny.__safeFetchPatched = true
+  }
+}
+
 /**
  * Defensive safeFetch wrapper for browser client: strip role-like headers
  */
@@ -46,7 +95,18 @@ const safeFetch = (input: RequestInfo, init?: RequestInit) => {
       toDelete.push(k)
     }
   })
-  toDelete.forEach(h => headers.delete(h))
+  // Capture values of the headers we're about to remove so we can diagnose
+  // which header (and its value) might have caused PostgREST to attempt
+  // SET ROLE '<role>' on the server.
+  const removedHeaders: Array<{ name: string; value: string }> = []
+  toDelete.forEach(h => {
+    try {
+      removedHeaders.push({ name: h, value: headers.get(h) ?? '' })
+    } catch (_) {
+      removedHeaders.push({ name: h, value: '<could not read>' })
+    }
+    headers.delete(h)
+  })
 
   // Set a conservative default PostgREST role for browser requests. This prevents
   // PostgREST from trying to SET ROLE to custom DB roles (like 'therapist') that
@@ -55,8 +115,13 @@ const safeFetch = (input: RequestInfo, init?: RequestInit) => {
   if (!headers.has('x-postgrest-role')) headers.set('x-postgrest-role', 'authenticated')
 
   if (toDelete.length && import.meta.env.DEV) {
-    console.warn('[safeFetch] removed role-like headers:', toDelete, 'for request', input)
+    console.warn('[safeFetch] removed role-like headers (names):', toDelete, 'for request', input)
+    try { console.debug('[safeFetch] removed role-like headers (name/value):', removedHeaders) } catch (_) {}
     try { console.debug('[safeFetch] remaining headers:', Array.from(headers.entries())) } catch (_) {}
+  } else if (removedHeaders.some(h => /therapist/i.test(h.value))) {
+    // If we detected a removed header whose value mentions 'therapist', log
+    // it at error level so it shows up even outside DEV mode.
+    console.error('[safeFetch] removed header containing "therapist":', removedHeaders.filter(h => /therapist/i.test(h.value)), 'for request', input)
   }
 
   nextInit.headers = headers
