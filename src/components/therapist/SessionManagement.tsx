@@ -3,7 +3,21 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDateTime, isRecursionError } from '../../utils/helpers'
-import { Calendar, Plus, ListFilter as Filter, User, CreditCard as Edit, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, Trash2, Clock, Search, Check, Users, FileText, MessageSquare } from 'lucide-react'' | 'family' | 'assessment'
+import {
+  Calendar,
+  Plus,
+  Filter,
+  User,
+  Edit,
+  CheckCircle,
+  AlertTriangle,
+  Trash2,
+  Clock,
+  Search,
+  Check,
+} from 'lucide-react'
+
+type AptType = 'individual' | 'group' | 'family' | 'assessment'
 type AptStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show'
 
 interface Appointment {
