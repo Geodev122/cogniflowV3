@@ -10,6 +10,8 @@ export const LicensingCompliance: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
+  const [originalFilename, setOriginalFilename] = useState<string | null>(null)
+  const [licenseName, setLicenseName] = useState<string>('')
   const [expires, setExpires] = useState<string>('')
   const [ceTotal, setCeTotal] = useState<number | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -65,11 +67,12 @@ export const LicensingCompliance: React.FC = () => {
       const path = `${profile.id}/${Date.now()}.${ext}`
       const { error: st } = await supabase.storage.from('licensing').upload(path, file, { upsert: true })
       if (st) throw st
-      const { error: ins } = await supabase.from('therapist_licenses').insert({
-        therapist_id: profile.id, file_path: path, expires_on: expires || null, status: 'submitted'
-      })
+      const payload: any = { therapist_id: profile.id, file_path: path, expires_on: expires || null, status: 'submitted' }
+      if (originalFilename) payload.original_filename = originalFilename
+      if (licenseName) payload.license_name = licenseName
+      const { error: ins } = await supabase.from('therapist_licenses').insert(payload)
       if (ins) throw ins
-      setFile(null); setExpires('')
+      setFile(null); setExpires(''); setOriginalFilename(null); setLicenseName('')
       await load()
       push({ message: 'License uploaded', type: 'success' })
     } catch (e: any) {
@@ -121,8 +124,9 @@ export const LicensingCompliance: React.FC = () => {
           <div className="text-sm text-gray-600">Uploaded licenses</div>
           <div className="text-sm text-gray-700">CE credits: {ceTotal === null ? '—' : ceTotal} {ceTotal !== null && <span className="ml-3 text-xs text-gray-500">({Math.min(100, Math.round((ceTotal/30)*100))}% of 30h)</span>}</div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input type="file" onChange={(e) => { const f = e.target.files?.[0] || null; setFile(f); setOriginalFilename(f?.name || null) }} className="text-sm" />
+          <input type="text" value={licenseName} onChange={(e) => setLicenseName(e.target.value)} className="px-3 py-2 border rounded text-sm" placeholder="License name (optional)" />
           <input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} className="px-3 py-2 border rounded text-sm" placeholder="Expiry date" />
           <button onClick={upload} disabled={!file} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
             <Upload className="w-4 h-4 inline mr-1" /> Upload License
@@ -161,8 +165,11 @@ export const LicensingCompliance: React.FC = () => {
                   return (
                     <tr key={r.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 truncate">{r.file_path}</div>
-                        <div className="text-xs text-gray-500">{new Date(r.created_at).toLocaleString()}</div>
+                        <div className="font-medium text-gray-900 truncate">{r.license_name || r.file_path}</div>
+                        <div className="text-xs text-gray-500">
+                          {r.original_filename ? <span className="font-mono mr-2">{r.original_filename}</span> : null}
+                          {new Date(r.created_at).toLocaleString()}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         {r.expires_on ? (
@@ -189,6 +196,9 @@ export const LicensingCompliance: React.FC = () => {
                             <Trash2 className="w-3.5 h-3.5" /> {deleting === r.id ? 'Deleting...' : 'Delete'}
                           </button>
                         </div>
+                        {r.verified_at && (
+                          <div className="text-xs text-green-600 mt-1">Verified {new Date(r.verified_at).toLocaleDateString()}{r.verified_by ? ` by ${r.verified_by}` : ''}</div>
+                        )}
                       </td>
                     </tr>
                   )
