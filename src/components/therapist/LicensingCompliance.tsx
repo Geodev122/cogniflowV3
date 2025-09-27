@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { IdCard, Loader2, AlertTriangle, Upload, Download, Bell } from 'lucide-react'
+import { IdCard, Loader2, AlertTriangle, Upload, Download, Bell, Trash2, Eye } from 'lucide-react'
 
 export const LicensingCompliance: React.FC = () => {
   const { profile } = useAuth()
@@ -11,6 +11,8 @@ export const LicensingCompliance: React.FC = () => {
   const [file, setFile] = useState<File | null>(null)
   const [expires, setExpires] = useState<string>('')
   const [ceTotal, setCeTotal] = useState<number | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!profile?.id) return
@@ -69,6 +71,27 @@ export const LicensingCompliance: React.FC = () => {
     }
   }
 
+  const handlePreview = (path: string) => {
+    const url = supabase.storage.from('licensing').getPublicUrl(path).data.publicUrl
+    setPreviewUrl(url)
+  }
+
+  const handleDelete = async (row: any) => {
+    if (!profile?.id) return
+    if (!confirm('Delete this license file? This cannot be undone.')) return
+    try {
+      setDeleting(row.id)
+      // remove from storage
+      await supabase.storage.from('licensing').remove([row.file_path])
+      // remove DB record
+      const { error } = await supabase.from('therapist_licenses').delete().eq('id', row.id)
+      if (error) throw error
+      await load()
+    } catch (e: any) {
+      alert(e?.message || 'Delete failed')
+    } finally { setDeleting(null) }
+  }
+
   const daysLeft = (d?: string | null) => {
     if (!d) return null
     const ms = new Date(d).getTime() - Date.now()
@@ -85,7 +108,7 @@ export const LicensingCompliance: React.FC = () => {
       <div className="bg-white border rounded-lg shadow-sm p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="text-sm text-gray-600">Uploaded licenses</div>
-          <div className="text-sm text-gray-700">CE credits: {ceTotal === null ? '—' : ceTotal}</div>
+          <div className="text-sm text-gray-700">CE credits: {ceTotal === null ? '—' : ceTotal} {ceTotal !== null && <span className="ml-3 text-xs text-gray-500">({Math.min(100, Math.round((ceTotal/30)*100))}% of 30h)</span>}</div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" />
@@ -144,9 +167,17 @@ export const LicensingCompliance: React.FC = () => {
                         }`}>{r.status || 'pending'}</span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 rounded hover:bg-gray-200 text-xs">
-                          <Download className="w-3.5 h-3.5" /> View
-                        </a>
+                        <div className="inline-flex items-center gap-2">
+                          <button onClick={() => handlePreview(r.file_path)} className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 rounded hover:bg-gray-200 text-xs">
+                            <Eye className="w-3.5 h-3.5" /> Preview
+                          </button>
+                          <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 rounded hover:bg-gray-200 text-xs">
+                            <Download className="w-3.5 h-3.5" /> Download
+                          </a>
+                          <button onClick={() => handleDelete(r)} disabled={deleting === r.id} className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 text-xs">
+                            <Trash2 className="w-3.5 h-3.5" /> {deleting === r.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -156,6 +187,16 @@ export const LicensingCompliance: React.FC = () => {
           </div>
         )}
       </div>
+      {previewUrl && (
+        <div className="fixed inset-0 bg-black/50 grid place-items-center z-50" onClick={() => setPreviewUrl(null)}>
+          <div className="bg-white max-w-3xl w-full p-4 rounded shadow" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-end"><button onClick={() => setPreviewUrl(null)} className="text-sm text-gray-600">Close</button></div>
+            <div className="mt-2">
+              <iframe src={previewUrl} className="w-full h-[70vh] border" title="Preview" />
+            </div>
+          </div>
+        </div>
+      )}
       <div className="text-xs text-gray-500 flex items-center gap-1">
         <Bell className="w-3.5 h-3.5" /> We’ll alert you 30/14/7 days before expiry.
       </div>
