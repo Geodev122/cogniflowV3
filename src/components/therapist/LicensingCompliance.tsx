@@ -13,6 +13,9 @@ export const LicensingCompliance: React.FC = () => {
   const [ceTotal, setCeTotal] = useState<number | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [ceHours, setCeHours] = useState<number | ''>('')
+  const [ceCourse, setCeCourse] = useState<string>('')
+  const [ceSubmitting, setCeSubmitting] = useState(false)
 
   const load = useCallback(async () => {
     if (!profile?.id) return
@@ -186,6 +189,36 @@ export const LicensingCompliance: React.FC = () => {
             </table>
           </div>
         )}
+      </div>
+      <div className="bg-white border rounded-lg shadow-sm p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm text-gray-600">Add CE completion (manual entry)</div>
+          <div className="text-sm text-gray-700">Total: {ceTotal === null ? '—' : ceTotal} hrs</div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input type="number" min={0.25} step={0.25} value={ceHours as any} onChange={(e) => setCeHours(e.target.value === '' ? '' : Number(e.target.value))} className="px-3 py-2 border rounded text-sm" placeholder="Hours (e.g. 1.5)" />
+          <input type="text" value={ceCourse} onChange={(e) => setCeCourse(e.target.value)} className="px-3 py-2 border rounded text-sm" placeholder="Course ID / Title (optional)" />
+          <div />
+          <div className="text-right">
+            <button onClick={async () => {
+              if (!profile?.id || !ceHours) return alert('Enter hours')
+              try {
+                setCeSubmitting(true)
+                const payload: any = { therapist_id: profile.id, hours: ceHours }
+                if (ceCourse) payload.course_id = ceCourse
+                const { error } = await supabase.from('ce_completions').insert(payload)
+                if (error) throw error
+                // refresh total
+                const { data } = await supabase.from('ce_completions').select('hours').eq('therapist_id', profile.id)
+                const total = (data || []).reduce((s: number, r: any) => s + (r.hours || 0), 0)
+                setCeTotal(total)
+                setCeHours(''); setCeCourse('')
+                alert('CE completion recorded')
+              } catch (e: any) { alert(e?.message || 'Failed to record CE') }
+              finally { setCeSubmitting(false) }
+            }} disabled={ceSubmitting || !ceHours} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">{ceSubmitting ? 'Saving...' : 'Add CE'}</button>
+          </div>
+        </div>
       </div>
       {previewUrl && (
         <div className="fixed inset-0 bg-black/50 grid place-items-center z-50" onClick={() => setPreviewUrl(null)}>
