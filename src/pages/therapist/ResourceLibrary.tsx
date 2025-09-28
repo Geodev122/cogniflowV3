@@ -1,6 +1,6 @@
 // src/components/therapist/ResourceLibrary.tsx
 import React, { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useAssessments } from '../../hooks/useAssessments'
 import {
@@ -1083,10 +1083,11 @@ export default function ResourceLibrary() {
     run()
   }, [profile])
 
-  // Load resources only on the Resources tab
+  // Load resources only on the Resources tab. Public resources are visible
+  // even when profile is not yet available, so don't gate on profile.
   useEffect(() => {
     const run = async () => {
-      if (!profile?.id || activeTab !== 'resources') return
+      if (activeTab !== 'resources') return
       setResourcesLoading(true)
       setResourcesError(null)
       try {
@@ -1095,21 +1096,26 @@ export default function ResourceLibrary() {
           .select(
             'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
           )
-          .eq('is_public', true as any)
+          .eq('is_public', true)
           .order('created_at', { ascending: false })
 
-        if (error) throw error
+        if (error) {
+          console.error('[ResourceLibrary] supabase error fetching resources:', error)
+          setResources([])
+          setResourcesError(error.message ?? String(error))
+          return
+        }
         setResources((data as Resource[]) || [])
       } catch (e) {
         console.error('[ResourceLibrary] fetchResources error:', e)
         setResources([])
-        setResourcesError('Could not load resources.')
+        setResourcesError(e instanceof Error ? e.message : String(e))
       } finally {
         setResourcesLoading(false)
       }
     }
     run()
-  }, [profile, activeTab])
+  }, [activeTab])
 
   // Derived
   const filteredResources = useMemo(() => {
