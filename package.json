@@ -1,3 +1,4 @@
+
 {
   "name": "cogniflow-pwa",
   "private": true,
@@ -9,13 +10,13 @@
     "build:analyze": "vite build --mode analyze",
     "preview": "vite preview",
     "lint": "eslint .",
-  "cypress:open": "cypress open",
-  "cypress:run": "cypress run",
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run",
     "migrate:archive": "powershell ./supabase/scripts/archive_old_migrations.ps1",
     "migrate:validate": "powershell ./supabase/scripts/validate_migrations.ps1",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
-  "clean": "rm -rf dist node_modules/.vite",
-  "gen:db-types": "echo \"Run: supabase gen types typescript --schema public > src/types/database.ts\"",
+    "clean": "rm -rf dist node_modules/.vite",
+    "gen:db-types": "echo \"Run: supabase gen types typescript --schema public > src/types/database.ts\"",
     "reinstall": "npm run clean && npm install"
   },
   "dependencies": {
