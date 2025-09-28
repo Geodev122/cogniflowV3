@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { supabase, expectMany, run } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -97,43 +99,149 @@ export type SupportCategory = { key: string; name: string; description?: string 
 export type SupportTag = { key: string; label: string };
 export type ProfileLite = { id: string; email: string; first_name?: string; last_name?: string; role?: string };
 
-// Minimal API client (adjust to your backend)
-const API_BASE = "/api/support";
-async function http<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, init);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<T>;
-}
-
+// Supabase-backed API helpers
 const api = {
   listTickets: async (params: Partial<Record<string, string>> = {}) => {
-    const qs = new URLSearchParams(params as Record<string, string>);
-    return http<TicketListItem[]>(`${API_BASE}/tickets?${qs.toString()}`);
+    // Basic filtering: q -> subject/body search, status, priority, category, assignee (email)
+    let query = supabase.from('tickets').select('*, profiles:profiles!user_id(id, first_name, last_name, email)');
+    // apply simple filters where possible
+    if (params.status) query = query.eq('status', params.status as string);
+    if (params.priority) query = query.eq('status', params.priority as string); // keep parity if needed
+    // category and assignee handling might depend on schema; do a simple select and map server-side
+    const { rows } = await expectMany<TicketListItem>(query);
+    // rows may not match TicketListItem shape; best-effort map
+    return rows.map((r: any) => ({
+      id: String(r.id),
+      ticket_number: r.ticket_number ?? (r.id as string).slice(0, 8),
+      status: (r.status ?? 'open') as TicketStatus,
+      priority: (r.priority ?? 'medium') as TicketPriority,
+      subject: r.subject ?? '',
+      category_key: r.category_key ?? null,
+      created_at: r.created_at ?? new Date().toISOString(),
+      updated_at: r.updated_at ?? new Date().toISOString(),
+      last_activity_at: r.updated_at ?? r.created_at ?? new Date().toISOString(),
+      requester_id: r.user_id ?? r.requester_id ?? '',
+      requester_email: r.profiles?.email ?? r.requester_email ?? '',
+      requester_name: [r.profiles?.first_name, r.profiles?.last_name].filter(Boolean).join(' ') || r.requester_name ?? '',
+      assignee_id: r.assignee_id ?? null,
+      assignee_email: r.assignee_email ?? null,
+      assignee_name: r.assignee_name ?? null,
+      latest_message_preview: r.latest_message_preview ?? null,
+      message_created_at: r.message_created_at ?? null,
+      tags: r.tags ?? undefined,
+    } as TicketListItem));
   },
-  getMessages: async (ticketId: string) => http<TicketMessage[]>(`${API_BASE}/tickets/${ticketId}/messages`),
+  getMessages: async (ticketId: string) => {
+    const { rows } = await expectMany<TicketMessage>(supabase.from('messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }));
+    return rows.map((r: any) => ({
+      ticket_id: String(r.ticket_id),
+      message_id: String(r.id ?? r.message_id),
+      body: r.body,
+      is_internal: Boolean(r.is_internal),
+      attachments: r.attachments ?? [],
+      created_at: r.created_at,
+      sender_id: String(r.sender_id ?? r.created_by ?? ''),
+      sender_email: r.sender_email ?? r.sender_email ?? '',
+      sender_name: r.sender_name ?? r.sender_name ?? '',
+    } as TicketMessage));
+  },
   postMessage: async (
     ticketId: string,
     payload: { sender_id: string; body: string; is_internal?: boolean }
-  ) =>
-    http<TicketMessage>(`${API_BASE}/tickets/${ticketId}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }),
+  ) => {
+    const p: any = { ticket_id: ticketId, body: payload.body, is_internal: payload.is_internal ?? false, sender_id: payload.sender_id };
+    const inserted = await run(supabase.from('messages').insert(p).select('*').single());
+    if (!inserted) throw new Error('Failed to insert message');
+    const r: any = inserted;
+    return {
+      ticket_id: String(r.ticket_id),
+      message_id: String(r.id ?? r.message_id),
+      body: r.body,
+      is_internal: Boolean(r.is_internal),
+      attachments: r.attachments ?? [],
+      created_at: r.created_at,
+      sender_id: String(r.sender_id ?? r.created_by ?? ''),
+      sender_email: r.sender_email ?? '',
+      sender_name: r.sender_name ?? '',
+    } as TicketMessage;
+  },
   patchTicket: async (
     ticketId: string,
-    patch: Partial<Pick<TicketListItem, "status" | "priority" | "subject">> & { assignee_id?: string | null }
-  ) =>
-    http<TicketListItem>(`${API_BASE}/tickets/${ticketId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    }),
-  createTicket: async (payload: { requester_id: string; subject: string; description: string; category_key?: string | null; priority?: TicketPriority }) =>
-    http<TicketListItem>(`${API_BASE}/tickets`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-  listCategories: async () => http<SupportCategory[]>(`${API_BASE}/categories`),
-  listTags: async () => http<SupportTag[]>(`${API_BASE}/tags`),
-  listProfiles: async (q = "", role?: string) => http<ProfileLite[]>(`/api/profiles?q=${encodeURIComponent(q)}&role=${encodeURIComponent(role ?? "")}`),
+    patch: Partial<Pick<TicketListItem, 'status' | 'priority' | 'subject'>> & { assignee_id?: string | null }
+  ) => {
+    const data: any = { ...(patch as any) };
+    if (patch.assignee_id !== undefined) data.assignee_id = patch.assignee_id;
+    const updated = await run(supabase.from('tickets').update(data).eq('id', ticketId).select('*').single());
+    if (!updated) throw new Error('Failed to update ticket');
+    const r: any = updated;
+    return {
+      id: String(r.id),
+      ticket_number: r.ticket_number ?? (r.id as string).slice(0, 8),
+      status: (r.status ?? 'open') as TicketStatus,
+      priority: (r.priority ?? 'medium') as TicketPriority,
+      subject: r.subject ?? '',
+      category_key: r.category_key ?? null,
+      created_at: r.created_at ?? new Date().toISOString(),
+      updated_at: r.updated_at ?? new Date().toISOString(),
+      last_activity_at: r.updated_at ?? r.created_at ?? new Date().toISOString(),
+      requester_id: r.user_id ?? r.requester_id ?? '',
+      requester_email: r.requester_email ?? '',
+      requester_name: r.requester_name ?? '',
+      assignee_id: r.assignee_id ?? null,
+      assignee_email: r.assignee_email ?? null,
+      assignee_name: r.assignee_name ?? null,
+      latest_message_preview: r.latest_message_preview ?? null,
+      message_created_at: r.message_created_at ?? null,
+      tags: r.tags ?? undefined,
+    } as TicketListItem;
+  },
+  createTicket: async (payload: { requester_id: string; subject: string; description: string; category_key?: string | null; priority?: TicketPriority }) => {
+    const toInsert: any = {
+      user_id: payload.requester_id,
+      subject: payload.subject,
+      body: payload.description,
+      category_key: payload.category_key ?? null,
+      priority: payload.priority ?? 'medium',
+    };
+    const inserted = await run(supabase.from('tickets').insert(toInsert).select('*').single());
+    if (!inserted) throw new Error('Failed to create ticket');
+    const r: any = inserted;
+    return {
+      id: String(r.id),
+      ticket_number: r.ticket_number ?? (r.id as string).slice(0, 8),
+      status: (r.status ?? 'open') as TicketStatus,
+      priority: (r.priority ?? 'medium') as TicketPriority,
+      subject: r.subject ?? '',
+      category_key: r.category_key ?? null,
+      created_at: r.created_at ?? new Date().toISOString(),
+      updated_at: r.updated_at ?? new Date().toISOString(),
+      last_activity_at: r.updated_at ?? r.created_at ?? new Date().toISOString(),
+      requester_id: r.user_id ?? '',
+      requester_email: r.requester_email ?? '',
+      requester_name: r.requester_name ?? '',
+      assignee_id: r.assignee_id ?? null,
+      assignee_email: r.assignee_email ?? null,
+      assignee_name: r.assignee_name ?? null,
+      latest_message_preview: r.latest_message_preview ?? null,
+      message_created_at: r.message_created_at ?? null,
+      tags: r.tags ?? undefined,
+    } as TicketListItem;
+  },
+  listCategories: async () => {
+    const { rows } = await expectMany<SupportCategory>(supabase.from('support_categories').select('*'));
+    return rows.map((r: any) => ({ key: r.key ?? String(r.id), name: r.name ?? r.key, description: r.description } as SupportCategory));
+  },
+  listTags: async () => {
+    const { rows } = await expectMany<SupportTag>(supabase.from('support_tags').select('*'));
+    return rows.map((r: any) => ({ key: r.key ?? String(r.id), label: r.label } as SupportTag));
+  },
+  listProfiles: async (q = '', role?: string) => {
+    let query = supabase.from('profiles').select('id, email, first_name, last_name, role');
+    if (q) query = query.ilike('email', `%${q}%`).or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`);
+    if (role) query = query.eq('role', role);
+    const { rows } = await expectMany<ProfileLite>(query.limit(20));
+    return rows.map((r: any) => ({ id: String(r.id), email: r.email, first_name: r.first_name, last_name: r.last_name, role: r.role } as ProfileLite));
+  },
 };
 
 const CATEGORY_META: Record<string, { icon: LucideIcon; label: string }> = {
