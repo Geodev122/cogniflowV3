@@ -160,7 +160,7 @@ const AssessmentLibrary: React.FC<AssessmentLibraryProps> = ({ onAssign, onPrevi
   }
 
   return (
-    <div className="h-full flex flex-col">
+  <div className="h-full flex flex-col overflow-x-hidden">
       {/* Sticky/compact filters */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-gray-200 p-3">
         <div className="flex items-center justify-between mb-2">
@@ -1306,8 +1306,8 @@ export default function ResourceLibrary() {
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-3">
+  {/* Content */}
+  <div className="flex-1 overflow-y-auto p-3 min-w-0">
           {filteredResources.length === 0 ? (
             <div className="h-full grid place-items-center">
               <div className="text-center">

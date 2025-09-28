@@ -416,7 +416,7 @@ export const Clienteles: React.FC = () => {
   /* --------------------------------- UI ----------------------------------- */
   return (
     <div className="h-full min-h-0 w-full overflow-x-hidden">
-      <div className="mx-auto w-full max-w-[1400px] px-3 sm:px-6 py-6">
+      <div className="mx-auto w-full max-w-[1400px] px-3 sm:px-6 py-6 min-w-0">
         {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div className="flex items-center gap-2 min-w-0">
@@ -424,14 +424,14 @@ export const Clienteles: React.FC = () => {
             <h2 className="text-2xl font-bold text-gray-900 truncate">Clienteles</h2>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search name, email, city…"
-                className="pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64 max-w-[70vw]"
+                className="pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full"
               />
             </div>
             <select
@@ -588,8 +588,8 @@ export const Clienteles: React.FC = () => {
               </ul>
 
               {/* Desktop: fixed table */}
-              <div className="hidden md:block w-full">
-                <table className="w-full table-fixed">
+              <div className="hidden md:block w-full overflow-x-auto">
+                <table className="w-full table-auto">
                   <colgroup>
                     <col className="w-[42%]" />
                     <col className="w-[14%]" />
