@@ -182,8 +182,8 @@ export default function TherapistDashboard() {
       title: 'Client Care',
       expandable: true,
       items: [
-        { id: 'archives', name: 'Case Archives', icon: Archive },
         { id: 'clienteles', name: 'Clienteles', icon: Users },
+        { id: 'archives', name: 'Case Archives', icon: Archive },
         { id: 'resources', name: 'Resource Library', icon: Library },
       ]
     },
@@ -193,8 +193,6 @@ export default function TherapistDashboard() {
       expandable: true,
       items: [
         { id: 'sessions', name: 'Session Management', icon: Calendar },
-        { id: 'metrics', name: 'Progress Metrics', icon: BarChart3 },
-        { id: 'continuing-education', name: 'Continuing Education', icon: GraduationCap },
         { id: 'cases', name: 'Case Management', icon: FileText },
         { id: 'supervision', name: 'Supervision', icon: Headphones },
       ]
@@ -204,9 +202,10 @@ export default function TherapistDashboard() {
       title: 'Professional Setting',
       expandable: false,
       items: [
+        { id: 'continuing-education', name: 'Continuing Education', icon: GraduationCap },
         { id: 'licensing', name: 'Compliance', icon: ShieldCheck },
         { id: 'clinic', name: 'Clinic Rentals', icon: Building2 },
-        { id: 'vip', name: 'VIP Opportunities', icon: Star },
+
       ]
     },
     {
@@ -214,6 +213,7 @@ export default function TherapistDashboard() {
       title: 'Account',
       expandable: false,
       items: [
+        { id: 'vip', name: 'VIP Opportunities', icon: Star },
         { id: 'membership', name: 'Membership', icon: CalendarDays },
         { id: 'admin', name: 'Support/Tickets', icon: Shield },
       ]

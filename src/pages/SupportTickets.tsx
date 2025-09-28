@@ -1,287 +1,3 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../hooks/useAuth'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { Separator } from '@/components/ui/separator'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { formatDistanceToNow, format } from 'date-fns'
-import {
-  Ticket as TicketIcon,
-  Plus,
-  Search,
-  Clock,
-  Mail,
-  Users,
-  Hash,
-  AlertCircle,
-  ChevronDown,
-  Loader2,
-} from 'lucide-react'
-
-type TicketStatus = 'open' | 'pending' | 'resolved' | 'closed'
-type TicketPriority = 'low' | 'medium' | 'high' | 'urgent'
-
-type TicketListItem = {
-  id: string
-  ticket_number: string
-  subject: string
-  status: TicketStatus
-  priority: TicketPriority
-  category_key?: string | null
-  created_at: string
-  updated_at: string
-  last_activity_at: string
-  requester_id: string
-  requester_email: string
-  requester_name: string
-  assignee_id?: string | null
-  assignee_email?: string | null
-  assignee_name?: string | null
-  latest_message_preview?: string | null
-}
-
-type TicketMessage = {
-  message_id: string
-  ticket_id: string
-  body: string
-  is_internal: boolean
-  created_at: string
-  sender_id: string
-  sender_name: string
-}
-
-export default function SupportTicketsPage() {
-  const { profile } = useAuth()
-  const [tickets, setTickets] = useState<TicketListItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [sheetOpen, setSheetOpen] = useState(false)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const { data } = await supabase
-        .from('support_tickets_view')
-        .select('*')
-        .order('last_activity_at', { ascending: false })
-      setTickets((data as any) ?? [])
-      if (!activeId && data && data.length) setActiveId((data as any)[0].id)
-    } catch (e) {
-      console.error('load tickets', e)
-    } finally {
-      setLoading(false)
-    }
-  }, [activeId])
-
-  useEffect(() => { load() }, [load])
-
-  const activeTicket = useMemo(() => tickets.find(t => t.id === activeId) || null, [tickets, activeId])
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-emerald-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        <header className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-xl bg-white shadow grid place-items-center text-sky-600">
-              <TicketIcon className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">Support & Tickets</h1>
-              <p className="text-sm text-zinc-600">Manage inbound requests, internal notes and SLAs</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={load} className="gap-2"><Loader2 className="h-4 w-4" /> Refresh</Button>
-            <NewTicket onCreated={(t)=> setTickets(prev => [t,...prev])} />
-          </div>
-        </header>
-
-        <div className="grid grid-cols-12 gap-4">
-          <div className="col-span-12 lg:col-span-5 bg-white rounded-2xl shadow border overflow-hidden">
-            <div className="p-4 border-b flex items-center justify-between">
-              <div className="text-sm text-zinc-600">Open tickets</div>
-              <div className="text-xs text-zinc-500">{tickets.length} results</div>
-            </div>
-            <ScrollArea className="h-[70vh]">
-              <div className="divide-y">
-                {loading ? <div className="p-4">Loading…</div> : (
-                  tickets.map(t => (
-                    <button key={t.id} onClick={() => { setActiveId(t.id); setSheetOpen(true); }} className="w-full text-left p-4 hover:bg-sky-50 flex items-start gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <div className="font-medium truncate">{t.subject}</div>
-                          <div className="text-xs text-zinc-500">{formatDistanceToNow(new Date(t.last_activity_at), { addSuffix: true })}</div>
-                        </div>
-                        <div className="text-xs text-zinc-500 mt-1">#{t.ticket_number} • {t.requester_email}</div>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-
-          <div className="hidden lg:block col-span-7 bg-white rounded-2xl shadow border overflow-hidden">
-            {activeTicket ? (
-              <TicketDetail ticket={activeTicket} onTicketChange={(nt)=> setTickets(prev => prev.map(p=> p.id===nt.id ? nt : p))} />
-            ) : (
-              <div className="p-8 text-center text-zinc-500">Select a ticket to view details</div>
-            )}
-          </div>
-
-          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-            <SheetContent side="right" className="w-full sm:max-w-2xl">
-              <SheetHeader>
-                <SheetTitle>Ticket</SheetTitle>
-              </SheetHeader>
-              {activeTicket && <TicketDetail ticket={activeTicket} onTicketChange={(nt)=> setTickets(prev => prev.map(p=> p.id===nt.id ? nt : p))} />}
-            </SheetContent>
-          </Sheet>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function NewTicket({ onCreated }: { onCreated: (t: TicketListItem)=>void }){
-  const { profile } = useAuth()
-  const [open, setOpen] = useState(false)
-  const [subject, setSubject] = useState('')
-  const [description, setDescription] = useState('')
-  const [priority, setPriority] = useState<TicketPriority>('medium')
-
-  const create = async ()=>{
-    if (!profile) return alert('Sign in to create tickets')
-    try{
-      const ticket_number = `T-${Date.now().toString().slice(-6)}`
-      const { data, error } = await supabase.from('support_tickets').insert({
-        ticket_number,
-        subject,
-        requester_id: profile.id,
-        requester_email: profile.email,
-        requester_name: (profile as any).first_name || profile.id,
-        priority,
-        status: 'open',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-      }).select().single()
-      if (error) throw error
-      setOpen(false)
-      onCreated((data as any) as TicketListItem)
-    }catch(e:any){ console.error(e); alert('Failed to create ticket: '+(e.message||e)) }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="gap-2"><Plus className="h-4 w-4"/> New Ticket</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create ticket</DialogTitle>
-        </DialogHeader>
-        <div className="grid grid-cols-1 gap-3">
-          <Label>Subject</Label>
-          <Input value={subject} onChange={(e)=> setSubject(e.target.value)} />
-          <Label>Description</Label>
-          <Textarea value={description} onChange={(e)=> setDescription(e.target.value)} />
-          <Label>Priority</Label>
-          <Select value={priority} onValueChange={(v:TicketPriority)=> setPriority(v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="urgent">Urgent</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={()=> setOpen(false)}>Cancel</Button>
-          <Button onClick={create}>Create</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function TicketDetail({ ticket, onTicketChange }: { ticket: TicketListItem; onTicketChange: (t:TicketListItem)=>void }){
-  const { profile } = useAuth()
-  const [messages, setMessages] = useState<TicketMessage[]>([])
-  const [loading, setLoading] = useState(false)
-  const [body, setBody] = useState('')
-  const [posting, setPosting] = useState(false)
-  const scrollRef = useRef<HTMLDivElement|null>(null)
-
-  const load = useCallback(async ()=>{
-    setLoading(true)
-    try{
-      const { data } = await supabase.from('support_ticket_messages_view').select('*').eq('ticket_id', ticket.id).order('created_at', { ascending: true })
-      setMessages((data as any) ?? [])
-    }catch(e){ console.error(e); setMessages([]) } finally { setLoading(false) }
-  },[ticket.id])
-
-  useEffect(()=>{ load() },[load])
-
-  useEffect(()=>{ if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }, [messages])
-
-  const post = async ()=>{
-    if (!profile) return alert('Sign in')
-    if (!body.trim()) return
-    setPosting(true)
-    try{
-      const { data, error } = await supabase.from('support_ticket_messages').insert({
-        ticket_id: ticket.id,
-        body,
-        is_internal: false,
-        sender_id: profile.id,
-        sender_name: (profile as any).first_name || profile.email,
-        created_at: new Date().toISOString(),
-      }).select().single()
-      if (error) throw error
-      setBody('')
-      await load()
-      const { data: t2 } = await supabase.from('support_tickets').update({ last_activity_at: new Date().toISOString() }).eq('id', ticket.id).select().single()
-      if (t2) onTicketChange((t2 as any) as TicketListItem)
-    }catch(e:any){ console.error(e); alert('Failed to post: '+(e.message||e)) } finally { setPosting(false) }
-  }
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 border-b">
-        <div className="text-xs text-zinc-500">#{ticket.ticket_number} • {format(new Date(ticket.created_at), 'PPp')}</div>
-        <h2 className="text-lg font-semibold mt-2">{ticket.subject}</h2>
-        <div className="text-sm text-zinc-600 mt-1">{ticket.requester_name} • {ticket.requester_email}</div>
-      </div>
-      <div className="flex-1 overflow-auto p-4" ref={scrollRef as any}>
-        {loading ? <div>Loading…</div> : messages.map(m => (
-          <div key={m.message_id} className="mb-3">
-            <div className="text-xs text-zinc-500">{m.sender_name} • {format(new Date(m.created_at), 'PPp')}</div>
-            <div className="mt-1 bg-zinc-100 p-3 rounded">{m.body}</div>
-          </div>
-        ))}
-      </div>
-      <div className="p-4 border-t">
-        <Textarea value={body} onChange={(e)=> setBody(e.target.value)} placeholder="Write a reply..." />
-        <div className="flex items-center justify-end gap-2 mt-2">
-          <Button variant="outline" onClick={()=> setBody('')}>Clear</Button>
-          <Button onClick={post} disabled={posting || !body.trim()}>{posting ? 'Sending...' : 'Send'}</Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-//pages/SupportTickets.tsx
-// pages/SupportTickets.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -340,9 +56,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
-// -----------------------------------------------------------------------------
-// Types (aligned with the SQL schema and views)
-// -----------------------------------------------------------------------------
+// Types
 export type TicketStatus = "open" | "pending" | "resolved" | "closed";
 export type TicketPriority = "low" | "medium" | "high" | "urgent";
 
@@ -363,7 +77,7 @@ export type TicketListItem = {
   assignee_email: string | null;
   assignee_name: string | null;
   latest_message_preview: string | null;
-  message_created_at: string | null;
+  message_created_at?: string | null;
   tags?: string[];
 };
 
@@ -372,7 +86,7 @@ export type TicketMessage = {
   message_id: string;
   body: string;
   is_internal: boolean;
-  attachments: any[];
+  attachments: unknown[];
   created_at: string;
   sender_id: string;
   sender_email: string;
@@ -383,56 +97,45 @@ export type SupportCategory = { key: string; name: string; description?: string 
 export type SupportTag = { key: string; label: string };
 export type ProfileLite = { id: string; email: string; first_name?: string; last_name?: string; role?: string };
 
-// -----------------------------------------------------------------------------
-// API client
-// -----------------------------------------------------------------------------
-const API_BASE = "/api/support"; // adapt to your backend router
-
+// Minimal API client (adjust to your backend)
+const API_BASE = "/api/support";
 async function http<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const res = await fetch(input, init);
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return res.json() as Promise<T>;
 }
 
 const api = {
-  listTickets: async (params: Partial<{ q: string; status: string; priority: string; category: string; assignee: string; requester: string }>): Promise<TicketListItem[]> => {
+  listTickets: async (params: Partial<Record<string, string>> = {}) => {
     const qs = new URLSearchParams(params as Record<string, string>);
     return http<TicketListItem[]>(`${API_BASE}/tickets?${qs.toString()}`);
   },
-  getTicket: async (id: string): Promise<TicketListItem> => http(`${API_BASE}/tickets/${id}`),
-  getMessages: async (ticketId: string): Promise<TicketMessage[]> => http(`${API_BASE}/tickets/${ticketId}/messages`),
-  postMessage: async (ticketId: string, payload: { sender_id: string; body: string; is_internal?: boolean; attachments?: any[] }) =>
+  getMessages: async (ticketId: string) => http<TicketMessage[]>(`${API_BASE}/tickets/${ticketId}/messages`),
+  postMessage: async (
+    ticketId: string,
+    payload: { sender_id: string; body: string; is_internal?: boolean }
+  ) =>
     http<TicketMessage>(`${API_BASE}/tickets/${ticketId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
-  patchTicket: async (ticketId: string, patch: Partial<Pick<TicketListItem, "status" | "priority" | "subject">> & { assignee_id?: string | null; tags?: string[] }) =>
+  patchTicket: async (
+    ticketId: string,
+    patch: Partial<Pick<TicketListItem, "status" | "priority" | "subject">> & { assignee_id?: string | null }
+  ) =>
     http<TicketListItem>(`${API_BASE}/tickets/${ticketId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     }),
-  createTicket: async (payload: {
-    requester_id: string;
-    subject: string;
-    description: string;
-    category_key?: string | null;
-    priority?: TicketPriority;
-    initial_message?: string;
-    tags?: string[];
-  }) => http<TicketListItem>(`${API_BASE}/tickets`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-  listCategories: async (): Promise<SupportCategory[]> => http(`${API_BASE}/categories`),
-  listTags: async (): Promise<SupportTag[]> => http(`${API_BASE}/tags`),
-  listProfiles: async (q = "", role?: string): Promise<ProfileLite[]> => {
-    const qs = new URLSearchParams({ q, role: role ?? "" });
-    return http(`/api/profiles?${qs.toString()}`);
-  },
+  createTicket: async (payload: { requester_id: string; subject: string; description: string; category_key?: string | null; priority?: TicketPriority }) =>
+    http<TicketListItem>(`${API_BASE}/tickets`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+  listCategories: async () => http<SupportCategory[]>(`${API_BASE}/categories`),
+  listTags: async () => http<SupportTag[]>(`${API_BASE}/tags`),
+  listProfiles: async (q = "", role?: string) => http<ProfileLite[]>(`/api/profiles?q=${encodeURIComponent(q)}&role=${encodeURIComponent(role ?? "")}`),
 };
 
-// -----------------------------------------------------------------------------
-// Utilities
-// -----------------------------------------------------------------------------
 const CATEGORY_META: Record<string, { icon: LucideIcon; label: string }> = {
   billing: { icon: DollarSign, label: "Billing & Payments" },
   bug: { icon: Bug, label: "Bug Report" },
@@ -457,9 +160,6 @@ function initials(name?: string) {
     .toUpperCase();
 }
 
-// -----------------------------------------------------------------------------
-// Badges & Small UI bits
-// -----------------------------------------------------------------------------
 function StatusBadge({ status }: { status: TicketStatus }) {
   const map: Record<TicketStatus, string> = {
     open: "bg-emerald-100 text-emerald-700",
@@ -503,22 +203,18 @@ function AssigneePill({ name, email }: { name?: string | null; email?: string | 
   );
 }
 
-// -----------------------------------------------------------------------------
-// Main Component
-// -----------------------------------------------------------------------------
 export default function SupportTickets() {
   const [tickets, setTickets] = useState<TicketListItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<string>("");
-  const [priority, setPriority] = useState<string>("");
-  const [category, setCategory] = useState<string>("");
-  const [assignee, setAssignee] = useState<string>("");
+  const [status, setStatus] = useState("");
+  const [priority, setPriority] = useState("");
+  const [category, setCategory] = useState("");
+  const [assignee, setAssignee] = useState("");
 
   const [categories, setCategories] = useState<SupportCategory[]>([]);
-  const [tags, setTags] = useState<SupportTag[]>([]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -527,17 +223,15 @@ export default function SupportTickets() {
     setLoading(true);
     setError(null);
     try {
-      const [cats, tgs, list] = await Promise.all([
-        api.listCategories().catch(() => []),
-        api.listTags().catch(() => []),
-        api.listTickets({ q, status, priority, category, assignee }).catch(() => []),
+      const [cats, list] = await Promise.all([
+        api.listCategories().catch(() => [] as SupportCategory[]),
+        api.listTickets({ q, status, priority, category, assignee }).catch(() => [] as TicketListItem[]),
       ]);
       setCategories(cats);
-      setTags(tgs);
       setTickets(list);
       if (!activeId && list && list.length) setActiveId(list[0].id);
-    } catch (e: any) {
-      setError(e.message || "Failed to load tickets");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -600,7 +294,6 @@ export default function SupportTickets() {
           </ScrollArea>
         </div>
 
-        {/* Detail panel (as a side pane on desktop; sheet on mobile) */}
         <div className="hidden lg:flex col-span-7 rounded-2xl border overflow-hidden">
           {activeTicket ? (
             <TicketDetail key={activeTicket.id} ticket={activeTicket} onTicketChange={(nt) => mutateTicketInList(setTickets, nt)} />
@@ -612,7 +305,6 @@ export default function SupportTickets() {
           )}
         </div>
 
-        {/* Mobile detail */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent side="right" className="w-full sm:max-w-2xl p-0">
             <SheetHeader className="px-4 py-3 border-b">
@@ -628,9 +320,6 @@ export default function SupportTickets() {
   );
 }
 
-// -----------------------------------------------------------------------------
-// Header with New Ticket
-// -----------------------------------------------------------------------------
 function Header({ onRefresh, onNewTicketCreated }: { onRefresh: () => void; onNewTicketCreated: (t: TicketListItem) => void }) {
   const [open, setOpen] = useState(false);
   return (
@@ -645,10 +334,14 @@ function Header({ onRefresh, onNewTicketCreated }: { onRefresh: () => void; onNe
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="outline" onClick={onRefresh} className="gap-2"><Loader2 className="h-4 w-4" /> Refresh</Button>
+        <Button variant="outline" onClick={onRefresh} className="gap-2">
+          <Loader2 className="h-4 w-4" /> Refresh
+        </Button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2"><Plus className="h-4 w-4" /> New Ticket</Button>
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" /> New Ticket
+            </Button>
           </DialogTrigger>
           <NewTicketDialog onCreated={(t) => { onNewTicketCreated(t); setOpen(false); }} />
         </Dialog>
@@ -675,13 +368,17 @@ function NewTicketDialog({ onCreated }: { onCreated: (t: TicketListItem) => void
       try {
         const r = await api.listProfiles(requesterQ);
         if (!ignore) setResults(r);
-      } catch {}
-      setLoading(false);
+      } catch (err) {
+        // log and ignore search errors
+        console.error("listProfiles", err);
+      } finally {
+        setLoading(false);
+      }
     })();
     return () => { ignore = true; };
   }, [requesterQ]);
 
-  const canCreate = requester && subject.trim().length > 2 && description.trim().length > 4;
+  const canCreate = Boolean(requester && subject.trim().length > 2 && description.trim().length > 4);
 
   const create = async () => {
     if (!requester) return;
@@ -704,7 +401,7 @@ function NewTicketDialog({ onCreated }: { onCreated: (t: TicketListItem) => void
           </div>
           <div className="mt-2 max-h-40 overflow-auto rounded border">
             {results.map((p) => (
-              <button key={p.id} onClick={() => setRequester(p)} className={clsx("w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2", requester?.id === p.id && "bg-zinc-100")}> 
+              <button key={p.id} onClick={() => setRequester(p)} className={clsx("w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2", requester?.id === p.id && "bg-zinc-100")}>
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-zinc-200 text-[10px] font-semibold">{initials(`${p.first_name ?? ""} ${p.last_name ?? ""}`)}</span>
                 <span>{p.first_name} {p.last_name} <span className="text-zinc-500">• {p.email}</span></span>
               </button>
@@ -758,9 +455,6 @@ function NewTicketDialog({ onCreated }: { onCreated: (t: TicketListItem) => void
   );
 }
 
-// -----------------------------------------------------------------------------
-// Filters bar
-// -----------------------------------------------------------------------------
 function FiltersBar({ q, onQ, status, onStatus, priority, onPriority, category, onCategory, assignee, onAssignee, categories }:{
   q: string; onQ: (v:string)=>void;
   status: string; onStatus: (v:string)=>void;
@@ -821,13 +515,10 @@ function FiltersBar({ q, onQ, status, onStatus, priority, onPriority, category, 
   );
 }
 
-// -----------------------------------------------------------------------------
-// Ticket list row
-// -----------------------------------------------------------------------------
 function TicketRow({ t, active, onClick }: { t: TicketListItem; active?: boolean; onClick: ()=>void }){
   const rel = formatDistanceToNow(new Date(t.last_activity_at), { addSuffix: true });
   return (
-    <button onClick={onClick} className={clsx("w-full text-left p-3 hover:bg-zinc-50 flex gap-3", active && "bg-zinc-50")}> 
+    <button onClick={onClick} className={clsx("w-full text-left p-3 hover:bg-zinc-50 flex gap-3", active && "bg-zinc-50")}>
       <div className="mt-0.5">
         <StatusBadge status={t.status} />
       </div>
@@ -853,9 +544,6 @@ function TicketRow({ t, active, onClick }: { t: TicketListItem; active?: boolean
   );
 }
 
-// -----------------------------------------------------------------------------
-// Ticket Detail (right pane)
-// -----------------------------------------------------------------------------
 function TicketDetail({ ticket, onTicketChange }: { ticket: TicketListItem; onTicketChange: (t: TicketListItem)=>void }){
   const [messages, setMessages] = useState<TicketMessage[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -866,7 +554,7 @@ function TicketDetail({ ticket, onTicketChange }: { ticket: TicketListItem; onTi
 
   const load = useCallback(async ()=>{
     setLoading(true);
-    try{ setMessages(await api.getMessages(ticket.id)); }catch{ setMessages([]);} finally{ setLoading(false); }
+    try{ setMessages(await api.getMessages(ticket.id)); }catch(err){ console.error('getMessages', err); setMessages([]);} finally{ setLoading(false); }
   },[ticket.id]);
 
   useEffect(()=>{ load(); },[load]);
@@ -881,11 +569,14 @@ function TicketDetail({ ticket, onTicketChange }: { ticket: TicketListItem; onTi
     if (!body.trim()) return;
     setPosting(true);
     try{
-      // NOTE: replace sender_id with the logged-in user's profile id
-      const sender_id = (window as any).currentProfileId || ticket.assignee_id || ticket.requester_id;
+      // try to get a sender id from a global (fallback) or ticket fields
+      const global = (window as unknown as { currentProfileId?: string }).currentProfileId;
+      const sender_id = global ?? ticket.assignee_id ?? ticket.requester_id;
       const msg = await api.postMessage(ticket.id, { sender_id, body, is_internal: internal });
       setMessages((prev)=> prev ? [...prev, msg] : [msg]);
       setBody("");
+    } catch (err) {
+      console.error('postMessage', err);
     } finally{ setPosting(false); }
   };
 
@@ -956,7 +647,7 @@ function TicketDetail({ ticket, onTicketChange }: { ticket: TicketListItem; onTi
 
       <div className="grid grid-cols-12 gap-0 flex-1 min-h-0">
         <div className="col-span-12 xl:col-span-8 flex flex-col">
-          <ScrollArea className="flex-1" ref={scrollRef as any}>
+          <ScrollArea className="flex-1" ref={scrollRef as unknown as React.RefObject<HTMLDivElement>}>
             {loading && <ThreadSkeleton/>}
             {!loading && messages && (
               <div className="p-4 space-y-3">
@@ -1039,7 +730,7 @@ function AssigneeMenu({ ticket, onChanged }: { ticket: TicketListItem; onChanged
     if (!open) return;
     let ignore = false;
     (async()=>{
-      try{ const r = await api.listProfiles(q, "therapist"); if(!ignore) setList(r);}catch{}
+      try{ const r = await api.listProfiles(q, "therapist"); if(!ignore) setList(r);}catch(err){ console.error('listProfiles', err);} 
     })();
     return ()=>{ ignore = true; };
   },[open, q]);
@@ -1077,11 +768,11 @@ function AssigneeMenu({ ticket, onChanged }: { ticket: TicketListItem; onChanged
 function MessageBubble({ m, requesterId }: { m: TicketMessage; requesterId: string }){
   const mine = m.sender_id !== requesterId; // treat non-requester as team
   return (
-    <div className={clsx("flex gap-2", mine ? "justify-end" : "justify-start")}> 
+    <div className={clsx("flex gap-2", mine ? "justify-end" : "justify-start")}>
       {!mine && (
         <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-zinc-200 text-[10px] font-semibold mt-0.5">{initials(m.sender_name)}</span>
       )}
-      <div className={clsx("max-w-[80%] rounded-2xl px-3 py-2 text-sm", m.is_internal ? "bg-amber-50 border border-amber-200" : mine ? "bg-zinc-900 text-white" : "bg-zinc-100")}> 
+      <div className={clsx("max-w-[80%] rounded-2xl px-3 py-2 text-sm", m.is_internal ? "bg-amber-50 border border-amber-200" : mine ? "bg-zinc-900 text-white" : "bg-zinc-100")}>
         {m.is_internal && (
           <div className="text-amber-700 text-[11px] mb-1 font-medium inline-flex items-center gap-1"><AlertCircle className="h-3 w-3"/> Internal note</div>
         )}
@@ -1095,9 +786,6 @@ function MessageBubble({ m, requesterId }: { m: TicketMessage; requesterId: stri
   );
 }
 
-// -----------------------------------------------------------------------------
-// Helpers
-// -----------------------------------------------------------------------------
 function mutateTicketInList(setter: React.Dispatch<React.SetStateAction<TicketListItem[] | null>>, updated: TicketListItem){
   setter((prev)=> prev ? prev.map(t=> t.id === updated.id ? updated : t) : [updated]);
 }
