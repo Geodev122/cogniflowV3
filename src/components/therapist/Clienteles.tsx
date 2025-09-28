@@ -109,20 +109,25 @@ export const Clienteles: React.FC = () => {
       let error: any = null
 
       if (scope === 'mine' && profile?.id) {
-        // Fetch my clients through relations
-        const { data: relations, error: relErr } = await supabase
+        // Fetch client ids from relations, then fetch profiles directly.
+        const { data: relRows, error: relErr } = await supabase
           .from('therapist_client_relations')
-          .select(`
-            client_id,
-            client:profiles!therapist_client_relations_client_id_fkey(
-              id, first_name, last_name, email, phone, whatsapp_number,
-              city, country, created_at, role, patient_code
-            )
-          `)
+          .select('client_id')
           .eq('therapist_id', profile.id)
 
         if (relErr) throw relErr
-        data = (relations || []).map((r: any) => r.client).filter(Boolean)
+        const clientIds = (relRows || []).map((r: any) => r.client_id).filter(Boolean)
+        if (clientIds.length === 0) {
+          data = []
+        } else {
+          const { data: profilesData, error: profilesErr } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, email, phone, whatsapp_number, city, country, created_at, role, patient_code, referral_source')
+            .in('id', clientIds)
+
+          if (profilesErr) throw profilesErr
+          data = profilesData || []
+        }
       } else {
         // Try RPC first, fallback to direct query
         try {
@@ -143,7 +148,7 @@ export const Clienteles: React.FC = () => {
         }
       }
 
-      if (e) throw e
+  // removed stray undefined variable check
       const raw: any[] = (data || [])
 
       const normalized: ClientRow[] = raw.map(r => {
