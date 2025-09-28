@@ -75,6 +75,31 @@ const getDifficultyColor = (level?: string | null) => {
   }
 }
 
+// Safe insert helper: tries insert, and if PostgREST reports a missing column
+// like "column resource_library.interactive_schema does not exist", it will
+// remove that column from the payload and retry once. Returns { data, error }.
+async function tryInsertResource(payload: any, selectCols: string) {
+  // first attempt
+  let { data, error } = await supabase.from('resource_library').insert(payload).select(selectCols).single()
+  if (!error) return { data, error: null }
+
+  const msg = String((error && (error as any).message) || error)
+  const colMatch = msg.match(/column\s+"?([a-z0-9_]+)"?\s+does not exist/i)
+  if (!colMatch) return { data: null, error }
+
+  const missingCol = colMatch[1]
+  // remove the column from payload and retry
+  const reduced: any = { ...(payload || {}) }
+  if (missingCol in reduced) delete reduced[missingCol]
+
+  // also remove missing column from select list safely
+  const cols = selectCols.split(',').map((s) => s.trim()).filter(Boolean)
+  const filteredCols = cols.filter((c) => c !== missingCol).join(', ')
+
+  const retry = await supabase.from('resource_library').insert(reduced).select(filteredCols || cols.join(', ')).single()
+  return { data: (retry as any).data, error: (retry as any).error || null }
+}
+
 /* =========================
    Assessments Library (left tab)
 ========================= */
@@ -538,35 +563,32 @@ const CreateResourceModal: React.FC<{
       // pick best final url
       const finalUrl = media_url || ext_url || null
 
-      const { data, error } = await supabase
-        .from('resource_library')
-        .insert({
-          title,
-          category,
-          description,
-          content_type: contentType,
-          difficulty_level: difficulty,
-          tags: tags
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean),
-          is_public: true,
-          media_url: finalUrl,
-          storage_path,
-          external_url: ext_url,
-          interactive_schema,
-        })
-        .select(
+      const { data, error } = await tryInsertResource(
+          {
+            title,
+            category,
+            description,
+            content_type: contentType,
+            difficulty_level: difficulty,
+            tags: tags
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean),
+            is_public: true,
+            media_url: finalUrl,
+            storage_path,
+            external_url: ext_url,
+            interactive_schema,
+          },
           'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
         )
-        .single()
-
-      if (error) throw error
+      if ((error as any) || !data) throw error || new Error('Insert returned no data')
       onCreated(data as Resource)
       onClose()
     } catch (err) {
       console.error('CreateResource error:', err)
-      alert('Could not create resource. Check storage bucket "resource_files" and RLS.')
+      const msg = err && (err as any).message ? (err as any).message : String(err)
+      alert(`Could not create resource: ${msg}`)
     } finally {
       setLoading(false)
     }
@@ -813,29 +835,27 @@ const CreateCourseModal: React.FC<{
         }))
       }
 
-      const { data, error } = await supabase
-        .from('resource_library')
-        .insert({
-          title,
-          description,
-          category,
-          content_type: 'course',
-          difficulty_level: difficulty,
-          is_public: true,
-          tags: [],
-          course_manifest: manifest
-        })
-        .select(
+      const { data, error } = await tryInsertResource(
+          {
+            title,
+            description,
+            category,
+            content_type: 'course',
+            difficulty_level: difficulty,
+            is_public: true,
+            tags: [],
+            course_manifest: manifest,
+          },
           'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
         )
-        .single()
 
-      if (error) throw error
+      if ((error as any) || !data) throw error || new Error('Insert returned no data')
       onCreated(data as Resource)
       onClose()
     } catch (err) {
       console.error('CreateCourse error:', err)
-      alert('Could not create course. Ensure table "resource_library" allows JSONB in course_manifest.')
+      const msg = err && (err as any).message ? (err as any).message : String(err)
+      alert(`Could not create course: ${msg}`)
     } finally {
       setSaving(false)
     }
