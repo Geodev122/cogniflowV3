@@ -1217,91 +1217,91 @@ export default function ResourceLibrary() {
     return (
       <div className="h-full flex flex-col">
         {/* Filters header */}
-        <div className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-gray-200 p-3">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
-            <div className="relative lg:col-span-2">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search resources…"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
+        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-200 px-3 py-4">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search resources, titles, tags…"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-12 pr-3 py-3 text-sm md:text-base border border-gray-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                {categoriesWithCounts.map((c) => {
+                  const Icon = c.icon
+                  const active = selectedCategory === c.id
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedCategory(c.id)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                        active ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{c.name}</span>
+                      <span className={`ml-1 px-2 py-0.5 text-[11px] rounded-full ${active ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
+                        {c.count}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {(resourcesError || clientsError) && (
+                <div className="mt-2 space-y-1">
+                  {resourcesError && (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-2">
+                      {resourcesError}
+                    </div>
+                  )}
+                  {clientsError && (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-2">
+                      {clientsError}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="flex gap-2 overflow-x-auto items-center">
-              {categoriesWithCounts.map((c) => {
-                const Icon = c.icon
-                const active = selectedCategory === c.id
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => setSelectedCategory(c.id)}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
-                      active ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span>{c.name}</span>
-                    <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${active ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
-                      {c.count}
-                    </span>
-                  </button>
-                )
-              })}
-
-              {/* View toggle */}
-              <div className="ml-auto flex items-center gap-1">
+            <div className="flex items-center gap-3">
+              <div className="hidden md:flex items-center gap-2">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                  className={`p-2 rounded ${viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
                   aria-label="Grid view"
                 >
                   <Grid3X3 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                  className={`p-2 rounded ${viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
                   aria-label="List view"
                 >
                   <List className="w-4 h-4" />
                 </button>
               </div>
-            </div>
 
-            {(resourcesError || clientsError) && (
-              <div className="lg:col-span-3 mt-2 space-y-1">
-                {resourcesError && (
-                  <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-2">
-                    {resourcesError}
-                  </div>
-                )}
-                {clientsError && (
-                  <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded p-2">
-                    {clientsError}
-                  </div>
-                )}
+              <div className="inline-flex rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                <button
+                  onClick={() => setShowCreateResource(true)}
+                  className="px-4 py-2 text-sm md:text-base font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  New Resource
+                </button>
+                <div className="w-px bg-gray-200" aria-hidden="true" />
+                <button
+                  onClick={() => setShowCreateCourse(true)}
+                  className="px-4 py-2 text-sm md:text-base font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                >
+                  New Course
+                </button>
               </div>
-            )}
-          </div>
-
-          {/* Inline create actions */}
-          <div className="mt-3 flex justify-end">
-            <div className="inline-flex rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-              <button
-                onClick={() => setShowCreateResource(true)}
-                className="px-3 sm:px-4 py-2 text-sm font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              >
-                New Resource
-              </button>
-              <div className="w-px bg-gray-200" aria-hidden="true" />
-              <button
-                onClick={() => setShowCreateCourse(true)}
-                className="px-3 sm:px-4 py-2 text-sm font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-              >
-                New Course
-              </button>
             </div>
           </div>
         </div>
@@ -1471,7 +1471,7 @@ export default function ResourceLibrary() {
               role="tab"
               aria-selected={activeTab === 'assessments'}
               onClick={() => setActiveTab('assessments')}
-              className={`px-4 py-2 text-sm font-medium rounded-xl transition ${
+              className={`px-5 py-3 text-sm md:text-base font-semibold rounded-xl transition ${
                 activeTab === 'assessments'
                   ? 'bg-white shadow text-blue-700 border border-gray-200'
                   : 'text-gray-600 hover:text-gray-900'
@@ -1483,7 +1483,7 @@ export default function ResourceLibrary() {
               role="tab"
               aria-selected={activeTab === 'resources'}
               onClick={() => setActiveTab('resources')}
-              className={`ml-1 px-4 py-2 text-sm font-medium rounded-xl transition ${
+              className={`ml-2 px-5 py-3 text-sm md:text-base font-semibold rounded-xl transition ${
                 activeTab === 'resources'
                   ? 'bg-white shadow text-blue-700 border border-gray-200'
                   : 'text-gray-600 hover:text-gray-900'
