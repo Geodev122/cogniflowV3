@@ -2,12 +2,17 @@ import React, { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Users, CheckCircle, X, Clock } from 'lucide-react'
+import { useToasts } from '../ui/ToastContext'
+import ConfirmModal from '../ui/ConfirmModal'
 
 export const TherapistReferralsInbox: React.FC = () => {
   const { profile } = useAuth()
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
+  const { push } = useToasts()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmPayload, setConfirmPayload] = useState<{id: string, accept: boolean} | null>(null)
 
   const fetch = async () => {
     if (!profile?.id) return
@@ -41,9 +46,12 @@ export const TherapistReferralsInbox: React.FC = () => {
       if (error) throw error
       await supabase.from('referral_request_audits').insert({ referral_request_id: id, action: accept ? 'accepted_by_therapist_web' : 'rejected_by_therapist_web', actor: profile?.id })
       await fetch()
+      push({ type: 'success', message: `Referral ${accept ? 'accepted' : 'rejected'}` })
     } catch (e:any) {
       console.error('respond referral', e)
-      setError(e?.message || String(e))
+      const msg = e?.message || String(e)
+      setError(msg)
+      push({ type: 'error', message: msg })
     } finally { setLoading(false) }
   }
 
@@ -72,8 +80,8 @@ export const TherapistReferralsInbox: React.FC = () => {
                 <div className="text-xs px-2 py-1 rounded text-white" style={{ background: r.status === 'pending_therapist' ? '#F59E0B' : r.status === 'pending_client' ? '#3B82F6' : r.status === 'completed' ? '#10B981' : '#6B7280' }}>{r.status}</div>
                 {r.status === 'pending_therapist' && (
                   <div className="flex gap-2">
-                    <button onClick={() => respond(r.id, true)} className="px-3 py-1 rounded bg-green-600 text-white text-sm">Accept</button>
-                    <button onClick={() => respond(r.id, false)} className="px-3 py-1 rounded bg-red-600 text-white text-sm">Reject</button>
+                    <button onClick={() => { setConfirmPayload({ id: r.id, accept: true }); setConfirmOpen(true) }} className="px-3 py-1 rounded bg-green-600 text-white text-sm">Accept</button>
+                    <button onClick={() => { setConfirmPayload({ id: r.id, accept: false }); setConfirmOpen(true) }} className="px-3 py-1 rounded bg-red-600 text-white text-sm">Reject</button>
                   </div>
                 )}
               </div>
@@ -81,6 +89,15 @@ export const TherapistReferralsInbox: React.FC = () => {
           ))}
         </ul>
       )}
+      <ConfirmModal
+        open={confirmOpen}
+        title={confirmPayload?.accept ? 'Accept referral' : 'Reject referral'}
+        description={confirmPayload?.accept ? 'Accepting will request the client to confirm and link them to the referred therapist.' : 'Rejecting will decline this referral.'}
+        confirmLabel={confirmPayload?.accept ? 'Accept' : 'Reject'}
+        loading={loading}
+        onConfirm={async () => { if (confirmPayload) await respond(confirmPayload.id, confirmPayload.accept); setConfirmOpen(false); setConfirmPayload(null) }}
+        onCancel={() => { setConfirmOpen(false); setConfirmPayload(null) }}
+      />
     </div>
   )
 }

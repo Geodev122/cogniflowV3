@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useToasts } from '../ui/ToastContext'
 
 type Props = { clientId: string }
 
@@ -7,6 +8,7 @@ export const ClientReferralsList: React.FC<Props> = ({ clientId }) => {
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { push } = useToasts()
 
   useEffect(() => {
     let mounted = true
@@ -19,7 +21,9 @@ export const ClientReferralsList: React.FC<Props> = ({ clientId }) => {
         setRows(data || [])
       } catch (e:any) {
         console.error('client referrals', e)
-        setError(e?.message || String(e))
+        const msg = e?.message || String(e)
+        setError(msg)
+        push({ type: 'error', message: msg })
       } finally { setLoading(false) }
     }
     if (clientId) run()

@@ -1,7 +1,7 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
-import { ToastProvider } from './components/ui/Toast'
+import { ToastProvider } from './components/ui/ToastContext'
 import { ProtectedRoute } from './components/therapist/ProtectedRoute'
 
 // Auth (therapist-facing auth screens)
