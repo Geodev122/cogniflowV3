@@ -128,4 +128,12 @@ $$;
 -- Grant execute on RPC to authenticated role if you wish to call it from client-side (careful - prefer server-side call)
 GRANT EXECUTE ON FUNCTION public.get_client_private_for_therapist(uuid, uuid) TO authenticated;
 
+-- RPC to return public client listings (used by frontend rpc('get_clients_public'))
+CREATE OR REPLACE FUNCTION public.get_clients_public()
+RETURNS TABLE(id uuid, first_name text, last_name text, city text, country text, created_at timestamptz) LANGUAGE sql SECURITY DEFINER AS $$
+  SELECT id, first_name, last_name, city, country, created_at FROM public.client_public_profiles ORDER BY created_at DESC;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_clients_public() TO authenticated;
+
 COMMIT;
