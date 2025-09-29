@@ -7,6 +7,8 @@ import { useAuth } from '../../hooks/useAuth'
 import {
   Users, Search, AlertTriangle, ShieldCheck, MessageSquare, FileText, Brain, RefreshCcw, Plus, X, Edit, Copy
 } from 'lucide-react'
+import ClientActions from './ClientActions'
+import TherapistSearchModal from './TherapistSearchModal'
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -766,22 +768,8 @@ export const Clienteles: React.FC = () => {
                           <div className="ml-auto text-[11px] text-gray-500">{new Date(r.created_at).toLocaleDateString()}</div>
                         </div>
 
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <button onClick={() => sendIntake('whatsapp', r)} disabled={!mine} className="flex-1 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 text-xs disabled:opacity-50">
-                            WhatsApp Intake
-                          </button>
-                          <button onClick={() => sendIntake('email', r)} disabled={!mine} className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs disabled:opacity-50">
-                            Email Intake
-                          </button>
-                          {isMine(r.id) || getAssignmentStatus(r.id) === 'accepted' ? (
-                            <button onClick={() => createCaseForClient(r.id)} className="px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs">Create Case</button>
-                          ) : getAssignmentStatus(r.id) === 'pending' ? (
-                            <button className="px-3 py-1.5 bg-gray-300 text-gray-700 rounded text-xs" disabled>Request Pending</button>
-                          ) : (
-                            <button data-test-request-btn onClick={() => requestAssignment(r.id)} className="px-3 py-1.5 bg-amber-500 text-white rounded hover:bg-amber-600 text-xs" disabled={!!requestingMap[r.id]}>
-                              {requestingMap[r.id] ? 'Sending...' : 'Request Assignment'}
-                            </button>
-                          )}
+                        <div className="mt-2">
+                          <ClientActions clientId={r.id} patientCode={r.patient_code} isMine={mine} assignmentStatus={getAssignmentStatus(r.id)} onRefresh={() => setRefreshKey(k => k + 1)} />
                         </div>
                       </div>
                     </li>
@@ -811,11 +799,7 @@ export const Clienteles: React.FC = () => {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 justify-end">
-                            <button onClick={() => copyPatientIdToClipboard(r.patient_code || r.id)} className="p-2 rounded hover:bg-gray-100" title="Copy ID"><Copy className="w-4 h-4"/></button>
-                            <button onClick={() => openCase(r)} className="p-2 rounded hover:bg-gray-100" title="Open Case"><FileText className="w-4 h-4"/></button>
-                            <button onClick={() => openEditModal(r)} className="p-2 rounded hover:bg-gray-100" title="Edit"><Edit className="w-4 h-4"/></button>
-                          </div>
+                          <ClientActions clientId={r.id} patientCode={r.patient_code} isMine={isMine(r.id)} assignmentStatus={getAssignmentStatus(r.id)} onRefresh={() => setRefreshKey(k => k + 1)} />
                         </td>
                       </tr>
                     ))}
@@ -825,6 +809,8 @@ export const Clienteles: React.FC = () => {
             </>
           )}
         </div>
+
+        <TherapistSearchModal />
 
         <div className="mt-3 text-xs text-gray-500 flex items-center gap-1">
           <ShieldCheck className="w-3.5 h-3.5" />
