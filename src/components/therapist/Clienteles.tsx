@@ -95,17 +95,27 @@ export const Clienteles: React.FC = () => {
   const fetchMineIds = useCallback(async () => {
     if (!profile?.id) return setMyIds(new Set())
     try {
-      // include therapist_client_relations as a source of 'my clients' as well
+      // Prefer therapist_client_relations as the authoritative source of "My Clients".
+      // If relations are present, use them; otherwise fall back to assignments.
       const [{ data: aData, error: aErr }, { data: rData, error: rErr }] = await Promise.all([
         supabase.from('assignments').select('client_id, status').eq('therapist_id', profile.id),
-        supabase.from('therapist_client_relations').select('client_id').eq('therapist_id', profile.id)
+        // include status from relations when available so we can reflect relation state
+        supabase.from('therapist_client_relations').select('client_id, status').eq('therapist_id', profile.id)
       ])
 
       if (aErr && rErr) throw (aErr || rErr)
       const ids = new Set<string>()
       const map: Record<string,string> = {}
-      ;(aData || []).forEach((r: any) => { ids.add(r.client_id); map[r.client_id] = r.status })
-      ;(rData || []).forEach((rr: any) => { if (rr.client_id) ids.add(rr.client_id) })
+
+      // If there are therapist_client_relations, prefer those as the authoritative set
+      if ((rData || []).length > 0) {
+        ;(rData || []).forEach((rr: any) => { if (rr?.client_id) { ids.add(rr.client_id); if (rr.status) map[rr.client_id] = rr.status } })
+        // keep assignment statuses for clients that are not present in relations (e.g., pending assignment requests)
+        ;(aData || []).forEach((r: any) => { if (r?.client_id && !ids.has(r.client_id)) { ids.add(r.client_id); map[r.client_id] = r.status } })
+      } else {
+        ;(aData || []).forEach((r: any) => { if (r?.client_id) { ids.add(r.client_id); map[r.client_id] = r.status } })
+      }
+
       setMyIds(ids)
       setAssignedMap(map)
     } catch (e) {
