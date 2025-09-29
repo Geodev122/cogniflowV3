@@ -1485,11 +1485,10 @@ CREATE INDEX IF NOT EXISTS idx_upcoming_appointments
 -- MATERIALIZED VIEWS FOR ANALYTICS
 -- ============================================================================
 
--- Assessment results with latest scores
--- Recreate with safe alias (avoid reserved keyword ASC)
-DROP MATERIALIZED VIEW IF EXISTS public.assessment_instance_latest_score;
-
-CREATE MATERIALIZED VIEW public.assessment_instance_latest_score AS
+-- Create materialized view if it does not already exist. The canonical merged
+-- migration now lives in `20250919120000_merge_assessment_views_and_refreshes.sql`.
+-- Avoid DROP here to prevent removing the view if it's been created elsewhere.
+CREATE MATERIALIZED VIEW IF NOT EXISTS public.assessment_instance_latest_score AS
 SELECT 
   ai.id           AS instance_id,
   ai.template_id,
@@ -1497,7 +1496,7 @@ SELECT
   ai.client_id,
   ai.case_id,
   ai.title,
-  ai.status,
+  ai.status::text AS status,
   ai.assigned_at,
   ai.due_date,          -- keep if your table has it; otherwise remove this line
   ai.completed_at,
@@ -1970,8 +1969,17 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION refresh_analytics_views()
 RETURNS VOID AS $$
 BEGIN
-  REFRESH MATERIALIZED VIEW assessment_instance_latest_score;
-  REFRESH MATERIALIZED VIEW therapist_dashboard_summary;
+  -- Ensure unique index required for CONCURRENTLY refresh exists
+  PERFORM 1 FROM pg_class WHERE relname = 'idx_assessment_instance_latest_score_instance_id';
+  IF NOT FOUND THEN
+    EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS idx_assessment_instance_latest_score_instance_id ON public.assessment_instance_latest_score(instance_id)';
+  END IF;
+
+  -- Serialize refreshes using an advisory transaction lock to avoid deadlocks
+  -- Use the same lock id as the merged migration for consistency.
+  PERFORM pg_advisory_xact_lock(2039283749);
+  REFRESH MATERIALIZED VIEW public.assessment_instance_latest_score;
+  REFRESH MATERIALIZED VIEW public.therapist_dashboard_summary;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

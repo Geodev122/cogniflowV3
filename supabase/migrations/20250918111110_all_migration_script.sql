@@ -2501,9 +2501,10 @@ CREATE INDEX IF NOT EXISTS idx_upcoming_appointments
 
 -- Assessment results with latest scores
 -- Recreate with safe alias (avoid reserved keyword ASC)
-DROP MATERIALIZED VIEW IF EXISTS public.assessment_instance_latest_score;
+-- NOTE: DROP disabled to avoid removing the view if another migration already created it
+-- DROP MATERIALIZED VIEW IF EXISTS public.assessment_instance_latest_score;
 
-CREATE MATERIALIZED VIEW public.assessment_instance_latest_score AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS public.assessment_instance_latest_score AS
 SELECT 
   ai.id           AS instance_id,
   ai.template_id,
@@ -2511,7 +2512,7 @@ SELECT
   ai.client_id,
   ai.case_id,
   ai.title,
-  ai.status,
+  ai.status::text AS status,
   ai.assigned_at,
   ai.due_date,          -- keep if your table has it; otherwise remove this line
   ai.completed_at,
@@ -2984,8 +2985,22 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION refresh_analytics_views()
 RETURNS VOID AS $$
 BEGIN
-  REFRESH MATERIALIZED VIEW assessment_instance_latest_score;
-  REFRESH MATERIALIZED VIEW therapist_dashboard_summary;
+  -- Ensure unique index exists for concurrent refresh
+  PERFORM 1 FROM pg_class WHERE relname = 'idx_assessment_instance_latest_score_instance_id';
+  IF NOT FOUND THEN
+    EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS idx_assessment_instance_latest_score_instance_id ON public.assessment_instance_latest_score(instance_id)';
+  END IF;
+
+  -- Serialize refreshes using an advisory transaction lock to avoid deadlocks
+  -- Keep the lock id aligned with the merged migration to avoid surprise collisions.
+  PERFORM pg_advisory_xact_lock(2039283749);
+  -- If the merged helper exists, call it; otherwise refresh directly (fully-qualified)
+  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'refresh_analytics_views') THEN
+    PERFORM public.refresh_analytics_views();
+  ELSE
+    REFRESH MATERIALIZED VIEW public.assessment_instance_latest_score;
+    REFRESH MATERIALIZED VIEW public.therapist_dashboard_summary;
+  END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -5002,7 +5017,7 @@ SELECT
   ai.client_id,
   ai.case_id,
   ai.title,
-  ai.status,
+  ai.status::text AS status,
   ai.assigned_at,
   ai.due_date,
   ai.completed_at,
@@ -5026,23 +5041,38 @@ LEFT JOIN assessment_scores ascore ON ai.id = ascore.instance_id
 WHERE ai.status IN ('completed', 'in_progress', 'assigned');
 
 -- Refresh the materialized view
-CREATE OR REPLACE FUNCTION refresh_assessment_views()
-RETURNS TRIGGER AS $$
+-- Create a trigger-safe refresh function if it doesn't already exist. This keeps
+-- behavior consistent with the merged migration and avoids replacing a canonical
+-- implementation in another migration.
+DO $$
 BEGIN
-  REFRESH MATERIALIZED VIEW CONCURRENTLY assessment_instance_latest_score;
-  RETURN NULL;
-END;
-$$ language 'plpgsql';
+  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'refresh_assessment_views') THEN
+    CREATE FUNCTION refresh_assessment_views()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      -- Use the same advisory lock id as the merged migration to serialize refreshes.
+      PERFORM pg_advisory_xact_lock(2039283749);
+      REFRESH MATERIALIZED VIEW assessment_instance_latest_score;
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+  END IF;
+END
+$$;
 
 -- Create unique index for concurrent refresh
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assessment_instance_latest_score_instance_id 
 ON assessment_instance_latest_score(instance_id);
 
 -- Trigger to refresh view when assessment data changes
+-- Ensure triggers are idempotent: drop and recreate to point at the (possibly existing)
+-- trigger-safe refresh function.
+DROP TRIGGER IF EXISTS refresh_assessment_views_trigger ON assessment_instances;
 CREATE TRIGGER refresh_assessment_views_trigger
   AFTER INSERT OR UPDATE OR DELETE ON assessment_instances
   FOR EACH STATEMENT EXECUTE FUNCTION refresh_assessment_views();
 
+DROP TRIGGER IF EXISTS refresh_assessment_scores_views_trigger ON assessment_scores;
 CREATE TRIGGER refresh_assessment_scores_views_trigger
   AFTER INSERT OR UPDATE OR DELETE ON assessment_scores
   FOR EACH STATEMENT EXECUTE FUNCTION refresh_assessment_views();
