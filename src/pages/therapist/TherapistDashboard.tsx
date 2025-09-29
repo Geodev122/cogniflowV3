@@ -183,7 +183,7 @@ export default function TherapistDashboard() {
       expandable: true,
       items: [
         { id: 'clienteles', name: 'Clienteles', icon: Users },
-        { id: 'archives', name: 'Case Archives', icon: Archive },
+        { id: 'sessions', name: 'Session Management', icon: Calendar },   
         { id: 'resources', name: 'Resource Library', icon: Library },
       ]
     },
@@ -192,8 +192,8 @@ export default function TherapistDashboard() {
       title: 'Practice Management',
       expandable: true,
       items: [
-        { id: 'sessions', name: 'Session Management', icon: Calendar },
         { id: 'cases', name: 'Case Management', icon: FileText },
+        { id: 'archives', name: 'Case Archives', icon: Archive },
         { id: 'supervision', name: 'Supervision', icon: Headphones },
       ]
     },
