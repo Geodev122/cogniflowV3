@@ -4,7 +4,6 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Mail } from 'lucide-react'
 
 export default function SupportTickets() {
   const [name, setName] = useState('')
@@ -17,41 +16,33 @@ export default function SupportTickets() {
     e?.preventDefault()
     setLoading(true)
     setStatus(null)
+    const payload: any = { name: name || null, email: email || null, message: message || null }
     try {
-      // Defensive: try to write to contact_messages if it exists
-      const payload: any = { name: name || null, email: email || null, message: message || null }
+      // Try to write to contact_messages table if it exists
+      await run(supabase.from('contact_messages').insert(payload).select('*').maybeSingle())
+      setStatus('Saved — thanks, we will follow up via email.')
+    } catch (err:any) {
+      // Fallback to a simple POST to an optional serverless endpoint
       try {
-        const inserted = await run(supabase.from('contact_messages').insert(payload).select('*').single())
-        if (inserted) {
-          setStatus('Saved — thanks, we will follow up via email.')
-        } else {
-          setStatus('Submitted — but contact_messages table not available. Your message was not stored.')
-        }
-      } catch (err:any) {
-        // Table might not exist or insert failed. Fall back to a fetch to an optional endpoint.
-        console.warn('contact_messages insert failed, falling back', err)
-        try {
-          await fetch('/.netlify/functions/contact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-          setStatus('Sent via fallback endpoint — thanks!')
-        } catch (err2:any) {
-          console.error('fallback send failed', err2)
-          setStatus('Could not submit message. Please email support@example.com')
-        }
+        await fetch('/.netlify/functions/contact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        setStatus('Sent via fallback endpoint — thanks!')
+      } catch (err2:any) {
+        console.error('fallback send failed', err2)
+        setStatus('Could not submit message. Please email support@example.com')
       }
+    } finally {
+      setLoading(false)
       setName('')
       setEmail('')
       setMessage('')
-    } finally { setLoading(false) }
+    }
   }
 
   return (
     <div className="p-6 max-w-3xl">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="h-10 w-10 rounded-lg bg-indigo-600 text-white grid place-items-center"><Mail className="w-5 h-5"/></div>
-        <div>
-          <h2 className="text-lg font-semibold">Contact & Support</h2>
-          <p className="text-sm text-zinc-500">Submit a question or request and our team will follow up.</p>
-        </div>
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold">Contact & Support</h2>
+        <p className="text-sm text-zinc-500">Use this form to ask questions or request help.</p>
       </div>
 
       <Card>
@@ -62,7 +53,7 @@ export default function SupportTickets() {
             <Textarea placeholder="How can we help?" value={message} onChange={(e) => setMessage(e.target.value)} rows={6} />
 
             <div className="flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => { setName(''); setEmail(''); setMessage('') }}>Clear</Button>
+              <Button variant="outline" type="button" onClick={() => { setName(''); setEmail(''); setMessage('') }}>Clear</Button>
               <Button type="submit" disabled={loading || (!email && !message)}>{loading ? 'Sending…' : 'Send message'}</Button>
             </div>
           </form>
@@ -73,191 +64,6 @@ export default function SupportTickets() {
     </div>
   )
 }
-
-const CATEGORY_META: Record<string, { icon: LucideIcon; label: string }> = {
-  billing: { icon: DollarSign, label: "Billing & Payments" },
-  bug: { icon: Bug, label: "Bug Report" },
-  feature: { icon: Settings, label: "Feature Request" },
-  account: { icon: User2, label: "Account & Access" },
-  "clinical-data": { icon: AlertCircle, label: "Clinical Data" },
-  other: { icon: Tag, label: "Other" },
-};
-
-function clsx(...c: (string | undefined | false)[]) {
-  return c.filter(Boolean).join(" ");
-}
-
-function initials(name?: string) {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .map((s) => s[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
-function StatusBadge({ status }: { status: TicketStatus }) {
-  const map: Record<TicketStatus, string> = {
-    open: "bg-emerald-100 text-emerald-700",
-    pending: "bg-amber-100 text-amber-700",
-    resolved: "bg-blue-100 text-blue-700",
-    closed: "bg-zinc-200 text-zinc-700",
-  };
-  return <Badge className={clsx("rounded-full px-2.5 py-0.5 text-xs border-0", map[status])}>{status}</Badge>;
-}
-
-function PriorityBadge({ priority }: { priority: TicketPriority }) {
-  const map: Record<TicketPriority, string> = {
-    low: "bg-zinc-100 text-zinc-700",
-    medium: "bg-sky-100 text-sky-700",
-    high: "bg-orange-100 text-orange-700",
-    urgent: "bg-rose-100 text-rose-700",
-  };
-  return <Badge className={clsx("rounded-full px-2.5 py-0.5 text-xs border-0", map[priority])}>{priority}</Badge>;
-}
-
-function CategoryChip({ category }: { category?: string | null }) {
-  if (!category) return null;
-  const meta = CATEGORY_META[category] ?? CATEGORY_META.other;
-  const Icon = meta.icon;
-  return (
-    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700">
-      <Icon className="h-3.5 w-3.5" /> {meta.label}
-    </span>
-  );
-}
-
-function AssigneePill({ name, email }: { name?: string | null; email?: string | null }) {
-  const label = name || email || "Unassigned";
-  return (
-    <span className="inline-flex items-center gap-2 text-xs px-2 py-0.5 rounded-full bg-white border">
-      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-zinc-200 text-[10px] font-semibold">
-        {initials(label)}
-      </span>
-      {label}
-    </span>
-  );
-}
-
-export default function SupportTickets() {
-  const [tickets, setTickets] = useState<TicketListItem[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState("");
-  const [priority, setPriority] = useState("");
-  const [category, setCategory] = useState("");
-  const [assignee, setAssignee] = useState("");
-
-  const [categories, setCategories] = useState<SupportCategory[]>([]);
-
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [cats, list] = await Promise.all([
-        api.listCategories().catch(() => [] as SupportCategory[]),
-        api.listTickets({ q, status, priority, category, assignee }).catch(() => [] as TicketListItem[]),
-      ]);
-      setCategories(cats);
-      setTickets(list);
-      if (!activeId && list && list.length) setActiveId(list[0].id);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [q, status, priority, category, assignee, activeId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const activeTicket = useMemo(() => tickets?.find((t) => t.id === activeId) || null, [tickets, activeId]);
-
-  return (
-    <div className="flex h-full w-full flex-col">
-      <Header onRefresh={load} onNewTicketCreated={(t) => setTickets((prev) => (prev ? [t, ...prev] : [t]))} />
-
-      <div className="px-4 pb-4">
-        <FiltersBar
-          q={q}
-          onQ={setQ}
-          status={status}
-          onStatus={setStatus}
-          priority={priority}
-          onPriority={setPriority}
-          category={category}
-          onCategory={setCategory}
-          assignee={assignee}
-          onAssignee={setAssignee}
-          categories={categories}
-        />
-      </div>
-
-      <div className="grid grid-cols-12 gap-4 px-4 pb-4 h-[calc(100dvh-180px)]">
-        <div className="col-span-12 lg:col-span-5 flex flex-col rounded-2xl border bg-white">
-          <div className="flex items-center justify-between p-3 border-b">
-            <div className="flex items-center gap-2 text-sm text-zinc-600">
-              <TicketIcon className="h-4 w-4" /> Tickets
-            </div>
-            <div className="text-xs text-zinc-500">{tickets?.length ?? 0} results</div>
-          </div>
-
-          <ScrollArea className="flex-1">
-            {loading && <ListSkeleton />}
-            {!loading && error && <EmptyState icon={AlertCircle} title="Couldn’t load" subtitle={error} />}
-            {!loading && !error && tickets && tickets.length === 0 && (
-              <EmptyState icon={Search} title="No tickets" subtitle="Try adjusting your filters or search." />
-            )}
-            <div className="divide-y">
-              {tickets?.map((t) => (
-                <TicketRow
-                  key={t.id}
-                  t={t}
-                  active={activeId === t.id}
-                  onClick={() => {
-                    setActiveId(t.id);
-                    setSheetOpen(true);
-                  }}
-                />
-              ))}
-            </div>
-          </ScrollArea>
-        </div>
-
-        <div className="hidden lg:flex col-span-7 rounded-2xl border overflow-hidden">
-          {activeTicket ? (
-            <TicketDetail key={activeTicket.id} ticket={activeTicket} onTicketChange={(nt) => mutateTicketInList(setTickets, nt)} />
-          ) : (
-            <div className="m-auto p-10 text-center text-zinc-500">
-              <MessageCircle className="h-6 w-6 mx-auto mb-3" />
-              Select a ticket to view details
-            </div>
-          )}
-        </div>
-
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent side="right" className="w-full sm:max-w-2xl p-0">
-            <SheetHeader className="px-4 py-3 border-b">
-              <SheetTitle>Ticket</SheetTitle>
-            </SheetHeader>
-            {activeTicket && (
-              <TicketDetail key={activeTicket.id + "-m"} ticket={activeTicket} onTicketChange={(nt) => mutateTicketInList(setTickets, nt)} />
-            )}
-          </SheetContent>
-        </Sheet>
-      </div>
-    </div>
-  );
-}
-
 function Header({ onRefresh, onNewTicketCreated }: { onRefresh: () => void; onNewTicketCreated: (t: TicketListItem) => void }) {
   const [open, setOpen] = useState(false);
   return (
