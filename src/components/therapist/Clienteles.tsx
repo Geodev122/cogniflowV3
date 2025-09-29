@@ -228,8 +228,19 @@ export const Clienteles: React.FC = () => {
     }
     catch (e: any) {
       console.error('[Clienteles] fetchRows', e)
-      setError('Could not load clients.')
+      // Try to extract a useful message from the error object
+      let msg = 'Could not load clients.'
+      try {
+        if (e?.message) msg = String(e.message)
+        else if (typeof e === 'string') msg = e
+        else msg = JSON.stringify(e)
+      } catch (_err) {
+        msg = 'Could not load clients (unknown error)'
+      }
+      setError(msg)
       setRows([])
+      // show short toast for visibility in UI
+      setToast({ type: 'error', message: msg.length > 120 ? msg.slice(0, 117) + '...' : msg })
     } finally {
       setLoading(false)
     }
