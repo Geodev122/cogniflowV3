@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import {
-  Users, Search, AlertTriangle, ShieldCheck, MessageSquare, FileText, Brain, RefreshCcw, Plus, X
+  Users, Search, AlertTriangle, ShieldCheck, MessageSquare, FileText, Brain, RefreshCcw, Plus, X, Edit
 } from 'lucide-react'
 
 /* -------------------------------------------------------------------------- */
@@ -107,16 +107,9 @@ export const Clienteles: React.FC = () => {
     try {
       let data: any[] = []
       let error: any = null
-
-      if (scope === 'mine' && profile?.id) {
-        // Fetch client ids from relations, then fetch profiles directly.
-        const { data: relRows, error: relErr } = await supabase
-          .from('therapist_client_relations')
-          .select('client_id')
-          .eq('therapist_id', profile.id)
-
-        if (relErr) throw relErr
-        const clientIds = (relRows || []).map((r: any) => r.client_id).filter(Boolean)
+      if (scope === 'mine') {
+        // Use the cached myIds (populated by fetchMineIds) to avoid an extra relation query.
+        const clientIds = Array.from(myIds || [])
         if (clientIds.length === 0) {
           data = []
         } else {
@@ -193,6 +186,60 @@ export const Clienteles: React.FC = () => {
       setLoading(false)
     }
   }, [scope, q, myIds, profile?.id])
+
+  /* ----------------------------- Patch client ---------------------------- */
+  /**
+   * Patch a client's profile and mirror fields in the clients table.
+   * Note: this will use the current anon client. If your RLS prevents therapists
+   * from updating profiles directly, implement a DB-side RPC (trusted function)
+   * that checks therapist-client relations and performs the update with service
+   * privileges.
+   */
+  const patchClient = async (clientId: string, updates: Partial<ClientRow>) => {
+    if (!profile?.id) {
+      setToast({ type: 'error', message: 'Not authenticated' })
+      return false
+    }
+    try {
+      setLoading(true)
+      // Update the lightweight `clients` table (if present) and `profiles` table.
+      const clientFields: any = {}
+      const profileFields: any = {}
+      // Mirror common editable fields to both tables where appropriate
+      if (updates.first_name !== undefined) { clientFields.first_name = updates.first_name; profileFields.first_name = updates.first_name }
+      if (updates.last_name !== undefined) { clientFields.last_name = updates.last_name; profileFields.last_name = updates.last_name }
+      if (updates.email !== undefined) { clientFields.email = updates.email; profileFields.email = updates.email }
+      if (updates.whatsapp_number !== undefined) { clientFields.whatsapp_number = updates.whatsapp_number; profileFields.whatsapp_number = updates.whatsapp_number }
+      if (updates.phone !== undefined) { profileFields.phone = updates.phone }
+      if (updates.city !== undefined) { clientFields.city = updates.city; profileFields.city = updates.city }
+      if (updates.country !== undefined) { clientFields.country = updates.country; profileFields.country = updates.country }
+      if (updates.referral_source !== undefined) { clientFields.referral_source = updates.referral_source; profileFields.referral_source = updates.referral_source }
+
+      // Run updates in parallel. If RLS blocks either, consider implementing a server-side RPC.
+      const ops: Promise<any>[] = []
+      if (Object.keys(clientFields).length > 0) {
+        ops.push(supabase.from('clients').update(clientFields).eq('id', clientId))
+      }
+      if (Object.keys(profileFields).length > 0) {
+        ops.push(supabase.from('profiles').update(profileFields).eq('id', clientId))
+      }
+
+      const results = await Promise.all(ops)
+      for (const res of results) {
+        if (res && (res as any).error) throw (res as any).error
+      }
+
+      setToast({ type: 'success', message: 'Client updated' })
+      setRefreshKey(k => k + 1)
+      return true
+    } catch (err: any) {
+      console.error('[Clienteles] patchClient', err)
+      setToast({ type: 'error', message: err?.message || 'Failed to update client' })
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Initial + manual refresh
   useEffect(() => { fetchMineIds() }, [fetchMineIds, refreshKey])
@@ -289,6 +336,54 @@ export const Clienteles: React.FC = () => {
 
   const resetCreateForm = () => {
     setFirstName(''); setLastName(''); setEmail(''); setPhone('')
+  }
+
+  /* ----------------------------- Edit Modal ----------------------------- */
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editingClient, setEditingClient] = useState<ClientRow | null>(null)
+  const [editFirstName, setEditFirstName] = useState('')
+  const [editLastName, setEditLastName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [editCity, setEditCity] = useState('')
+  const [editCountry, setEditCountry] = useState('')
+  const [editReferralSource, setEditReferralSource] = useState('')
+
+  const openEditModal = (r: ClientRow) => {
+    setEditingClient(r)
+    setEditFirstName(r.first_name || '')
+    setEditLastName(r.last_name || '')
+    setEditEmail(r.email || '')
+    setEditPhone(r.phone || r.whatsapp_number || '')
+    setEditCity(r.city || '')
+    setEditCountry(r.country || '')
+    setEditReferralSource(r.referral_source || '')
+    setShowEditModal(true)
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingClient) return
+    setEditing(true)
+    try {
+      const updates: Partial<ClientRow> = {
+        first_name: editFirstName.trim() || null,
+        last_name: editLastName.trim() || null,
+        email: editEmail.trim() || null,
+        phone: editPhone.trim() || null,
+        whatsapp_number: editPhone.trim() || null,
+        city: editCity.trim() || null,
+        country: editCountry.trim() || null,
+        referral_source: editReferralSource.trim() || null
+      }
+      const ok = await patchClient(editingClient.id, updates)
+      if (ok) {
+        setShowEditModal(false)
+      }
+    } finally {
+      setEditing(false)
+    }
   }
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -566,6 +661,15 @@ export const Clienteles: React.FC = () => {
                           Email Intake
                         </button>
 
+                        <button
+                          onClick={() => openEditModal(r)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 border border-gray-200 rounded hover:bg-gray-200 text-xs"
+                          title="Edit Client"
+                        >
+                          <Edit className="w-4 h-4" />
+                          Edit
+                        </button>
+
                         {/* Assignment/Create Case */}
                         {isMine(r.id) || getAssignmentStatus(r.id) === 'accepted' ? (
                           <button
@@ -663,6 +767,14 @@ export const Clienteles: React.FC = () => {
                               >
                                 <MessageSquare className="w-4 h-4" />
                                 <span className="hidden xl:inline">Message</span>
+                              </button>
+                              <button
+                                onClick={() => openEditModal(r)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 border border-gray-200 rounded hover:bg-gray-200"
+                                title="Edit Client"
+                              >
+                                <Edit className="w-4 h-4" />
+                                <span className="hidden xl:inline">Edit</span>
                               </button>
                               <button
                                 onClick={() => sendIntake('whatsapp', r)}
@@ -809,6 +921,91 @@ export const Clienteles: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => !creating && setShowCreateModal(false)}
+                    className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------- Edit Modal ------------------------------- */}
+      {showEditModal && editingClient && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-black/40"
+            onClick={() => !editing && setShowEditModal(false)}
+          />
+          <div className="flex min-h-screen items-end justify-center px-4 pb-10 pt-6 text-center sm:block sm:p-0">
+            <div className="inline-block w-full max-w-lg transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:align-middle">
+              <form onSubmit={handleEditSubmit}>
+                <div className="bg-white px-6 pt-6 pb-3">
+                  <div className="flex items-start justify-between">
+                    <h3 className="text-lg font-medium text-gray-900">Edit Client</h3>
+                    <button
+                      type="button"
+                      onClick={() => !editing && setShowEditModal(false)}
+                      className="p-2 rounded hover:bg-gray-100"
+                      title="Close"
+                    >
+                      <X className="w-5 h-5 text-gray-500" />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">First Name</label>
+                        <input value={editFirstName} onChange={e => setEditFirstName(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Last Name</label>
+                        <input value={editLastName} onChange={e => setEditLastName(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Email</label>
+                      <input value={editEmail} onChange={e => setEditEmail(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Phone / WhatsApp</label>
+                      <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">City</label>
+                        <input value={editCity} onChange={e => setEditCity(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Country</label>
+                        <input value={editCountry} onChange={e => setEditCountry(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Referral Source</label>
+                      <input value={editReferralSource} onChange={e => setEditReferralSource(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 px-6 py-4 sm:flex sm:flex-row-reverse">
+                  <button
+                    type="submit"
+                    disabled={editing}
+                    className="inline-flex w-full justify-center rounded-md bg-blue-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
+                  >
+                    {editing ? 'Saving…' : 'Save Changes'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => !editing && setShowEditModal(false)}
                     className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm"
                   >
                     Cancel
