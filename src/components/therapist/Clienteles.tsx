@@ -428,7 +428,7 @@ export const Clienteles: React.FC = () => {
       {/* Mobile: card list */}
       <ul className="divide-y md:hidden">
         {displayRows.map(r => {
-          const mine = isMine(r.id)
+          const mine = myIds.has(r.id)
           const name = fullName(r)
           const patientId = r.patient_code || r.id
           return (
@@ -506,7 +506,7 @@ export const Clienteles: React.FC = () => {
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <ClientActions clientId={r.id} patientCode={r.patient_code} isMine={isMine(r.id)} assignmentStatus={getAssignmentStatus(r.id)} onRefresh={() => setRefreshKey(k => k + 1)} />
+                  <ClientActions clientId={r.id} patientCode={r.patient_code} isMine={myIds.has(r.id)} assignmentStatus={getAssignmentStatus(r.id)} onRefresh={() => setRefreshKey(k => k + 1)} />
                 </td>
               </tr>
             ))}
