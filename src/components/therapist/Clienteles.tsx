@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import {
-  Users, Search, AlertTriangle, ShieldCheck, MessageSquare, FileText, Brain, RefreshCcw, Plus, X, Edit
+  Users, Search, AlertTriangle, ShieldCheck, MessageSquare, FileText, Brain, RefreshCcw, Plus, X, Edit, Copy
 } from 'lucide-react'
 
 /* -------------------------------------------------------------------------- */
@@ -43,8 +43,21 @@ function formatWhatsappDigits(input: string) {
   return plus + digits
 }
 
-function generatePatientCode(): string {
-  const n = Math.floor(100000 + Math.random() * 900000)
+function generatePatientCode(clientId?: string): string {
+  // Deterministic code derived from clientId when available.
+  // Format: PT + 9 chars (letters/digits) derived from a simple hash of clientId.
+  if (clientId) {
+    let h = 2166136261
+    for (let i = 0; i < clientId.length; i++) {
+      h ^= clientId.charCodeAt(i)
+      h = Math.imul(h, 16777619)
+    }
+    // convert to unsigned and base36, pad and take 9 chars
+    const s = (h >>> 0).toString(36).toUpperCase().padStart(9, '0').slice(0, 9)
+    return `PT${s}`
+  }
+  // Fallback random code
+  const n = Math.floor(100000000 + Math.random() * 900000000)
   return `PT${n}`
 }
 
@@ -107,7 +120,23 @@ export const Clienteles: React.FC = () => {
     try {
       let data: any[] = []
       let error: any = null
-      if (scope === 'mine') {
+      // If the query looks like a Patient ID (PT...), prefer server-side patient_code lookup.
+      const qTrim = q.trim()
+      if (qTrim.length > 0 && /^PT/i.test(qTrim)) {
+        try {
+          const { data: profilesData, error: profilesErr } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, email, phone, whatsapp_number, created_at, role, patient_code, referral_source')
+            .ilike('patient_code', `${qTrim}%`)
+            .order('created_at', { ascending: false })
+          if (profilesErr) throw profilesErr
+          data = profilesData || []
+          if (scope === 'mine') data = (data || []).filter((r: any) => myIds.has(r.id))
+        } catch (err) {
+          console.warn('[Clienteles] patient-id search failed', err)
+          data = []
+        }
+      } else if (scope === 'mine') {
         // Use the cached myIds (populated by fetchMineIds) to avoid an extra relation query.
         const clientIds = Array.from(myIds || [])
         if (clientIds.length === 0) {
@@ -161,9 +190,9 @@ export const Clienteles: React.FC = () => {
         }
       })
 
-      // client-side filtering/search for public fields
-      if (q.trim().length > 0) {
-        const like = q.trim().toLowerCase()
+      // client-side filtering/search for public fields (name, email, referral source)
+      if (qTrim.length > 0 && !/^PT/i.test(qTrim)) {
+        const like = qTrim.toLowerCase()
         const filtered = normalized.filter(r => {
           const name = `${r.first_name || ''} ${r.last_name || ''}`.trim().toLowerCase()
           const initials = toInitials(r.first_name, r.last_name).toLowerCase()
@@ -171,7 +200,6 @@ export const Clienteles: React.FC = () => {
             || initials.includes(like)
             || (r.email || '').toLowerCase().includes(like)
             || (r.referral_source || '').toLowerCase().includes(like)
-            || (r.city || '').toLowerCase().includes(like)
         })
         setRows(filtered)
       } else {
@@ -248,6 +276,16 @@ export const Clienteles: React.FC = () => {
       } finally {
         setLoading(false)
       }
+    }
+  }
+
+  const copyPatientIdToClipboard = async (val: string) => {
+    try {
+      await navigator.clipboard.writeText(val)
+      setToast({ type: 'success', message: 'Patient ID copied' })
+    } catch (e: any) {
+      console.warn('copy failed', e)
+      setToast({ type: 'error', message: 'Could not copy Patient ID' })
     }
   }
 
@@ -406,7 +444,7 @@ export const Clienteles: React.FC = () => {
     try {
       let newUserId: string | null = null
       let existingProfileId: string | null = null
-      let patientCode = generatePatientCode()
+  let patientCode: string | null = null
 
       const { data: existing, error: existingErr } = await supabase
         .from('profiles')
@@ -422,7 +460,7 @@ export const Clienteles: React.FC = () => {
         existingProfileId = null
       }
 
-      if (!existingProfileId) {
+  if (!existingProfileId) {
         const supabaseAnon = createClient(
           import.meta.env.VITE_SUPABASE_URL,
           import.meta.env.VITE_SUPABASE_ANON_KEY,
@@ -442,7 +480,7 @@ export const Clienteles: React.FC = () => {
           }
         })
 
-        if (signUp.error) {
+  if (signUp.error) {
           if (!signUp.error.message?.toLowerCase().includes('already registered')) {
             throw signUp.error
           }
@@ -463,6 +501,8 @@ export const Clienteles: React.FC = () => {
 
       const targetId = existingProfileId || newUserId
       if (!targetId) throw new Error('Could not resolve client id.')
+      // Ensure deterministic patient code (derived from id) if not present
+      if (!patientCode) patientCode = generatePatientCode(targetId)
 
       // Create a client record in the new `clients` table and keep profiles as lightweight
       const { error: clientErr } = await supabase.from('clients').upsert({
@@ -472,6 +512,7 @@ export const Clienteles: React.FC = () => {
         email: email.toLowerCase(),
         whatsapp_number: cleanPhone,
         referral_source: referralSource || null,
+        patient_code: patientCode,
         created_at: new Date().toISOString()
       }, { onConflict: 'id' })
       if (clientErr) throw clientErr
@@ -529,9 +570,12 @@ export const Clienteles: React.FC = () => {
       <div className="mx-auto w-full max-w-[1400px] px-3 sm:px-6 py-6 min-w-0">
         {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-          <div className="flex items-center gap-2 min-w-0">
-            <Users className="w-6 h-6 text-blue-600 shrink-0" />
-            <h2 className="text-2xl font-bold text-gray-900 truncate">Clienteles</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 min-w-0">
+            <div className="flex items-center gap-2">
+              <Users className="w-6 h-6 text-blue-600 shrink-0" />
+              <h2 className="text-2xl font-bold text-gray-900 truncate">Clienteles</h2>
+            </div>
+            <div className="text-sm text-gray-500 mt-1 sm:mt-0 sm:ml-2">{displayRows.length} clients</div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -540,7 +584,7 @@ export const Clienteles: React.FC = () => {
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search name, email, city…"
+                placeholder="Search name, email, patient id…"
                 className="pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full"
               />
             </div>
@@ -597,6 +641,7 @@ export const Clienteles: React.FC = () => {
                 {displayRows.map(r => {
                   const mine = isMine(r.id)
                   const name = fullName(r)
+                  const patientId = r.patient_code || r.id
                   return (
                     <li key={r.id} data-test-client-row className="p-4 space-y-2">
                       <div className="flex items-center gap-3">
@@ -609,97 +654,55 @@ export const Clienteles: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="text-gray-600">
-                          <div className="text-[11px] uppercase text-gray-400">City</div>
-                          <div className="truncate">{r.city || '—'}</div>
-                        </div>
-                        <div className="text-gray-600">
-                          <div className="text-[11px] uppercase text-gray-400">Country</div>
-                          <div className="truncate">{r.country || '—'}</div>
-                        </div>
-                        <div className="col-span-2 text-gray-600">
-                          <div className="text-[11px] uppercase text-gray-400">Contact</div>
-                          <div className="truncate break-words">
-                            {mine ? (r.email || '—') : 'Hidden'}
+                      {/* Compact card: always surface Patient ID and Name */}
+                      <div className="text-sm text-gray-700">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-[11px] uppercase text-gray-400">Patient ID</div>
+                            <div className="font-mono text-[12px] text-gray-700 truncate">{patientId}</div>
                           </div>
-                          <div className="truncate text-gray-500 break-all">
-                            {mine ? (r.phone || r.whatsapp_number || '—') : '—'}
-                          </div>
+                          <button type="button" onClick={() => copyPatientIdToClipboard(patientId)} className="p-1 rounded hover:bg-gray-100">
+                            <Copy className="w-4 h-4 text-gray-500" />
+                          </button>
                         </div>
+                        <div className="text-[11px] uppercase text-gray-400 mt-2">Name</div>
+                        <div className="truncate text-gray-600">{name}</div>
                       </div>
 
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <button
-                          onClick={() => openCase(r)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-100 text-xs"
-                          title="Open Case"
-                        >
-                          <FileText className="w-4 h-4" />
-                          Open Case
-                        </button>
-                        <button
-                          onClick={() => assignAssessment(r)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100 text-xs"
-                          title="Assign Assessment"
-                        >
-                          <Brain className="w-4 h-4" />
-                          Assign
-                        </button>
-                        <button
-                          onClick={() => messageClient(r)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 text-xs"
-                          title="Message"
-                        >
-                          <MessageSquare className="w-4 h-4" />
-                          Message
-                        </button>
-                        <button
-                          onClick={() => sendIntake('whatsapp', r)}
-                          disabled={!mine}
-                          className="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 text-xs"
-                          title={mine ? 'Send WhatsApp intake' : 'Only available for linked clients'}
-                        >
-                          WhatsApp Intake
-                        </button>
-                        <button
-                          onClick={() => sendIntake('email', r)}
-                          disabled={!mine}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-xs"
-                          title={mine ? 'Send email intake' : 'Only available for linked clients'}
-                        >
-                          Email Intake
-                        </button>
-
-                        <button
-                          onClick={() => openEditModal(r)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 border border-gray-200 rounded hover:bg-gray-200 text-xs"
-                          title="Edit Client"
-                        >
-                          <Edit className="w-4 h-4" />
-                          Edit
-                        </button>
-
-                        {/* Assignment/Create Case */}
-                        {isMine(r.id) || getAssignmentStatus(r.id) === 'accepted' ? (
-                          <button
-                            onClick={() => createCaseForClient(r.id)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs"
-                          >
-                            Create Case
+                      <div className="pt-2">
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                          <button onClick={() => openCase(r)} title="Open Case" className="p-2 rounded hover:bg-gray-100">
+                            <FileText className="w-4 h-4 text-indigo-700" />
                           </button>
-                        ) : getAssignmentStatus(r.id) === 'pending' ? (
-                          <button className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-300 text-gray-700 rounded text-xs" disabled>Request Pending</button>
-                        ) : (
-                          <button
-                            data-test-request-btn
-                            onClick={() => requestAssignment(r.id)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-500 text-white rounded hover:bg-amber-600 text-xs"
-                            disabled={!!requestingMap[r.id]}
-                          >
-                            {requestingMap[r.id] ? 'Sending...' : 'Request Assignment'}
+                          <button onClick={() => assignAssessment(r)} title="Assign Assessment" className="p-2 rounded hover:bg-gray-100">
+                            <Brain className="w-4 h-4 text-amber-700" />
                           </button>
-                        )}
+                          <button onClick={() => messageClient(r)} title="Message" className="p-2 rounded hover:bg-gray-100">
+                            <MessageSquare className="w-4 h-4 text-blue-700" />
+                          </button>
+                          <button onClick={() => openEditModal(r)} title="Edit" className="p-2 rounded hover:bg-gray-100">
+                            <Edit className="w-4 h-4 text-gray-700" />
+                          </button>
+                          <div className="ml-auto text-[11px] text-gray-500">{new Date(r.created_at).toLocaleDateString()}</div>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button onClick={() => sendIntake('whatsapp', r)} disabled={!mine} className="flex-1 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 text-xs disabled:opacity-50">
+                            WhatsApp Intake
+                          </button>
+                          <button onClick={() => sendIntake('email', r)} disabled={!mine} className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs disabled:opacity-50">
+                            Email Intake
+                          </button>
+                          {isMine(r.id) || getAssignmentStatus(r.id) === 'accepted' ? (
+                            <button onClick={() => createCaseForClient(r.id)} className="px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs">Create Case</button>
+                          ) : getAssignmentStatus(r.id) === 'pending' ? (
+                            <button className="px-3 py-1.5 bg-gray-300 text-gray-700 rounded text-xs" disabled>Request Pending</button>
+                          ) : (
+                            <button data-test-request-btn onClick={() => requestAssignment(r.id)} className="px-3 py-1.5 bg-amber-500 text-white rounded hover:bg-amber-600 text-xs" disabled={!!requestingMap[r.id]}>
+                              {requestingMap[r.id] ? 'Sending...' : 'Request Assignment'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </li>
                   )
@@ -710,18 +713,20 @@ export const Clienteles: React.FC = () => {
               <div className="hidden md:block w-full overflow-x-auto">
                 <table className="w-full table-auto">
                   <colgroup>
-                    <col className="w-[42%]" />
-                    <col className="w-[14%]" />
-                    <col className="w-[14%]" />
                     <col className="w-[18%]" />
+                    <col className="w-[38%]" />
+                    {scope === 'mine' && <col className="w-[14%]" />}
+                    {scope === 'mine' && <col className="w-[14%]" />}
+                    {scope === 'mine' && <col className="w-[12%]" />}
                     <col className="w-[12%]" />
                   </colgroup>
                   <thead className="bg-gray-50 text-xs uppercase text-gray-600">
                     <tr>
+                      <th className="text-left px-4 py-3">Patient ID</th>
                       <th className="text-left px-4 py-3">Name</th>
-                      <th className="text-left px-4 py-3">City</th>
-                      <th className="text-left px-4 py-3">Country</th>
-                      <th className="text-left px-4 py-3">Contact</th>
+                      {scope === 'mine' && <th className="text-left px-4 py-3">City</th>}
+                      {scope === 'mine' && <th className="text-left px-4 py-3">Country</th>}
+                      {scope === 'mine' && <th className="text-left px-4 py-3">Contact</th>}
                       <th className="text-right px-4 py-3">Actions</th>
                     </tr>
                   </thead>
@@ -731,6 +736,14 @@ export const Clienteles: React.FC = () => {
                       const name = fullName(r)
                       return (
                         <tr key={r.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 align-top">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[13px] text-gray-700 truncate border rounded px-2 py-1 bg-gray-50">{r.patient_code || r.id}</span>
+                              <button type="button" onClick={() => copyPatientIdToClipboard(r.patient_code || r.id)} className="p-1 rounded hover:bg-gray-100" aria-label="Copy Patient ID">
+                                <Copy className="w-4 h-4 text-gray-500" />
+                              </button>
+                            </div>
+                          </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-[10px] shrink-0">
@@ -742,16 +755,22 @@ export const Clienteles: React.FC = () => {
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3">
-                            <div className="truncate">{r.city || '—'}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="truncate">{r.country || '—'}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="text-xs text-gray-600 truncate break-words">{mine ? (r.email || '—') : 'Hidden'}</div>
-                            <div className="text-xs text-gray-500 truncate break-all">{mine ? (r.phone || r.whatsapp_number || '—') : '—'}</div>
-                          </td>
+                          {scope === 'mine' && (
+                            <td className="px-4 py-3">
+                              <div className="truncate">{r.city || '—'}</div>
+                            </td>
+                          )}
+                          {scope === 'mine' && (
+                            <td className="px-4 py-3">
+                              <div className="truncate">{r.country || '—'}</div>
+                            </td>
+                          )}
+                          {scope === 'mine' && (
+                            <td className="px-4 py-3">
+                              <div className="text-xs text-gray-600 truncate break-words">{mine ? (r.email || '—') : 'Hidden'}</div>
+                              <div className="text-xs text-gray-500 truncate break-all">{mine ? (r.phone || r.whatsapp_number || '—') : '—'}</div>
+                            </td>
+                          )}
                           <td className="px-4 py-3">
                             <div className="flex flex-wrap items-center gap-2 justify-end">
                               <button
@@ -987,16 +1006,7 @@ export const Clienteles: React.FC = () => {
                       <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">City</label>
-                        <input value={editCity} onChange={e => setEditCity(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Country</label>
-                        <input value={editCountry} onChange={e => setEditCountry(e.target.value)} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" />
-                      </div>
-                    </div>
+                    {/* City/Country removed from therapist UI (private fields) */}
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Referral Source</label>
