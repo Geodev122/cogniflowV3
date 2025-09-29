@@ -182,8 +182,8 @@ export default function TherapistDashboard() {
       title: 'Client Care',
       expandable: true,
       items: [
-        { id: 'archives', name: 'Case Archives', icon: Archive },
         { id: 'clienteles', name: 'Clienteles', icon: Users },
+        { id: 'sessions', name: 'Session Management', icon: Calendar },   
         { id: 'resources', name: 'Resource Library', icon: Library },
       ]
     },
@@ -192,10 +192,8 @@ export default function TherapistDashboard() {
       title: 'Practice Management',
       expandable: true,
       items: [
-        { id: 'sessions', name: 'Session Management', icon: Calendar },
-        { id: 'metrics', name: 'Progress Metrics', icon: BarChart3 },
-        { id: 'continuing-education', name: 'Continuing Education', icon: GraduationCap },
         { id: 'cases', name: 'Case Management', icon: FileText },
+        { id: 'archives', name: 'Case Archives', icon: Archive },
         { id: 'supervision', name: 'Supervision', icon: Headphones },
       ]
     },
@@ -204,9 +202,10 @@ export default function TherapistDashboard() {
       title: 'Professional Setting',
       expandable: false,
       items: [
+        { id: 'continuing-education', name: 'Continuing Education', icon: GraduationCap },
         { id: 'licensing', name: 'Compliance', icon: ShieldCheck },
         { id: 'clinic', name: 'Clinic Rentals', icon: Building2 },
-        { id: 'vip', name: 'VIP Opportunities', icon: Star },
+
       ]
     },
     {
@@ -214,6 +213,7 @@ export default function TherapistDashboard() {
       title: 'Account',
       expandable: false,
       items: [
+        { id: 'vip', name: 'VIP Opportunities', icon: Star },
         { id: 'membership', name: 'Membership', icon: CalendarDays },
         { id: 'admin', name: 'Support/Tickets', icon: Shield },
       ]
@@ -967,7 +967,7 @@ export default function TherapistDashboard() {
         </div>
       </header>
 
-      <div className="flex pt-16">
+  <div className="flex pt-16 min-w-0">
         {/* Sidebar (extracted to shared component) */}
         <TherapistSidebar
           sidebarCollapsed={sidebarCollapsed}
@@ -1062,8 +1062,8 @@ export default function TherapistDashboard() {
         )}
 
         {/* Main Content */}
-        <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} bg-gray-50 min-h-0`}>
-          <main className="min-h-[calc(100vh-4rem)] overflow-y-auto overflow-x-hidden">
+        <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} bg-gray-50 min-h-0 min-w-0`}>
+          <main className="min-h-[calc(100vh-4rem)] overflow-y-auto overflow-x-hidden min-w-0">
             <Suspense fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>}>
               {active === 'overview'            && <Overview />}
               {active === 'clienteles'          && <Clienteles />}

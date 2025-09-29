@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { 
   User, 
   Award, 
@@ -7,12 +7,10 @@ import {
   Shield, 
   Phone,
   Mail,
-  Globe,
   Calendar,
   Star,
   MessageCircle,
   Video,
-  FileText,
   Edit,
   Camera,
   Languages,
@@ -21,6 +19,9 @@ import {
   CheckCircle,
   Clock
 } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../hooks/useAuth'
+import { TherapistOnboarding } from './TherapistOnboarding'
 
 interface TherapistProfileData {
   // Basic Info
@@ -71,6 +72,87 @@ export const TherapistProfile: React.FC<TherapistProfileProps> = ({
   isOwnProfile = false, 
   onEdit 
 }) => {
+  const { profile: authProfile } = useAuth()
+  const [therapistState, setTherapistState] = useState<TherapistProfileData>(therapist)
+  const [professionalDetails, setProfessionalDetails] = useState<any>(null)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [loadingRefresh, setLoadingRefresh] = useState(false)
+
+  useEffect(() => {
+    setTherapistState(therapist)
+    // Try to seed professionalDetails from incoming prop when available
+    const seed = (therapist as any)
+    const pd = seed?.professionalDetails || seed?.professional_details || null
+    if (pd) setProfessionalDetails(pd)
+  }, [therapist])
+
+  const refreshProfileFromDb = async () => {
+    // Try to fetch latest profile/professional_details from DB and merge into state
+    try {
+      const userId = authProfile?.id || therapist.id
+      if (!userId) return
+      setLoadingRefresh(true)
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (error) {
+        console.warn('[TherapistProfile] failed to refresh profile from DB', error)
+        return
+      }
+
+      if (data) {
+        const p: any = data
+        const pd = p.professional_details || {}
+
+        // Also fetch therapist_profiles which stores onboarding step fields
+        let tp: any = null
+        try {
+          const { data: tpData, error: tpErr } = await supabase
+            .from('therapist_profiles')
+            .select('*')
+            .eq('user_id', userId)
+            .maybeSingle()
+          if (!tpErr && tpData) tp = tpData
+        } catch (e) {
+          // ignore
+        }
+
+        // Merge therapist_profiles fields into professional details view
+        const mergedDetails = {
+          ...pd,
+          ...(tp || {}),
+          // prefer nested licenses from profiles.professional_details if present
+          licenses: pd.licenses || (tp ? tp.licenses : undefined) || [],
+        }
+
+        setTherapistState(prev => ({
+          id: String(p.user_id || p.id || prev.id),
+          fullName: p.full_name || mergedDetails.fullName || prev.fullName,
+          profilePicture: mergedDetails.profile_picture_url || prev.profilePicture,
+          whatsappNumber: p.whatsapp_number || prev.whatsappNumber,
+          email: p.email || prev.email,
+          specializations: mergedDetails.specializations || prev.specializations || [],
+          languages: mergedDetails.languages || prev.languages || [],
+          qualifications: mergedDetails.qualifications || prev.qualifications || '',
+          bio: mergedDetails.bio || prev.bio || '',
+          introVideo: mergedDetails.intro_video_url || prev.introVideo,
+          practiceLocations: mergedDetails.practice_locations || prev.practiceLocations || [],
+          verificationStatus: p.verification_status || prev.verificationStatus || 'pending',
+          membershipStatus: p.membership_status || prev.membershipStatus || 'pending',
+          joinDate: p.created_at || prev.joinDate || new Date().toISOString(),
+          stats: prev.stats,
+        }))
+        setProfessionalDetails(mergedDetails)
+      }
+    } catch (e) {
+      console.error('[TherapistProfile] refresh error', e)
+    } finally {
+      setLoadingRefresh(false)
+    }
+  }
   const getVerificationBadge = () => {
     switch (therapist.verificationStatus) {
       case 'verified':
@@ -158,13 +240,24 @@ export const TherapistProfile: React.FC<TherapistProfileProps> = ({
                   {renderStarRating(therapist.stats.rating)}
                 </div>
                 {isOwnProfile && (
-                  <button
-                    onClick={onEdit}
-                    className="inline-flex items-center px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 transition-colors"
-                  >
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit Profile
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setShowOnboarding(true)}
+                      className="inline-flex items-center px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 transition-colors"
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit Profile
+                    </button>
+                    {showOnboarding && (
+                      <TherapistOnboarding
+                        onClose={() => setShowOnboarding(false)}
+                        onComplete={async () => {
+                          setShowOnboarding(false)
+                          await refreshProfileFromDb()
+                        }}
+                      />
+                    )}
+                  </>
                 )}
               </div>
 
@@ -343,6 +436,71 @@ export const TherapistProfile: React.FC<TherapistProfileProps> = ({
                 ))}
               </div>
             </div>
+
+            {/* Professional Details from Onboarding */}
+            {professionalDetails && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Shield className="w-5 h-5 mr-2 text-indigo-600" />
+                  Professional Details
+                </h3>
+
+                <div className="space-y-4">
+                  {professionalDetails.therapeutic_approaches && (
+                    <div>
+                      <div className="text-sm font-medium text-gray-900 mb-1">Therapeutic Approaches</div>
+                      <div className="text-sm text-gray-700">{(professionalDetails.therapeutic_approaches || []).join(', ')}</div>
+                    </div>
+                  )}
+
+                  {professionalDetails.treatment_philosophy && (
+                    <div>
+                      <div className="text-sm font-medium text-gray-900 mb-1">Treatment Philosophy</div>
+                      <div className="text-sm text-gray-700">{professionalDetails.treatment_philosophy}</div>
+                    </div>
+                  )}
+
+                  {professionalDetails.education_background && (
+                    <div>
+                      <div className="text-sm font-medium text-gray-900 mb-1">Education</div>
+                      <div className="text-sm text-gray-700 whitespace-pre-line">{professionalDetails.education_background}</div>
+                    </div>
+                  )}
+
+                  {professionalDetails.years_experience !== undefined && (
+                    <div>
+                      <div className="text-sm font-medium text-gray-900 mb-1">Years of Experience</div>
+                      <div className="text-sm text-gray-700">{professionalDetails.years_experience}</div>
+                    </div>
+                  )}
+
+                  {professionalDetails.session_rate !== undefined && (
+                    <div>
+                      <div className="text-sm font-medium text-gray-900 mb-1">Session Rate</div>
+                      <div className="text-sm text-gray-700">{professionalDetails.session_rate ? `$${professionalDetails.session_rate}` : 'N/A'}</div>
+                    </div>
+                  )}
+
+                  {professionalDetails.availability_days && (
+                    <div>
+                      <div className="text-sm font-medium text-gray-900 mb-1">Availability</div>
+                      <div className="text-sm text-gray-700">{((professionalDetails.availability_days || [])).join(', ')} {professionalDetails.availability_times ? `• ${professionalDetails.availability_times}` : ''}</div>
+                    </div>
+                  )}
+
+                  {professionalDetails.licenses && professionalDetails.licenses.length > 0 && (
+                    <div>
+                      <div className="text-sm font-medium text-gray-900 mb-1">Licenses</div>
+                      <ul className="text-sm text-gray-700 list-disc list-inside">
+                        {professionalDetails.licenses.map((lic: any, i: number) => (
+                          <li key={i}>{lic.name} ({lic.country}) {lic.document_url ? <a href={lic.document_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">View</a> : null}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Professional Status */}
             {isOwnProfile && (
