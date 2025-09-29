@@ -136,7 +136,7 @@ export const Clienteles: React.FC = () => {
         try {
           const { data: profilesData, error: profilesErr } = await supabase
             .from('profiles')
-            .select('id, first_name, last_name, email, phone, whatsapp_number, created_at, role, patient_code, referral_source')
+            .select('id, first_name, last_name, email, phone, whatsapp_number, created_at, role, patient_code')
             .ilike('patient_code', `${qTrim}%`)
             .order('created_at', { ascending: false })
           if (profilesErr) throw profilesErr
@@ -154,7 +154,7 @@ export const Clienteles: React.FC = () => {
         } else {
           const { data: profilesData, error: profilesErr } = await supabase
             .from('profiles')
-            .select('id, first_name, last_name, email, phone, whatsapp_number, city, country, created_at, role, patient_code, referral_source')
+            .select('id, first_name, last_name, email, phone, whatsapp_number, city, country, created_at, role, patient_code')
             .in('id', clientIds)
 
           if (profilesErr) throw profilesErr
