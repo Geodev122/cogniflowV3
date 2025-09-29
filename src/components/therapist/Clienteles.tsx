@@ -507,9 +507,13 @@ export const Clienteles: React.FC = () => {
           { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
         )
 
+        // Generate a temporary signup password for the new auth user. We'll show this to the therapist
+        // so they can share it with the client. The server will still generate the canonical patient_code.
+        const signupPassword = generatePatientCode()
+
         const signUp = await supabaseAnon.auth.signUp({
           email: email.toLowerCase(),
-          password: patientCode,
+          password: signupPassword,
           options: {
             data: {
               first_name: firstName,
@@ -536,15 +540,18 @@ export const Clienteles: React.FC = () => {
         } else {
           if (!signUp.data.user) throw new Error('Auth signup succeeded but no user returned.')
           newUserId = signUp.data.user.id
+          // carry forward the signupPassword so the therapist can see it in the confirmation message
+          patientCode = signupPassword
         }
       }
 
       const targetId = existingProfileId || newUserId
       if (!targetId) throw new Error('Could not resolve client id.')
-      // Ensure deterministic patient code (derived from id) if not present
-      if (!patientCode) patientCode = generatePatientCode(targetId)
 
-      // Create a client record in the new `clients` table and keep profiles as lightweight
+  // The signup password (if created above) is stored in patientCode for messaging purposes.
+  // The server will be asked to generate the canonical patient_code.
+
+      // Create a client record in the new `clients` table and upsert the profile without a client-side patient_code.
       const { error: clientErr } = await supabase.from('clients').upsert({
         id: targetId,
         first_name: firstName.trim(),
@@ -552,7 +559,6 @@ export const Clienteles: React.FC = () => {
         email: email.toLowerCase(),
         whatsapp_number: cleanPhone,
         referral_source: referralSource || null,
-        patient_code: patientCode,
         created_at: new Date().toISOString()
       }, { onConflict: 'id' })
       if (clientErr) throw clientErr
@@ -564,11 +570,32 @@ export const Clienteles: React.FC = () => {
         last_name: lastName.trim(),
         email: email.toLowerCase(),
         whatsapp_number: cleanPhone,
-        patient_code: patientCode,
         created_by_therapist: profile.id,
         password_set: false
       }, { onConflict: 'id' })
       if (upsertErr) throw upsertErr
+
+      // Ask the server to ensure (and return) a patient_code for the profile. If the RPC is missing or fails,
+      // fall back to a deterministic client-side code so the flow still works.
+      let finalPatientCode: string | null = null
+      try {
+        const { data: codeData, error: codeErr } = await supabase.rpc('ensure_patient_code', { p_profile: targetId }) as any
+        if (codeErr) throw codeErr
+        const code = Array.isArray(codeData) ? codeData[0] : codeData
+        if (code) finalPatientCode = String(code)
+      } catch (rpcErr) {
+        // RPC not available or failed — fallback to deterministic client-side code
+        finalPatientCode = generatePatientCode(targetId)
+        console.warn('[Clienteles] ensure_patient_code RPC failed, falling back to client-side code', rpcErr)
+      }
+
+      // Persist the patient_code into the clients mirror and into profiles so the server and UI agree.
+      if (finalPatientCode) {
+        await supabase.from('clients').update({ patient_code: finalPatientCode }).eq('id', targetId)
+          .then(({ error }) => { if (error) console.warn('[Clienteles] updating clients.patient_code failed', error) })
+        await supabase.from('profiles').update({ patient_code: finalPatientCode }).eq('id', targetId)
+          .then(({ error }) => { if (error) console.warn('[Clienteles] updating profiles.patient_code failed', error) })
+      }
 
       const rel = await supabase
         .from('therapist_client_relations')
@@ -590,9 +617,9 @@ export const Clienteles: React.FC = () => {
       setRefreshKey(k => k + 1)
 
       const intakeUrl = `${window.location.origin}/intake/${targetId}`
-      const msg = `Client created.\n\n• Temp password: ${patientCode}\n• Intake: ${intakeUrl}\n\nOpen WhatsApp to share this now?`
+      const msg = `Client created.\n\n• Temp password: ${patientCode || '(no temp password)'}\n• Patient code: ${finalPatientCode || '(not available)'}\n• Intake: ${intakeUrl}\n\nOpen WhatsApp to share this now?`
       if (confirm(msg)) {
-        const waText = `Hello ${firstName}, please use the code ${patientCode} to log in and complete your intake form: ${intakeUrl}`
+        const waText = `Hello ${firstName}, please use the code ${finalPatientCode || patientCode || 'your code'} to log in and complete your intake form: ${intakeUrl}`
         const waNumber = cleanPhone.replace('+', '')
         if (waNumber) window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(waText)}`, '_blank', 'noopener,noreferrer')
       }
