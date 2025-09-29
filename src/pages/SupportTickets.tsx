@@ -1,226 +1,75 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { supabase, expectMany, run } from '@/lib/supabase'
+import React, { useState } from 'react'
+import { supabase, run } from '@/lib/supabase'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Textarea } from '@/components/ui/textarea'
-import { Loader2, MessageCircle, Search, Hash, Mail, Clock, Plus } from 'lucide-react'
-import { format, formatDistanceToNow } from 'date-fns'
-
-// Minimal types (keep it resilient to DB shape changes)
-type Ticket = {
-  id: string
-  ticket_number?: string
-  subject?: string
-  body?: string
-  status?: string
-  priority?: string
-  created_at?: string
-  updated_at?: string
-  user_id?: string
-  requester_email?: string
-  requester_name?: string
-  assignee_id?: string | null
-  assignee_email?: string | null
-  assignee_name?: string | null
-  latest_message_preview?: string | null
-}
-
-type Message = {
-  id: string
-  ticket_id: string
-  body: string
-  is_internal?: boolean
-  created_at?: string
-  sender_id?: string
-  sender_name?: string
-}
+import { Mail } from 'lucide-react'
 
 export default function SupportTickets() {
-  const [tickets, setTickets] = useState<Ticket[] | null>(null)
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<string | null>(null)
 
-  const [q, setQ] = useState('')
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [sheetOpen, setSheetOpen] = useState(false)
-
-  const load = useCallback(async () => {
+  const submit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
     setLoading(true)
-    setError(null)
+    setStatus(null)
     try {
-      const { rows } = await expectMany<any>(supabase.from('tickets').select('*').order('created_at', { ascending: false }).limit(200))
-      setTickets(rows || [])
-      if (!activeId && rows && rows.length) setActiveId(String(rows[0].id))
-    } catch (err: any) {
-      console.error('load tickets', err)
-      setError(err?.message || String(err))
-      setTickets([])
-    } finally {
-      setLoading(false)
-    }
-  }, [activeId])
-
-  useEffect(() => { load() }, [load])
-
-  const filtered = useMemo(() => {
-    if (!tickets) return null
-    const ql = q.trim().toLowerCase()
-    if (!ql) return tickets
-    return tickets.filter(t => (t.subject || '').toLowerCase().includes(ql) || (t.body || '').toLowerCase().includes(ql) || (t.requester_email || '').toLowerCase().includes(ql))
-  }, [tickets, q])
-
-  return (
-    <div className="h-full w-full flex flex-col">
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-2xl bg-zinc-900 text-white grid place-items-center"><Hash className="h-4 w-4"/></div>
-          <div>
-            <div className="text-xl font-semibold">Support Tickets</div>
-            <div className="text-sm text-zinc-500">Tickets, messages, and requests</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={load} className="gap-2"><Loader2 className="h-4 w-4"/> Refresh</Button>
-          <Button onClick={() => { setSheetOpen(true); setActiveId(null) }} className="gap-2"><Plus className="h-4 w-4"/> New</Button>
-        </div>
-      </div>
-
-      <div className="p-4">
-        <div className="max-w-3xl">
-          <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Search subject, body, requester..." className="mb-3" />
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="col-span-1 lg:col-span-1">
-              <Card>
-                <CardContent className="p-0">
-                  <div className="border-b p-3 flex items-center justify-between">
-                    <div className="text-sm text-zinc-600">Tickets</div>
-                    <div className="text-xs text-zinc-500">{filtered ? filtered.length : 0}</div>
-                  </div>
-                  <ScrollArea className="h-[60vh]">
-                    {loading && <div className="p-4 text-center"><Loader2 className="animate-spin"/></div>}
-                    {!loading && error && <div className="p-4 text-sm text-red-600">{error}</div>}
-                    {!loading && !error && filtered && filtered.length === 0 && <div className="p-4 text-sm text-zinc-500">No tickets</div>}
-                    <div className="divide-y">
-                      {filtered && filtered.map(t => (
-                        <button key={t.id} onClick={() => { setActiveId(String(t.id)); setSheetOpen(true) }} className="w-full text-left p-3 hover:bg-zinc-50 flex items-start gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{t.subject || '(no subject)'}</div>
-                            <div className="text-xs text-zinc-500 truncate">{t.requester_email || t.requester_name || ''}</div>
-                          </div>
-                          <div className="text-xs text-zinc-500 whitespace-nowrap">{formatDistanceToNow(new Date(t.created_at || Date.now()), { addSuffix: true })}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="col-span-1 lg:col-span-2">
-              <div className="rounded-2xl border bg-white p-3 h-[60vh] overflow-hidden">
-                {activeId ? (
-                  <TicketDetail key={activeId} ticketId={activeId} onClose={() => { setActiveId(null); setSheetOpen(false); load() }} />
-                ) : (
-                  <div className="h-full grid place-items-center text-zinc-500">
-                    <MessageCircle className="h-8 w-8 mb-2" />
-                    Select a ticket to view messages
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl p-0">
-          <SheetHeader className="px-4 py-3 border-b"><SheetTitle>Ticket</SheetTitle></SheetHeader>
-          {activeId ? <TicketDetail ticketId={activeId} onClose={() => { setSheetOpen(false); load() }} /> : <div className="p-4">Create or select a ticket</div>}
-        </SheetContent>
-      </Sheet>
-    </div>
-  )
-}
-
-function TicketDetail({ ticketId, onClose }: { ticketId: string | null; onClose?: () => void }){
-  const [messages, setMessages] = useState<Message[] | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [body, setBody] = useState('')
-  const [posting, setPosting] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
-
-  const load = useCallback(async () => {
-    if (!ticketId) return
-    setLoading(true)
-    setError(null)
-    try {
-      const { rows } = await expectMany<any>(supabase.from('messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }))
-      setMessages((rows || []).map((r:any) => ({ id: String(r.id || r.message_id || ''), ticket_id: String(r.ticket_id || ''), body: r.body || '', is_internal: Boolean(r.is_internal), created_at: r.created_at || null, sender_id: r.sender_id || r.created_by || null, sender_name: r.sender_name || r.sender_email || '' })))
-    } catch (err:any) {
-      console.error('load messages', err)
-      setError(err?.message || String(err))
-      setMessages([])
-    } finally { setLoading(false) }
-  }, [ticketId])
-
-  useEffect(() => { load() }, [load])
-
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }, [messages])
-
-  const doPost = async () => {
-    if (!body.trim() || !ticketId) return
-    setPosting(true)
-    try {
-      const inserted = await run(supabase.from('messages').insert({ ticket_id: ticketId, body, is_internal: false }).select('*').single())
-      if (inserted) {
-        setMessages(prev => prev ? [...prev, { id: String((inserted as any).id || (inserted as any).message_id), ticket_id: ticketId, body: (inserted as any).body || '', is_internal: Boolean((inserted as any).is_internal), created_at: (inserted as any).created_at, sender_id: (inserted as any).sender_id || (inserted as any).created_by, sender_name: (inserted as any).sender_name || (inserted as any).sender_email || '' }] : [])
-        setBody('')
+      // Defensive: try to write to contact_messages if it exists
+      const payload: any = { name: name || null, email: email || null, message: message || null }
+      try {
+        const inserted = await run(supabase.from('contact_messages').insert(payload).select('*').single())
+        if (inserted) {
+          setStatus('Saved — thanks, we will follow up via email.')
+        } else {
+          setStatus('Submitted — but contact_messages table not available. Your message was not stored.')
+        }
+      } catch (err:any) {
+        // Table might not exist or insert failed. Fall back to a fetch to an optional endpoint.
+        console.warn('contact_messages insert failed, falling back', err)
+        try {
+          await fetch('/.netlify/functions/contact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+          setStatus('Sent via fallback endpoint — thanks!')
+        } catch (err2:any) {
+          console.error('fallback send failed', err2)
+          setStatus('Could not submit message. Please email support@example.com')
+        }
       }
-    } catch (err:any) {
-      console.error('post message', err)
-      setError(err?.message || String(err))
-    } finally { setPosting(false) }
+      setName('')
+      setEmail('')
+      setMessage('')
+    } finally { setLoading(false) }
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-3 border-b">
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-zinc-600">Messages</div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => { onClose?.(); }} className="gap-2">Close</Button>
-          </div>
+    <div className="p-6 max-w-3xl">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="h-10 w-10 rounded-lg bg-indigo-600 text-white grid place-items-center"><Mail className="w-5 h-5"/></div>
+        <div>
+          <h2 className="text-lg font-semibold">Contact & Support</h2>
+          <p className="text-sm text-zinc-500">Submit a question or request and our team will follow up.</p>
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full p-3" ref={scrollRef as any}>
-          {loading && <div className="p-4 text-center"><Loader2 className="animate-spin"/></div>}
-          {!loading && error && <div className="p-4 text-sm text-red-600">{error}</div>}
-          {!loading && !error && messages && messages.length === 0 && <div className="p-4 text-sm text-zinc-500">No messages</div>}
-          <div className="space-y-3">
-            {messages && messages.map(m => (
-              <div key={m.id} className={`p-3 rounded-2xl ${m.is_internal ? 'bg-amber-50 border border-amber-200' : 'bg-zinc-100'}`}>
-                <div className="text-sm">{m.body}</div>
-                <div className="text-xs text-zinc-500 mt-1">{m.sender_name} • {m.created_at ? format(new Date(m.created_at), 'PPp') : ''}</div>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-      </div>
+      <Card>
+        <CardContent>
+          <form onSubmit={submit} className="space-y-3">
+            <Input placeholder="Your full name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input placeholder="Your email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Textarea placeholder="How can we help?" value={message} onChange={(e) => setMessage(e.target.value)} rows={6} />
 
-      <div className="border-t p-3">
-        <Textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write a reply..." />
-        <div className="flex items-center justify-end gap-2 mt-2">
-          <Button variant="outline" onClick={() => { setBody('') }}>Clear</Button>
-          <Button onClick={doPost} disabled={!body.trim() || posting} className="gap-2">{posting ? 'Sending…' : 'Send'}</Button>
-        </div>
-      </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="outline" onClick={() => { setName(''); setEmail(''); setMessage('') }}>Clear</Button>
+              <Button type="submit" disabled={loading || (!email && !message)}>{loading ? 'Sending…' : 'Send message'}</Button>
+            </div>
+          </form>
+
+          {status && <div className="mt-3 text-sm text-zinc-700">{status}</div>}
+        </CardContent>
+      </Card>
     </div>
   )
 }
