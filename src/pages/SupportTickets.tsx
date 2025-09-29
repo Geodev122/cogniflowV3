@@ -1,248 +1,229 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { supabase, expectMany, run } from "@/lib/supabase";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Textarea } from "@/components/ui/textarea";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { supabase, expectMany, run } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Textarea } from '@/components/ui/textarea'
+import { Loader2, MessageCircle, Search, Hash, Mail, Clock, Plus } from 'lucide-react'
+import { format, formatDistanceToNow } from 'date-fns'
 
-import {
-  AlertCircle,
-  Bug,
-  Check,
-  ChevronDown,
-  Clock,
-  DollarSign,
-  Filter,
-  Hash,
-  Loader2,
-  LucideIcon,
-  Mail,
-  MessageCircle,
-  MoreHorizontal,
-  Plus,
-  Search,
-  Settings,
-  Tag,
-  Ticket as TicketIcon,
-  User2,
-  Users,
-} from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+// Minimal types (keep it resilient to DB shape changes)
+type Ticket = {
+  id: string
+  ticket_number?: string
+  subject?: string
+  body?: string
+  status?: string
+  priority?: string
+  created_at?: string
+  updated_at?: string
+  user_id?: string
+  requester_email?: string
+  requester_name?: string
+  assignee_id?: string | null
+  assignee_email?: string | null
+  assignee_name?: string | null
+  latest_message_preview?: string | null
+}
 
-// Types
-export type TicketStatus = "open" | "pending" | "resolved" | "closed";
-export type TicketPriority = "low" | "medium" | "high" | "urgent";
+type Message = {
+  id: string
+  ticket_id: string
+  body: string
+  is_internal?: boolean
+  created_at?: string
+  sender_id?: string
+  sender_name?: string
+}
 
-export type TicketListItem = {
-  id: string;
-  ticket_number: string;
-  status: TicketStatus;
-  priority: TicketPriority;
-  subject: string;
-  category_key: string | null;
-  created_at: string;
-  updated_at: string;
-  last_activity_at: string;
-  requester_id: string;
-  requester_email: string;
-  requester_name: string;
-  assignee_id: string | null;
-  assignee_email: string | null;
-  assignee_name: string | null;
-  latest_message_preview: string | null;
-  message_created_at?: string | null;
-  tags?: string[];
-};
+export default function SupportTickets() {
+  const [tickets, setTickets] = useState<Ticket[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-export type TicketMessage = {
-  ticket_id: string;
-  message_id: string;
-  body: string;
-  is_internal: boolean;
-  attachments: unknown[];
-  created_at: string;
-  sender_id: string;
-  sender_email: string;
-  sender_name: string;
-};
+  const [q, setQ] = useState('')
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
-export type SupportCategory = { key: string; name: string; description?: string };
-export type SupportTag = { key: string; label: string };
-export type ProfileLite = { id: string; email: string; first_name?: string; last_name?: string; role?: string };
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const { rows } = await expectMany<any>(supabase.from('tickets').select('*').order('created_at', { ascending: false }).limit(200))
+      setTickets(rows || [])
+      if (!activeId && rows && rows.length) setActiveId(String(rows[0].id))
+    } catch (err: any) {
+      console.error('load tickets', err)
+      setError(err?.message || String(err))
+      setTickets([])
+    } finally {
+      setLoading(false)
+    }
+  }, [activeId])
 
-// Supabase-backed API helpers
-const api = {
-  listTickets: async (params: Partial<Record<string, string>> = {}) => {
-    // Basic filtering: q -> subject/body search, status, priority, category, assignee (email)
-    let query = supabase.from('tickets').select('*, profiles:profiles!user_id(id, first_name, last_name, email)');
-    // apply simple filters where possible
-    if (params.status) query = query.eq('status', params.status as string);
-    if (params.priority) query = query.eq('status', params.priority as string); // keep parity if needed
-    // category and assignee handling might depend on schema; do a simple select and map server-side
-    const { rows } = await expectMany<TicketListItem>(query);
-    // rows may not match TicketListItem shape; best-effort map
-    return rows.map((r: any) => ({
-      id: String(r.id),
-      ticket_number: r.ticket_number ?? (r.id as string).slice(0, 8),
-      status: (r.status ?? 'open') as TicketStatus,
-      priority: (r.priority ?? 'medium') as TicketPriority,
-      subject: r.subject ?? '',
-      category_key: r.category_key ?? null,
-      created_at: r.created_at ?? new Date().toISOString(),
-      updated_at: r.updated_at ?? new Date().toISOString(),
-      last_activity_at: r.updated_at ?? r.created_at ?? new Date().toISOString(),
-      requester_id: r.user_id ?? r.requester_id ?? '',
-      requester_email: r.profiles?.email ?? r.requester_email ?? '',
-  requester_name: ([r.profiles?.first_name, r.profiles?.last_name].filter(Boolean).join(' ') || r.requester_name) ?? '',
-      assignee_id: r.assignee_id ?? null,
-      assignee_email: r.assignee_email ?? null,
-      assignee_name: r.assignee_name ?? null,
-      latest_message_preview: r.latest_message_preview ?? null,
-      message_created_at: r.message_created_at ?? null,
-      tags: r.tags ?? undefined,
-    } as TicketListItem));
-  },
-  getMessages: async (ticketId: string) => {
-    const { rows } = await expectMany<TicketMessage>(supabase.from('messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }));
-    return rows.map((r: any) => ({
-      ticket_id: String(r.ticket_id),
-      message_id: String(r.id ?? r.message_id),
-      body: r.body,
-      is_internal: Boolean(r.is_internal),
-      attachments: r.attachments ?? [],
-      created_at: r.created_at,
-      sender_id: String(r.sender_id ?? r.created_by ?? ''),
-      sender_email: r.sender_email ?? r.sender_email ?? '',
-      sender_name: r.sender_name ?? r.sender_name ?? '',
-    } as TicketMessage));
-  },
-  postMessage: async (
-    ticketId: string,
-    payload: { sender_id: string; body: string; is_internal?: boolean }
-  ) => {
-    const p: any = { ticket_id: ticketId, body: payload.body, is_internal: payload.is_internal ?? false, sender_id: payload.sender_id };
-    const inserted = await run(supabase.from('messages').insert(p).select('*').single());
-    if (!inserted) throw new Error('Failed to insert message');
-    const r: any = inserted;
-    return {
-      ticket_id: String(r.ticket_id),
-      message_id: String(r.id ?? r.message_id),
-      body: r.body,
-      is_internal: Boolean(r.is_internal),
-      attachments: r.attachments ?? [],
-      created_at: r.created_at,
-      sender_id: String(r.sender_id ?? r.created_by ?? ''),
-      sender_email: r.sender_email ?? '',
-      sender_name: r.sender_name ?? '',
-    } as TicketMessage;
-  },
-  patchTicket: async (
-    ticketId: string,
-    patch: Partial<Pick<TicketListItem, 'status' | 'priority' | 'subject'>> & { assignee_id?: string | null }
-  ) => {
-    const data: any = { ...(patch as any) };
-    if (patch.assignee_id !== undefined) data.assignee_id = patch.assignee_id;
-    const updated = await run(supabase.from('tickets').update(data).eq('id', ticketId).select('*').single());
-    if (!updated) throw new Error('Failed to update ticket');
-    const r: any = updated;
-    return {
-      id: String(r.id),
-      ticket_number: r.ticket_number ?? (r.id as string).slice(0, 8),
-      status: (r.status ?? 'open') as TicketStatus,
-      priority: (r.priority ?? 'medium') as TicketPriority,
-      subject: r.subject ?? '',
-      category_key: r.category_key ?? null,
-      created_at: r.created_at ?? new Date().toISOString(),
-      updated_at: r.updated_at ?? new Date().toISOString(),
-      last_activity_at: r.updated_at ?? r.created_at ?? new Date().toISOString(),
-      requester_id: r.user_id ?? r.requester_id ?? '',
-      requester_email: r.requester_email ?? '',
-      requester_name: r.requester_name ?? '',
-      assignee_id: r.assignee_id ?? null,
-      assignee_email: r.assignee_email ?? null,
-      assignee_name: r.assignee_name ?? null,
-      latest_message_preview: r.latest_message_preview ?? null,
-      message_created_at: r.message_created_at ?? null,
-      tags: r.tags ?? undefined,
-    } as TicketListItem;
-  },
-  createTicket: async (payload: { requester_id: string; subject: string; description: string; category_key?: string | null; priority?: TicketPriority }) => {
-    const toInsert: any = {
-      user_id: payload.requester_id,
-      subject: payload.subject,
-      body: payload.description,
-      category_key: payload.category_key ?? null,
-      priority: payload.priority ?? 'medium',
-    };
-    const inserted = await run(supabase.from('tickets').insert(toInsert).select('*').single());
-    if (!inserted) throw new Error('Failed to create ticket');
-    const r: any = inserted;
-    return {
-      id: String(r.id),
-      ticket_number: r.ticket_number ?? (r.id as string).slice(0, 8),
-      status: (r.status ?? 'open') as TicketStatus,
-      priority: (r.priority ?? 'medium') as TicketPriority,
-      subject: r.subject ?? '',
-      category_key: r.category_key ?? null,
-      created_at: r.created_at ?? new Date().toISOString(),
-      updated_at: r.updated_at ?? new Date().toISOString(),
-      last_activity_at: r.updated_at ?? r.created_at ?? new Date().toISOString(),
-      requester_id: r.user_id ?? '',
-      requester_email: r.requester_email ?? '',
-      requester_name: r.requester_name ?? '',
-      assignee_id: r.assignee_id ?? null,
-      assignee_email: r.assignee_email ?? null,
-      assignee_name: r.assignee_name ?? null,
-      latest_message_preview: r.latest_message_preview ?? null,
-      message_created_at: r.message_created_at ?? null,
-      tags: r.tags ?? undefined,
-    } as TicketListItem;
-  },
-  listCategories: async () => {
-    const { rows } = await expectMany<SupportCategory>(supabase.from('support_categories').select('*'));
-    return rows.map((r: any) => ({ key: r.key ?? String(r.id), name: r.name ?? r.key, description: r.description } as SupportCategory));
-  },
-  listTags: async () => {
-    const { rows } = await expectMany<SupportTag>(supabase.from('support_tags').select('*'));
-    return rows.map((r: any) => ({ key: r.key ?? String(r.id), label: r.label } as SupportTag));
-  },
-  listProfiles: async (q = '', role?: string) => {
-    let query = supabase.from('profiles').select('id, email, first_name, last_name, role');
-    if (q) query = query.ilike('email', `%${q}%`).or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`);
-    if (role) query = query.eq('role', role);
-    const { rows } = await expectMany<ProfileLite>(query.limit(20));
-    return rows.map((r: any) => ({ id: String(r.id), email: r.email, first_name: r.first_name, last_name: r.last_name, role: r.role } as ProfileLite));
-  },
-};
+  useEffect(() => { load() }, [load])
+
+  const filtered = useMemo(() => {
+    if (!tickets) return null
+    const ql = q.trim().toLowerCase()
+    if (!ql) return tickets
+    return tickets.filter(t => (t.subject || '').toLowerCase().includes(ql) || (t.body || '').toLowerCase().includes(ql) || (t.requester_email || '').toLowerCase().includes(ql))
+  }, [tickets, q])
+
+  return (
+    <div className="h-full w-full flex flex-col">
+      <div className="flex items-center justify-between p-4">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-2xl bg-zinc-900 text-white grid place-items-center"><Hash className="h-4 w-4"/></div>
+          <div>
+            <div className="text-xl font-semibold">Support Tickets</div>
+            <div className="text-sm text-zinc-500">Tickets, messages, and requests</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={load} className="gap-2"><Loader2 className="h-4 w-4"/> Refresh</Button>
+          <Button onClick={() => { setSheetOpen(true); setActiveId(null) }} className="gap-2"><Plus className="h-4 w-4"/> New</Button>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="max-w-3xl">
+          <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Search subject, body, requester..." className="mb-3" />
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="col-span-1 lg:col-span-1">
+              <Card>
+                <CardContent className="p-0">
+                  <div className="border-b p-3 flex items-center justify-between">
+                    <div className="text-sm text-zinc-600">Tickets</div>
+                    <div className="text-xs text-zinc-500">{filtered ? filtered.length : 0}</div>
+                  </div>
+                  <ScrollArea className="h-[60vh]">
+                    {loading && <div className="p-4 text-center"><Loader2 className="animate-spin"/></div>}
+                    {!loading && error && <div className="p-4 text-sm text-red-600">{error}</div>}
+                    {!loading && !error && filtered && filtered.length === 0 && <div className="p-4 text-sm text-zinc-500">No tickets</div>}
+                    <div className="divide-y">
+                      {filtered && filtered.map(t => (
+                        <button key={t.id} onClick={() => { setActiveId(String(t.id)); setSheetOpen(true) }} className="w-full text-left p-3 hover:bg-zinc-50 flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{t.subject || '(no subject)'}</div>
+                            <div className="text-xs text-zinc-500 truncate">{t.requester_email || t.requester_name || ''}</div>
+                          </div>
+                          <div className="text-xs text-zinc-500 whitespace-nowrap">{formatDistanceToNow(new Date(t.created_at || Date.now()), { addSuffix: true })}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="col-span-1 lg:col-span-2">
+              <div className="rounded-2xl border bg-white p-3 h-[60vh] overflow-hidden">
+                {activeId ? (
+                  <TicketDetail key={activeId} ticketId={activeId} onClose={() => { setActiveId(null); setSheetOpen(false); load() }} />
+                ) : (
+                  <div className="h-full grid place-items-center text-zinc-500">
+                    <MessageCircle className="h-8 w-8 mb-2" />
+                    Select a ticket to view messages
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl p-0">
+          <SheetHeader className="px-4 py-3 border-b"><SheetTitle>Ticket</SheetTitle></SheetHeader>
+          {activeId ? <TicketDetail ticketId={activeId} onClose={() => { setSheetOpen(false); load() }} /> : <div className="p-4">Create or select a ticket</div>}
+        </SheetContent>
+      </Sheet>
+    </div>
+  )
+}
+
+function TicketDetail({ ticketId, onClose }: { ticketId: string | null; onClose?: () => void }){
+  const [messages, setMessages] = useState<Message[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [body, setBody] = useState('')
+  const [posting, setPosting] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const load = useCallback(async () => {
+    if (!ticketId) return
+    setLoading(true)
+    setError(null)
+    try {
+      const { rows } = await expectMany<any>(supabase.from('messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }))
+      setMessages((rows || []).map((r:any) => ({ id: String(r.id || r.message_id || ''), ticket_id: String(r.ticket_id || ''), body: r.body || '', is_internal: Boolean(r.is_internal), created_at: r.created_at || null, sender_id: r.sender_id || r.created_by || null, sender_name: r.sender_name || r.sender_email || '' })))
+    } catch (err:any) {
+      console.error('load messages', err)
+      setError(err?.message || String(err))
+      setMessages([])
+    } finally { setLoading(false) }
+  }, [ticketId])
+
+  useEffect(() => { load() }, [load])
+
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }, [messages])
+
+  const doPost = async () => {
+    if (!body.trim() || !ticketId) return
+    setPosting(true)
+    try {
+      const inserted = await run(supabase.from('messages').insert({ ticket_id: ticketId, body, is_internal: false }).select('*').single())
+      if (inserted) {
+        setMessages(prev => prev ? [...prev, { id: String((inserted as any).id || (inserted as any).message_id), ticket_id: ticketId, body: (inserted as any).body || '', is_internal: Boolean((inserted as any).is_internal), created_at: (inserted as any).created_at, sender_id: (inserted as any).sender_id || (inserted as any).created_by, sender_name: (inserted as any).sender_name || (inserted as any).sender_email || '' }] : [])
+        setBody('')
+      }
+    } catch (err:any) {
+      console.error('post message', err)
+      setError(err?.message || String(err))
+    } finally { setPosting(false) }
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="p-3 border-b">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-zinc-600">Messages</div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => { onClose?.(); }} className="gap-2">Close</Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full p-3" ref={scrollRef as any}>
+          {loading && <div className="p-4 text-center"><Loader2 className="animate-spin"/></div>}
+          {!loading && error && <div className="p-4 text-sm text-red-600">{error}</div>}
+          {!loading && !error && messages && messages.length === 0 && <div className="p-4 text-sm text-zinc-500">No messages</div>}
+          <div className="space-y-3">
+            {messages && messages.map(m => (
+              <div key={m.id} className={`p-3 rounded-2xl ${m.is_internal ? 'bg-amber-50 border border-amber-200' : 'bg-zinc-100'}`}>
+                <div className="text-sm">{m.body}</div>
+                <div className="text-xs text-zinc-500 mt-1">{m.sender_name} • {m.created_at ? format(new Date(m.created_at), 'PPp') : ''}</div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+
+      <div className="border-t p-3">
+        <Textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write a reply..." />
+        <div className="flex items-center justify-end gap-2 mt-2">
+          <Button variant="outline" onClick={() => { setBody('') }}>Clear</Button>
+          <Button onClick={doPost} disabled={!body.trim() || posting} className="gap-2">{posting ? 'Sending…' : 'Send'}</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const CATEGORY_META: Record<string, { icon: LucideIcon; label: string }> = {
   billing: { icon: DollarSign, label: "Billing & Payments" },
