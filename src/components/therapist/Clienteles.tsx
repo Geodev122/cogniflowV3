@@ -200,44 +200,54 @@ export const Clienteles: React.FC = () => {
       setToast({ type: 'error', message: 'Not authenticated' })
       return false
     }
+    // First try server-side RPC which performs relation checks and transactional updates.
     try {
       setLoading(true)
-      // Update the lightweight `clients` table (if present) and `profiles` table.
-      const clientFields: any = {}
-      const profileFields: any = {}
-      // Mirror common editable fields to both tables where appropriate
-      if (updates.first_name !== undefined) { clientFields.first_name = updates.first_name; profileFields.first_name = updates.first_name }
-      if (updates.last_name !== undefined) { clientFields.last_name = updates.last_name; profileFields.last_name = updates.last_name }
-      if (updates.email !== undefined) { clientFields.email = updates.email; profileFields.email = updates.email }
-      if (updates.whatsapp_number !== undefined) { clientFields.whatsapp_number = updates.whatsapp_number; profileFields.whatsapp_number = updates.whatsapp_number }
-      if (updates.phone !== undefined) { profileFields.phone = updates.phone }
-      if (updates.city !== undefined) { clientFields.city = updates.city; profileFields.city = updates.city }
-      if (updates.country !== undefined) { clientFields.country = updates.country; profileFields.country = updates.country }
-      if (updates.referral_source !== undefined) { clientFields.referral_source = updates.referral_source; profileFields.referral_source = updates.referral_source }
-
-      // Run updates in parallel. If RLS blocks either, consider implementing a server-side RPC.
-      const ops: Promise<any>[] = []
-      if (Object.keys(clientFields).length > 0) {
-        ops.push(supabase.from('clients').update(clientFields).eq('id', clientId))
-      }
-      if (Object.keys(profileFields).length > 0) {
-        ops.push(supabase.from('profiles').update(profileFields).eq('id', clientId))
-      }
-
-      const results = await Promise.all(ops)
-      for (const res of results) {
-        if (res && (res as any).error) throw (res as any).error
-      }
-
+      const payload = { ...updates }
+      const { data, error } = await supabase.rpc('patch_client_for_therapist', { p_therapist: profile.id, p_client: clientId, p_payload: payload })
+      if (error) throw error
       setToast({ type: 'success', message: 'Client updated' })
       setRefreshKey(k => k + 1)
       return true
-    } catch (err: any) {
-      console.error('[Clienteles] patchClient', err)
-      setToast({ type: 'error', message: err?.message || 'Failed to update client' })
-      return false
-    } finally {
-      setLoading(false)
+    } catch (rpcErr: any) {
+      // If RPC fails (no function, permissions, etc.), fall back to client-side updates and surface the original error.
+      console.warn('[Clienteles] RPC patch failed, falling back to client-side updates', rpcErr)
+      try {
+        // Update the lightweight `clients` table (if present) and `profiles` table.
+        const clientFields: any = {}
+        const profileFields: any = {}
+        if (updates.first_name !== undefined) { clientFields.first_name = updates.first_name; profileFields.first_name = updates.first_name }
+        if (updates.last_name !== undefined) { clientFields.last_name = updates.last_name; profileFields.last_name = updates.last_name }
+        if (updates.email !== undefined) { clientFields.email = updates.email; profileFields.email = updates.email }
+        if (updates.whatsapp_number !== undefined) { clientFields.whatsapp_number = updates.whatsapp_number; profileFields.whatsapp_number = updates.whatsapp_number }
+        if (updates.phone !== undefined) { profileFields.phone = updates.phone }
+        if (updates.city !== undefined) { clientFields.city = updates.city; profileFields.city = updates.city }
+        if (updates.country !== undefined) { clientFields.country = updates.country; profileFields.country = updates.country }
+        if (updates.referral_source !== undefined) { clientFields.referral_source = updates.referral_source; profileFields.referral_source = updates.referral_source }
+
+        const ops: Promise<any>[] = []
+        if (Object.keys(clientFields).length > 0) {
+          ops.push(supabase.from('clients').update(clientFields).eq('id', clientId))
+        }
+        if (Object.keys(profileFields).length > 0) {
+          ops.push(supabase.from('profiles').update(profileFields).eq('id', clientId))
+        }
+
+        const results = await Promise.all(ops)
+        for (const res of results) {
+          if (res && (res as any).error) throw (res as any).error
+        }
+
+        setToast({ type: 'success', message: 'Client updated' })
+        setRefreshKey(k => k + 1)
+        return true
+      } catch (err: any) {
+        console.error('[Clienteles] patchClient fallback failed', err)
+        setToast({ type: 'error', message: err?.message || rpcErr?.message || 'Failed to update client' })
+        return false
+      } finally {
+        setLoading(false)
+      }
     }
   }
 

@@ -95,3 +95,37 @@ $$;
 --   );
 
 COMMIT;
+
+-- Additional objects: public view for non-sensitive client listing and RPC to fetch private fields for therapists
+BEGIN;
+
+-- Public view: only expose non-sensitive fields for 'All Clients' listings
+CREATE OR REPLACE VIEW public.client_public_profiles AS
+SELECT id, first_name, last_name, city, country, created_at
+FROM public.profiles
+WHERE role = 'client';
+
+-- Grant select on the view to authenticated users (adjust role as needed)
+GRANT SELECT ON public.client_public_profiles TO authenticated;
+
+-- RPC to fetch private fields for a therapist after verifying relation
+CREATE OR REPLACE FUNCTION public.get_client_private_for_therapist(
+  p_therapist uuid,
+  p_client uuid
+)
+RETURNS TABLE(id uuid, first_name text, last_name text, email text, phone text, whatsapp_number text, city text, country text) LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  _exists boolean;
+BEGIN
+  SELECT EXISTS(SELECT 1 FROM public.therapist_client_relations tcr WHERE tcr.therapist_id = p_therapist AND tcr.client_id = p_client) INTO _exists;
+  IF NOT _exists THEN
+    RAISE EXCEPTION 'not_authorized';
+  END IF;
+  RETURN QUERY SELECT id, first_name, last_name, email, phone, whatsapp_number, city, country FROM public.profiles WHERE id = p_client;
+END;
+$$;
+
+-- Grant execute on RPC to authenticated role if you wish to call it from client-side (careful - prefer server-side call)
+GRANT EXECUTE ON FUNCTION public.get_client_private_for_therapist(uuid, uuid) TO authenticated;
+
+COMMIT;
