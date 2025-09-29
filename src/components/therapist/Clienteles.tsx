@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import ClientActions from './ClientActions'
 import TherapistSearchModal from './TherapistSearchModal'
+import TherapistReferralsInbox from './TherapistReferralsInbox'
+import ClientReferralsList from './ClientReferralsList'
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -357,6 +359,138 @@ export const Clienteles: React.FC = () => {
 
   const displayRows = useMemo(() => rows, [rows])
 
+  /* ----------------------------- Create Modal ----------------------------- */
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showReferralsTab, setShowReferralsTab] = useState(false)
+  const [selectedClientForReferrals, setSelectedClientForReferrals] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [referralSource, setReferralSource] = useState('')
+
+  const resetCreateForm = () => {
+    setFirstName(''); setLastName(''); setEmail(''); setPhone('')
+  }
+
+  // Render body content (clients list vs referrals inbox)
+  const bodyContent = showReferralsTab ? (
+    <div className="p-4">
+      {profile?.role === 'therapist' ? (
+        <TherapistReferralsInbox />
+      ) : (
+        <div className="p-4">You do not have access to the referral inbox.</div>
+      )}
+    </div>
+  ) : loading ? (
+    <div className="py-12 grid place-items-center">
+      <div className="w-6 h-6 animate-spin border-b-2 border-blue-600 rounded-full" />
+    </div>
+  ) : error ? (
+    <div className="p-4 text-red-700 bg-red-50 border-b border-red-200 flex items-center gap-2">
+      <AlertTriangle className="w-5 h-5 shrink-0" />
+      <span className="break-words">{error}</span>
+    </div>
+  ) : displayRows.length === 0 ? (
+    <div className="py-16 text-center">
+      <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+      <div className="text-gray-900 font-medium">No clients found</div>
+      <div className="text-sm text-gray-600">Try changing scope or search</div>
+    </div>
+  ) : (
+    <>
+      {/* Mobile: card list */}
+      <ul className="divide-y md:hidden">
+        {displayRows.map(r => {
+          const mine = isMine(r.id)
+          const name = fullName(r)
+          const patientId = r.patient_code || r.id
+          return (
+            <li key={r.id} data-test-client-row className="p-4 space-y-2">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold flex-shrink-0">
+                  {toInitials(r.first_name, r.last_name)}
+                </span>
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-900 truncate">{name}</div>
+                  <div className="text-xs text-gray-500">{new Date(r.created_at).toLocaleDateString()}</div>
+                </div>
+              </div>
+
+              {/* Compact card: always surface Patient ID and Name */}
+              <div className="text-sm text-gray-700">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] uppercase text-gray-400">Patient ID</div>
+                    <div className="font-mono text-[12px] text-gray-700 truncate">{patientId}</div>
+                  </div>
+                  <button type="button" onClick={() => copyPatientIdToClipboard(patientId)} className="p-1 rounded hover:bg-gray-100">
+                    <Copy className="w-4 h-4 text-gray-500" />
+                  </button>
+                </div>
+                <div className="text-[11px] uppercase text-gray-400 mt-2">Name</div>
+                <div className="truncate text-gray-600">{name}</div>
+              </div>
+
+              <div className="pt-2">
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <button onClick={() => openCase(r)} title="Open Case" className="p-2 rounded hover:bg-gray-100">
+                    <FileText className="w-4 h-4 text-indigo-700" />
+                  </button>
+                  <button onClick={() => assignAssessment(r)} title="Assign Assessment" className="p-2 rounded hover:bg-gray-100">
+                    <Brain className="w-4 h-4 text-amber-700" />
+                  </button>
+                  <button onClick={() => messageClient(r)} title="Message" className="p-2 rounded hover:bg-gray-100">
+                    <MessageSquare className="w-4 h-4 text-blue-700" />
+                  </button>
+                  <button onClick={() => openEditModal(r)} title="Edit" className="p-2 rounded hover:bg-gray-100">
+                    <Edit className="w-4 h-4 text-gray-700" />
+                  </button>
+                  <div className="ml-auto text-[11px] text-gray-500">{new Date(r.created_at).toLocaleDateString()}</div>
+                </div>
+
+                <div className="mt-2">
+                  <ClientActions clientId={r.id} patientCode={r.patient_code} isMine={mine} assignmentStatus={getAssignmentStatus(r.id)} onRefresh={() => setRefreshKey(k => k + 1)} />
+                </div>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+
+      {/* Desktop: compact Patient ID + Actions */}
+      <div className="hidden md:block w-full overflow-x-auto">
+        <table className="w-full table-auto">
+          <colgroup>
+            <col className="w-[60%]" />
+            <col className="w-[40%]" />
+          </colgroup>
+          <thead className="bg-gray-50 text-xs uppercase text-gray-600">
+            <tr>
+              <th className="text-left px-4 py-3">Patient ID</th>
+              <th className="text-right px-4 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y text-sm">
+            {displayRows.map(r => (
+              <tr key={r.id} className="hover:bg-gray-50">
+                <td className="px-4 py-3 align-top">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[13px] text-gray-700 truncate border rounded px-2 py-1 bg-gray-50">{r.patient_code || r.id}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <ClientActions clientId={r.id} patientCode={r.patient_code} isMine={isMine(r.id)} assignmentStatus={getAssignmentStatus(r.id)} onRefresh={() => setRefreshKey(k => k + 1)} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+
   /* ------------------------------ Actions --------------------------------- */
   const sendIntake = (via: 'whatsapp' | 'email', r: ClientRow) => {
     const link = `${window.location.origin}/intake/${r.id}`
@@ -426,18 +560,7 @@ export const Clienteles: React.FC = () => {
     }
   }
 
-  /* ----------------------------- Create Modal ----------------------------- */
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [referralSource, setReferralSource] = useState('')
 
-  const resetCreateForm = () => {
-    setFirstName(''); setLastName(''); setEmail(''); setPhone('')
-  }
 
   /* ----------------------------- Edit Modal ----------------------------- */
   const [showEditModal, setShowEditModal] = useState(false)
@@ -691,6 +814,14 @@ export const Clienteles: React.FC = () => {
               <Plus className="w-4 h-4" />
               <span className="hidden sm:inline">Add Client</span>
             </button>
+            <button
+              onClick={() => setShowReferralsTab(s => !s)}
+              className={`inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm ${showReferralsTab ? 'bg-gray-700 text-white' : 'bg-white hover:bg-gray-50'}`}
+              title="Referrals"
+            >
+              <Users className="w-4 h-4" />
+              <span className="hidden sm:inline">Referrals</span>
+            </button>
           </div>
         </div>
 
@@ -701,113 +832,7 @@ export const Clienteles: React.FC = () => {
 
         {/* Body */}
         <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
-          {loading ? (
-            <div className="py-12 grid place-items-center">
-              <div className="w-6 h-6 animate-spin border-b-2 border-blue-600 rounded-full" />
-            </div>
-          ) : error ? (
-            <div className="p-4 text-red-700 bg-red-50 border-b border-red-200 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 shrink-0" />
-              <span className="break-words">{error}</span>
-            </div>
-          ) : displayRows.length === 0 ? (
-            <div className="py-16 text-center">
-              <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-              <div className="text-gray-900 font-medium">No clients found</div>
-              <div className="text-sm text-gray-600">Try changing scope or search</div>
-            </div>
-          ) : (
-            <>
-              {/* Mobile: card list */}
-              <ul className="divide-y md:hidden">
-                {displayRows.map(r => {
-                  const mine = isMine(r.id)
-                  const name = fullName(r)
-                  const patientId = r.patient_code || r.id
-                  return (
-                    <li key={r.id} data-test-client-row className="p-4 space-y-2">
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold flex-shrink-0">
-                          {toInitials(r.first_name, r.last_name)}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="font-medium text-gray-900 truncate">{name}</div>
-                          <div className="text-xs text-gray-500">{new Date(r.created_at).toLocaleDateString()}</div>
-                        </div>
-                      </div>
-
-                      {/* Compact card: always surface Patient ID and Name */}
-                      <div className="text-sm text-gray-700">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-[11px] uppercase text-gray-400">Patient ID</div>
-                            <div className="font-mono text-[12px] text-gray-700 truncate">{patientId}</div>
-                          </div>
-                          <button type="button" onClick={() => copyPatientIdToClipboard(patientId)} className="p-1 rounded hover:bg-gray-100">
-                            <Copy className="w-4 h-4 text-gray-500" />
-                          </button>
-                        </div>
-                        <div className="text-[11px] uppercase text-gray-400 mt-2">Name</div>
-                        <div className="truncate text-gray-600">{name}</div>
-                      </div>
-
-                      <div className="pt-2">
-                        <div className="flex items-center gap-2 text-xs text-gray-600">
-                          <button onClick={() => openCase(r)} title="Open Case" className="p-2 rounded hover:bg-gray-100">
-                            <FileText className="w-4 h-4 text-indigo-700" />
-                          </button>
-                          <button onClick={() => assignAssessment(r)} title="Assign Assessment" className="p-2 rounded hover:bg-gray-100">
-                            <Brain className="w-4 h-4 text-amber-700" />
-                          </button>
-                          <button onClick={() => messageClient(r)} title="Message" className="p-2 rounded hover:bg-gray-100">
-                            <MessageSquare className="w-4 h-4 text-blue-700" />
-                          </button>
-                          <button onClick={() => openEditModal(r)} title="Edit" className="p-2 rounded hover:bg-gray-100">
-                            <Edit className="w-4 h-4 text-gray-700" />
-                          </button>
-                          <div className="ml-auto text-[11px] text-gray-500">{new Date(r.created_at).toLocaleDateString()}</div>
-                        </div>
-
-                        <div className="mt-2">
-                          <ClientActions clientId={r.id} patientCode={r.patient_code} isMine={mine} assignmentStatus={getAssignmentStatus(r.id)} onRefresh={() => setRefreshKey(k => k + 1)} />
-                        </div>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-
-              {/* Desktop: compact Patient ID + Actions */}
-              <div className="hidden md:block w-full overflow-x-auto">
-                <table className="w-full table-auto">
-                  <colgroup>
-                    <col className="w-[60%]" />
-                    <col className="w-[40%]" />
-                  </colgroup>
-                  <thead className="bg-gray-50 text-xs uppercase text-gray-600">
-                    <tr>
-                      <th className="text-left px-4 py-3">Patient ID</th>
-                      <th className="text-right px-4 py-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y text-sm">
-                    {displayRows.map(r => (
-                      <tr key={r.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 align-top">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-[13px] text-gray-700 truncate border rounded px-2 py-1 bg-gray-50">{r.patient_code || r.id}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <ClientActions clientId={r.id} patientCode={r.patient_code} isMine={isMine(r.id)} assignmentStatus={getAssignmentStatus(r.id)} onRefresh={() => setRefreshKey(k => k + 1)} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
+          {bodyContent}
         </div>
 
         <TherapistSearchModal />
