@@ -22,13 +22,30 @@
     - Revenue tracking and analytics
 */
 
--- Create enums for membership system
-CREATE TYPE membership_plan_type AS ENUM ('monthly', 'quarterly', 'biannual', 'annual');
-CREATE TYPE membership_status AS ENUM ('active', 'past_due', 'canceled', 'trialing', 'inactive', 'suspended');
-CREATE TYPE transaction_status AS ENUM ('pending', 'completed', 'failed', 'refunded', 'disputed');
-CREATE TYPE promo_code_type AS ENUM ('percentage', 'fixed_amount');
-CREATE TYPE contract_status AS ENUM ('active', 'pending', 'expired', 'terminated');
-CREATE TYPE payment_request_status AS ENUM ('pending', 'sent', 'paid', 'overdue', 'cancelled');
+-- Create enums for membership system (idempotent)
+DO $$ BEGIN
+  CREATE TYPE membership_plan_type AS ENUM ('monthly', 'quarterly', 'biannual', 'annual');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE membership_status AS ENUM ('active', 'past_due', 'canceled', 'trialing', 'inactive', 'suspended');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE transaction_status AS ENUM ('pending', 'completed', 'failed', 'refunded', 'disputed');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE promo_code_type AS ENUM ('percentage', 'fixed_amount');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE contract_status AS ENUM ('active', 'pending', 'expired', 'terminated');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE payment_request_status AS ENUM ('pending', 'sent', 'paid', 'overdue', 'cancelled');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Membership Plans Table
 CREATE TABLE IF NOT EXISTS membership_plans (
@@ -181,16 +198,105 @@ CREATE INDEX IF NOT EXISTS idx_supervisor_contracts_period ON supervisor_contrac
 CREATE INDEX IF NOT EXISTS idx_payment_requests_therapist ON payment_requests(target_therapist_id, status);
 CREATE INDEX IF NOT EXISTS idx_payment_requests_due ON payment_requests(due_date) WHERE status IN ('pending', 'sent');
 
--- Add constraints
-ALTER TABLE membership_plans ADD CONSTRAINT valid_price CHECK (price_usd > 0);
-ALTER TABLE membership_plans ADD CONSTRAINT valid_duration CHECK (duration_months > 0);
-ALTER TABLE promo_codes ADD CONSTRAINT valid_discount_value CHECK (discount_value > 0);
-ALTER TABLE promo_codes ADD CONSTRAINT valid_usage_limit CHECK (usage_limit IS NULL OR usage_limit > 0);
-ALTER TABLE promo_codes ADD CONSTRAINT valid_usage_count CHECK (usage_count >= 0);
-ALTER TABLE whish_transactions ADD CONSTRAINT valid_amount CHECK (amount > 0);
-ALTER TABLE whish_transactions ADD CONSTRAINT valid_final_amount CHECK (final_amount > 0);
-ALTER TABLE supervisor_contracts ADD CONSTRAINT valid_trimester_period CHECK (trimester_end > trimester_start);
-ALTER TABLE payment_requests ADD CONSTRAINT valid_request_amount CHECK (amount > 0);
+-- Add constraints (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'valid_price'
+      AND conrelid = 'membership_plans'::regclass
+  ) THEN
+    ALTER TABLE membership_plans ADD CONSTRAINT valid_price CHECK (price_usd > 0);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'valid_duration'
+      AND conrelid = 'membership_plans'::regclass
+  ) THEN
+    ALTER TABLE membership_plans ADD CONSTRAINT valid_duration CHECK (duration_months > 0);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'valid_discount_value'
+      AND conrelid = 'promo_codes'::regclass
+  ) THEN
+    ALTER TABLE promo_codes ADD CONSTRAINT valid_discount_value CHECK (discount_value > 0);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'valid_usage_limit'
+      AND conrelid = 'promo_codes'::regclass
+  ) THEN
+    ALTER TABLE promo_codes ADD CONSTRAINT valid_usage_limit CHECK (usage_limit IS NULL OR usage_limit > 0);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'valid_usage_count'
+      AND conrelid = 'promo_codes'::regclass
+  ) THEN
+    ALTER TABLE promo_codes ADD CONSTRAINT valid_usage_count CHECK (usage_count >= 0);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'valid_amount'
+      AND conrelid = 'whish_transactions'::regclass
+  ) THEN
+    ALTER TABLE whish_transactions ADD CONSTRAINT valid_amount CHECK (amount > 0);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'valid_final_amount'
+      AND conrelid = 'whish_transactions'::regclass
+  ) THEN
+    ALTER TABLE whish_transactions ADD CONSTRAINT valid_final_amount CHECK (final_amount > 0);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'valid_trimester_period'
+      AND conrelid = 'supervisor_contracts'::regclass
+  ) THEN
+    ALTER TABLE supervisor_contracts ADD CONSTRAINT valid_trimester_period CHECK (trimester_end > trimester_start);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'valid_request_amount'
+      AND conrelid = 'payment_requests'::regclass
+  ) THEN
+    ALTER TABLE payment_requests ADD CONSTRAINT valid_request_amount CHECK (amount > 0);
+  END IF;
+END$$;
 
 -- Enable RLS on all tables
 ALTER TABLE membership_plans ENABLE ROW LEVEL SECURITY;
@@ -202,175 +308,182 @@ ALTER TABLE membership_analytics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE whish_pay_config ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for membership_plans
+DROP POLICY IF EXISTS "membership_plans_read_all" ON membership_plans;
 CREATE POLICY "membership_plans_read_all" ON membership_plans
   FOR SELECT TO authenticated
   USING (is_active = true);
 
+DROP POLICY IF EXISTS "membership_plans_admin_manage" ON membership_plans;
 CREATE POLICY "membership_plans_admin_manage" ON membership_plans
   FOR ALL TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   )
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   );
 
 -- RLS Policies for promo_codes
+DROP POLICY IF EXISTS "promo_codes_therapist_read" ON promo_codes;
 CREATE POLICY "promo_codes_therapist_read" ON promo_codes
   FOR SELECT TO authenticated
   USING (
     is_active = true 
     AND (valid_from IS NULL OR valid_from <= now())
     AND (valid_until IS NULL OR valid_until >= now())
-    AND EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role IN ('therapist', 'admin')
-    )
+    AND (public.get_user_role() IN ('therapist', 'admin'))
   );
 
+DROP POLICY IF EXISTS "promo_codes_admin_manage" ON promo_codes;
 CREATE POLICY "promo_codes_admin_manage" ON promo_codes
   FOR ALL TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   )
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   );
 
 -- RLS Policies for whish_transactions
+DROP POLICY IF EXISTS "whish_transactions_own_access" ON whish_transactions;
 CREATE POLICY "whish_transactions_own_access" ON whish_transactions
   FOR ALL TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "whish_transactions_admin_read" ON whish_transactions;
 CREATE POLICY "whish_transactions_admin_read" ON whish_transactions
   FOR SELECT TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   );
 
 -- RLS Policies for supervisor_contracts
+DROP POLICY IF EXISTS "supervisor_contracts_own_access" ON supervisor_contracts;
 CREATE POLICY "supervisor_contracts_own_access" ON supervisor_contracts
   FOR ALL TO authenticated
   USING (supervisor_id = auth.uid())
   WITH CHECK (supervisor_id = auth.uid());
 
+DROP POLICY IF EXISTS "supervisor_contracts_admin_manage" ON supervisor_contracts;
 CREATE POLICY "supervisor_contracts_admin_manage" ON supervisor_contracts
   FOR ALL TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   )
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   );
 
 -- RLS Policies for payment_requests
+DROP POLICY IF EXISTS "payment_requests_therapist_read" ON payment_requests;
 CREATE POLICY "payment_requests_therapist_read" ON payment_requests
   FOR SELECT TO authenticated
   USING (target_therapist_id = auth.uid());
 
+DROP POLICY IF EXISTS "payment_requests_admin_manage" ON payment_requests;
 CREATE POLICY "payment_requests_admin_manage" ON payment_requests
   FOR ALL TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   )
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   );
 
 -- RLS Policies for membership_analytics (Admin only)
+DROP POLICY IF EXISTS "membership_analytics_admin_only" ON membership_analytics;
 CREATE POLICY "membership_analytics_admin_only" ON membership_analytics
   FOR ALL TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   )
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   );
 
 -- RLS Policies for whish_pay_config (Admin only)
+DROP POLICY IF EXISTS "whish_pay_config_admin_only" ON whish_pay_config;
 CREATE POLICY "whish_pay_config_admin_only" ON whish_pay_config
   FOR ALL TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   )
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
-    )
+    (public.get_user_role() = 'admin')
   );
 
 -- Create triggers for updated_at
-CREATE TRIGGER update_membership_plans_updated_at
-  BEFORE UPDATE ON membership_plans
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Create triggers for updated_at (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'update_membership_plans_updated_at'
+      AND tgrelid = 'membership_plans'::regclass
+  ) THEN
+    CREATE TRIGGER update_membership_plans_updated_at
+      BEFORE UPDATE ON membership_plans
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END
+$$;
 
-CREATE TRIGGER update_promo_codes_updated_at
-  BEFORE UPDATE ON promo_codes
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'update_promo_codes_updated_at'
+      AND tgrelid = 'promo_codes'::regclass
+  ) THEN
+    CREATE TRIGGER update_promo_codes_updated_at
+      BEFORE UPDATE ON promo_codes
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END
+$$;
 
-CREATE TRIGGER update_whish_transactions_updated_at
-  BEFORE UPDATE ON whish_transactions
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'update_whish_transactions_updated_at'
+      AND tgrelid = 'whish_transactions'::regclass
+  ) THEN
+    CREATE TRIGGER update_whish_transactions_updated_at
+      BEFORE UPDATE ON whish_transactions
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END
+$$;
 
-CREATE TRIGGER update_supervisor_contracts_updated_at
-  BEFORE UPDATE ON supervisor_contracts
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'update_supervisor_contracts_updated_at'
+      AND tgrelid = 'supervisor_contracts'::regclass
+  ) THEN
+    CREATE TRIGGER update_supervisor_contracts_updated_at
+      BEFORE UPDATE ON supervisor_contracts
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END
+$$;
 
-CREATE TRIGGER update_payment_requests_updated_at
-  BEFORE UPDATE ON payment_requests
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'update_payment_requests_updated_at'
+      AND tgrelid = 'payment_requests'::regclass
+  ) THEN
+    CREATE TRIGGER update_payment_requests_updated_at
+      BEFORE UPDATE ON payment_requests
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END
+$$;
 
 -- Business Logic Functions
 
@@ -623,40 +736,55 @@ BEGIN
 END;
 $$;
 
--- Create materialized view for membership dashboard
-CREATE MATERIALIZED VIEW membership_dashboard_summary AS
-SELECT
-  -- Overall metrics
-  COUNT(DISTINCT s.user_id) FILTER (WHERE s.status = 'active') as active_subscribers,
-  COUNT(DISTINCT s.user_id) FILTER (WHERE s.status = 'past_due') as past_due_subscribers,
-  COUNT(DISTINCT s.user_id) FILTER (WHERE s.status = 'canceled') as canceled_subscribers,
-  
-  -- Revenue metrics
-  SUM(wt.final_amount) FILTER (WHERE wt.status = 'completed' AND wt.created_at >= date_trunc('month', now())) as monthly_revenue,
-  SUM(wt.final_amount) FILTER (WHERE wt.status = 'completed' AND wt.created_at >= date_trunc('year', now())) as yearly_revenue,
-  
-  -- Transaction metrics
-  COUNT(wt.id) FILTER (WHERE wt.status = 'completed' AND wt.created_at >= date_trunc('month', now())) as monthly_transactions,
-  COUNT(wt.id) FILTER (WHERE wt.status = 'failed' AND wt.created_at >= date_trunc('month', now())) as monthly_failed_transactions,
-  
-  -- Promo code metrics
-  COUNT(DISTINCT wt.promo_code_used) FILTER (WHERE wt.promo_code_used IS NOT NULL AND wt.created_at >= date_trunc('month', now())) as active_promo_codes,
-  SUM(wt.discount_applied) FILTER (WHERE wt.created_at >= date_trunc('month', now())) as monthly_discounts_given,
-  
-  -- Contract metrics
-  COUNT(sc.id) FILTER (WHERE sc.status = 'active') as active_supervisor_contracts,
-  COUNT(pr.id) FILTER (WHERE pr.status IN ('pending', 'sent')) as pending_payment_requests,
-  
-  -- Last updated
-  now() as calculated_at
+-- Create materialized view for membership dashboard (idempotent)
+DO $$
+BEGIN
+  -- Create the materialized view only if it does not already exist
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_class WHERE relname = 'membership_dashboard_summary' AND relkind = 'm'
+  ) THEN
+    EXECUTE $mv$
+    CREATE MATERIALIZED VIEW membership_dashboard_summary AS
+    SELECT
+      -- Overall metrics
+      COUNT(DISTINCT s.user_id) FILTER (WHERE s.status = 'active') as active_subscribers,
+      COUNT(DISTINCT s.user_id) FILTER (WHERE s.status = 'past_due') as past_due_subscribers,
+      COUNT(DISTINCT s.user_id) FILTER (WHERE s.status = 'canceled') as canceled_subscribers,
+      
+      -- Revenue metrics
+      SUM(wt.final_amount) FILTER (WHERE wt.status = 'completed' AND wt.created_at >= date_trunc('month', now())) as monthly_revenue,
+      SUM(wt.final_amount) FILTER (WHERE wt.status = 'completed' AND wt.created_at >= date_trunc('year', now())) as yearly_revenue,
+      
+      -- Transaction metrics
+      COUNT(wt.id) FILTER (WHERE wt.status = 'completed' AND wt.created_at >= date_trunc('month', now())) as monthly_transactions,
+      COUNT(wt.id) FILTER (WHERE wt.status = 'failed' AND wt.created_at >= date_trunc('month', now())) as monthly_failed_transactions,
+      
+      -- Promo code metrics
+      COUNT(DISTINCT wt.promo_code_used) FILTER (WHERE wt.promo_code_used IS NOT NULL AND wt.created_at >= date_trunc('month', now())) as active_promo_codes,
+      SUM(wt.discount_applied) FILTER (WHERE wt.created_at >= date_trunc('month', now())) as monthly_discounts_given,
+      
+      -- Contract metrics
+      COUNT(sc.id) FILTER (WHERE sc.status = 'active') as active_supervisor_contracts,
+      COUNT(pr.id) FILTER (WHERE pr.status IN ('pending', 'sent')) as pending_payment_requests,
+      
+      -- Last updated
+      now() as calculated_at
 
-FROM subscriptions s
-FULL OUTER JOIN whish_transactions wt ON wt.subscription_id = s.id
-FULL OUTER JOIN supervisor_contracts sc ON true
-FULL OUTER JOIN payment_requests pr ON true;
+    FROM subscriptions s
+    FULL OUTER JOIN whish_transactions wt ON wt.subscription_id = s.id
+    FULL OUTER JOIN supervisor_contracts sc ON true
+    FULL OUTER JOIN payment_requests pr ON true;
+    $mv$;
+  END IF;
 
--- Create index on materialized view
-CREATE UNIQUE INDEX membership_dashboard_summary_singleton ON membership_dashboard_summary ((1));
+  -- Create the unique singleton index only if the materialized view exists
+  IF EXISTS (
+    SELECT 1 FROM pg_class WHERE relname = 'membership_dashboard_summary' AND relkind = 'm'
+  ) THEN
+    EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS membership_dashboard_summary_singleton ON membership_dashboard_summary ((1))';
+  END IF;
+END
+$$;
 
 -- Function to refresh membership analytics
 CREATE OR REPLACE FUNCTION refresh_membership_analytics()
@@ -693,16 +821,25 @@ INSERT INTO membership_plans (name, description, plan_type, price_usd, price_lbp
 ('Annual Plan', 'Best value - Save 25% with our yearly plan', 'annual', 150.00, 13500000, 12, 
  '["Unlimited clients", "Assessment tools", "Session management", "Advanced analytics", "Priority support", "Resource library access", "Supervision tools", "Custom branding", "API access"]'::jsonb, 4);
 
--- Populate sample promo codes
-INSERT INTO promo_codes (code, name, description, discount_type, discount_value, min_amount, max_discount, usage_limit, valid_until, created_by) VALUES
-('WELCOME25', 'Welcome Discount', '25% off first subscription for new therapists', 'percentage', 25.00, 15.00, 50.00, 100, now() + interval '3 months', 
- (SELECT id FROM profiles WHERE role = 'admin' LIMIT 1)),
-
-('SAVE50', 'Limited Time Offer', '$50 off annual plans', 'fixed_amount', 50.00, 100.00, 50.00, 50, now() + interval '1 month',
- (SELECT id FROM profiles WHERE role = 'admin' LIMIT 1)),
-
-('STUDENT15', 'Student Discount', '15% off for verified students', 'percentage', 15.00, 15.00, 25.00, NULL, now() + interval '1 year',
- (SELECT id FROM profiles WHERE role = 'admin' LIMIT 1));
+-- Populate sample promo codes (idempotent upserts)
+INSERT INTO promo_codes (code, name, description, discount_type, discount_value, min_amount, max_discount, usage_limit, valid_until, created_by, is_active, updated_at)
+VALUES
+('WELCOME25', 'Welcome Discount', '25% off first subscription for new therapists', 'percentage', 25.00, 15.00, 50.00, 100, now() + interval '3 months', (SELECT id FROM profiles WHERE role = 'admin' LIMIT 1), true, now()),
+('SAVE50', 'Limited Time Offer', '$50 off annual plans', 'fixed_amount', 50.00, 100.00, 50.00, 50, now() + interval '1 month', (SELECT id FROM profiles WHERE role = 'admin' LIMIT 1), true, now()),
+('STUDENT15', 'Student Discount', '15% off for verified students', 'percentage', 15.00, 15.00, 25.00, NULL, now() + interval '1 year', (SELECT id FROM profiles WHERE role = 'admin' LIMIT 1), true, now())
+ON CONFLICT (code) DO UPDATE
+  SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    discount_type = EXCLUDED.discount_type,
+    discount_value = EXCLUDED.discount_value,
+    min_amount = EXCLUDED.min_amount,
+    max_discount = EXCLUDED.max_discount,
+    usage_limit = EXCLUDED.usage_limit,
+    valid_until = EXCLUDED.valid_until,
+    is_active = EXCLUDED.is_active,
+    updated_at = now(),
+    created_by = COALESCE(promo_codes.created_by, EXCLUDED.created_by);
 
 -- Insert default Whish Pay configuration (placeholder - admin must update)
 INSERT INTO whish_pay_config (

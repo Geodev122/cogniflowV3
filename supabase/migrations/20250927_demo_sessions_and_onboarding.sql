@@ -22,7 +22,7 @@ WHERE full_name IS NULL;
 -- Insert only the required columns (`user_id`, `user_role`) so this migration is safe regardless of
 -- whether optional columns like `email` or `full_name` exist in the current schema.
 INSERT INTO public.profiles (user_id, user_role)
-SELECT u.id, 'Client'
+SELECT u.id, 'client'
 FROM auth.users u
 LEFT JOIN public.profiles p ON p.user_id = u.id
 WHERE p.user_id IS NULL;

@@ -65,12 +65,12 @@ BEGIN
   );
 
   FOR u IN SELECT * FROM (VALUES
-      ('fb1f33f3-b392-4c99-b4cf-77075df22886','Therapist','geo.elnajjar@gmail.com','Geo','Elnajjar'),
-      ('0eaf6b05-66f7-4508-9c4c-90cf2483359e','Admin','fedgee911@gmail.com','Admin','User'),
-      ('f41fdff0-1bac-4859-a9e7-c32f960e1cc8','Supervisor','rosaryco.cg@gmail.com','Supervisor','User'),
-      ('3de362a5-692a-4fe6-9c3a-54f9ef9f3d71','Client','test@client.com','Client','One'),
-      ('44444444-4444-4444-4444-444444444444','Client','client@example.com','Client','Two'),
-      ('22222222-2222-2222-2222-222222222222','Client','dazzlt.uk@gmail.com','Client','Three')
+      ('fb1f33f3-b392-4c99-b4cf-77075df22886','therapist','geo.elnajjar@gmail.com','Geo','Elnajjar'),
+      ('0eaf6b05-66f7-4508-9c4c-90cf2483359e','admin','fedgee911@gmail.com','Admin','User'),
+      ('f41fdff0-1bac-4859-a9e7-c32f960e1cc8','supervisor','rosaryco.cg@gmail.com','Supervisor','User'),
+      ('3de362a5-692a-4fe6-9c3a-54f9ef9f3d71','client','test@client.com','Client','One'),
+      ('44444444-4444-4444-4444-444444444444','client','client@example.com','Client','Two'),
+      ('22222222-2222-2222-2222-222222222222','client','dazzlt.uk@gmail.com','Client','Three')
     ) AS t(user_id, role, email, first_name, last_name)
   LOOP
     col_list := '';

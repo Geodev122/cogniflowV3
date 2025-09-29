@@ -112,21 +112,13 @@ alter table if exists public.resources
 create or replace function public.is_supervisor() returns boolean
 language sql stable
 as $$
-  select exists (
-    select 1 from public.profiles p
-    where p.id = auth.uid()
-      and (p.role = 'supervisor' or p.role = 'admin')
-  );
+  select (public.get_user_role() = 'supervisor' or public.get_user_role() = 'admin');
 $$;
 
 create or replace function public.is_admin() returns boolean
 language sql stable
 as $$
-  select exists (
-    select 1 from public.profiles p
-    where p.id = auth.uid()
-      and p.role = 'admin'
-  );
+  select (public.get_user_role() = 'admin');
 $$;
 
 -- ===== RLS =====

@@ -31,6 +31,22 @@ END
 $enum$ LANGUAGE plpgsql;
 
 -- ==========================================================================
+-- Safe helper: get_user_role()
+-- This SECURITY DEFINER function reads the role for the current authenticated
+-- user and is created WITH row_security disabled so calling it from policies
+-- does not re-enter RLS on the profiles table (avoids infinite recursion).
+-- Use CREATE OR REPLACE to avoid nested EXECUTE/dollar-quoting issues inside DO blocks.
+CREATE OR REPLACE FUNCTION public.get_user_role()
+RETURNS TEXT
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET row_security = off AS
+$fn$
+  SELECT p.role::TEXT FROM public.profiles p WHERE p.id = auth.uid() LIMIT 1;
+$fn$;
+
+-- ==========================================================================
 -- HELPFUL INDEXES
 -- ==========================================================================
 -- For assessment queues

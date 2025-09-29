@@ -67,16 +67,10 @@ CREATE POLICY "assessment_templates_therapist_manage"
   FOR ALL
   TO authenticated
   USING (
-    EXISTS(
-      SELECT 1 FROM profiles
-      WHERE id = auth.uid() AND role = 'therapist'
-    )
+    (public.get_user_role() = 'therapist')
   )
   WITH CHECK (
-    EXISTS(
-      SELECT 1 FROM profiles
-      WHERE id = auth.uid() AND role = 'therapist'
-    )
+    (public.get_user_role() = 'therapist')
   );
 
 
@@ -195,7 +189,7 @@ CREATE INDEX IF NOT EXISTS idx_assessment_scores_instance ON assessment_scores(i
 CREATE OR REPLACE FUNCTION auto_calculate_assessment_score()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed' THEN
+  IF NEW.status::text = 'completed' AND OLD.status::text IS DISTINCT FROM 'completed' THEN
     -- Placeholder hook for server-side scoring logic
     NULL;
   END IF;
@@ -226,7 +220,7 @@ CREATE TABLE IF NOT EXISTS assessment_instances (
   title text NOT NULL,
   instructions text,
   status text DEFAULT 'assigned' CHECK (
-    status = ANY (ARRAY['assigned','in_progress','completed','expired','cancelled'])
+    status::text = ANY (ARRAY['assigned','in_progress','completed','expired','cancelled'])
   ),
   assigned_at timestamptz DEFAULT now(),
   due_date date,
@@ -271,7 +265,7 @@ CREATE POLICY "assessment_instances_client_update_status"
   USING (client_id = auth.uid())
   WITH CHECK (
     client_id = auth.uid()
-    AND status = ANY (ARRAY['in_progress','completed'])
+    AND status::text = ANY (ARRAY['in_progress','completed'])
   );
 
 
@@ -331,248 +325,6 @@ CREATE POLICY "assessment_responses_therapist_read"
     )
   );
 
--- ========================================================
--- 4. Demo Data & Sample Entities (Fully Expanded Insertions)
--- ========================================================
-DO $$
-DECLARE
-  demo_therapist_id UUID := '60aa4294-e569-49af-a876-227ad43d94ca';
-  demo_client_id UUID := 'f7cb820b-f73e-4bfe-9571-261c7eef79e0';
-  demo_case_id UUID;
-BEGIN
-  -- 4.1 Insert or update demo client profile
-  INSERT INTO profiles (
-    id, role, first_name, last_name, email,
-    whatsapp_number, patient_code, created_by_therapist,
-    password_set, created_at
-  ) VALUES (
-    demo_client_id, 'client', 'John', 'Smith',
-    'demo.client@thera-py.com', '+1-555-0124', 'PT123455',
-    demo_therapist_id, TRUE, now() - INTERVAL '3 months'
-  )
-  ON CONFLICT (id) DO UPDATE
-    SET patient_code = EXCLUDED.patient_code,
-        created_by_therapist = EXCLUDED.created_by_therapist;
-
-  -- 4.2 Therapist-client relation
-  INSERT INTO therapist_client_relations (
-    therapist_id, client_id, created_at
-  ) VALUES (
-    demo_therapist_id, demo_client_id, now() - INTERVAL '3 months'
-  ) ON CONFLICT DO NOTHING;
-
-  -- 4.3 Client profile
-  INSERT INTO client_profiles (
-    client_id, therapist_id, emergency_contact_name,
-    emergency_contact_phone, emergency_contact_relationship,
-    medical_history, current_medications, presenting_concerns,
-    therapy_history, risk_level, notes, created_at
-  ) VALUES (
-    demo_client_id, demo_therapist_id, 'Jane Smith', '+1-555-0125',
-    'spouse', 'No significant medical history.', 'None currently',
-    'Increased anxiety and low mood after job loss.',
-    'No previous therapy. Interested in practical tools.',
-    'moderate', 'Motivated and responsive to CBT techniques.',
-    now() - INTERVAL '3 months'
-  ) ON CONFLICT (client_id, therapist_id) DO UPDATE
-    SET presenting_concerns = EXCLUDED.presenting_concerns,
-        notes = EXCLUDED.notes;
-
-  -- 4.4 Demo case entry
-  INSERT INTO cases (
-    id, client_id, therapist_id, case_number,
-    status, opened_at, created_at
-  ) VALUES (
-    gen_random_uuid(), demo_client_id, demo_therapist_id,
-    'CASE-2024-001', 'active',
-    now() - INTERVAL '3 months', now() - INTERVAL '3 months'
-  ) ON CONFLICT (case_number) DO NOTHING
-  RETURNING id INTO demo_case_id;
-
-  IF demo_case_id IS NULL THEN
-    SELECT id INTO demo_case_id FROM cases WHERE case_number = 'CASE-2024-001';
-  END IF;
-
-  -- 4.5 Assessment instances
-  INSERT INTO assessment_instances (
-    template_id, therapist_id, client_id, case_id,
-    title, instructions, status, assigned_at,
-    due_date, completed_at
-  )
-  SELECT
-    t.id, demo_therapist_id, demo_client_id, demo_case_id,
-    t.name, 'Please complete this assessment as part of your treatment.',
-    CASE
-      WHEN t.abbreviation IN ('PHQ-9', 'GAD-7') THEN 'completed'
-      ELSE 'assigned'
-    END,
-    now() - INTERVAL '1 week',
-    (now() + INTERVAL '1 week')::date,
-    CASE WHEN t.abbreviation IN ('PHQ-9', 'GAD-7') THEN now() - INTERVAL '3 days'
-         ELSE NULL END
-  FROM assessment_templates t
-  WHERE t.abbreviation IN ('PHQ-9', 'GAD-7', 'PSS-10')
-  ON CONFLICT DO NOTHING;
-
-  -- 4.6 Assessment responses
-  INSERT INTO assessment_responses (
-    instance_id, question_id, response_value,
-    is_final, response_timestamp
-  ) SELECT
-    ai.id,
-    q.value->>'id',
-    CASE
-      WHEN ai.title LIKE '%PHQ-9%' THEN
-        CASE q.value->>'id'
-          WHEN 'phq9_1' THEN '2'::jsonb
-          WHEN 'phq9_2' THEN '2'::jsonb
-          WHEN 'phq9_3' THEN '1'::jsonb
-          WHEN 'phq9_4' THEN '2'::jsonb
-          WHEN 'phq9_5' THEN '1'::jsonb
-          WHEN 'phq9_6' THEN '1'::jsonb
-          WHEN 'phq9_7' THEN '1'::jsonb
-          WHEN 'phq9_8' THEN '0'::jsonb
-          WHEN 'phq9_9' THEN '0'::jsonb
-          ELSE '1'::jsonb
-        END
-      WHEN ai.title LIKE '%GAD-7%' THEN
-        CASE q.value->>'id'
-          WHEN 'gad7_1' THEN '2'::jsonb
-          WHEN 'gad7_2' THEN '1'::jsonb
-          WHEN 'gad7_3' THEN '2'::jsonb
-          WHEN 'gad7_4' THEN '1'::jsonb
-          WHEN 'gad7_5' THEN '1'::jsonb
-          WHEN 'gad7_6' THEN '1'::jsonb
-          WHEN 'gad7_7' THEN '1'::jsonb
-          ELSE '1'::jsonb
-        END
-      ELSE '1'::jsonb
-    END,
-    true,
-    now() - INTERVAL '3 days'
-  FROM assessment_instances ai
-  JOIN assessment_templates t ON t.id = ai.template_id
-  CROSS JOIN jsonb_array_elements(t.questions) AS q
-  WHERE ai.status = 'completed'
-    AND ai.client_id = demo_client_id
-  ON CONFLICT (instance_id, question_id) DO NOTHING;
-
-  -- 4.7 Assessment scores
-  INSERT INTO assessment_scores (
-    instance_id, raw_score, interpretation_category,
-    interpretation_description, clinical_significance,
-    severity_level, recommendations, auto_generated, calculated_at
-  )
-  SELECT
-    ai.id,
-    CASE
-      WHEN ai.title LIKE '%PHQ-9%' THEN 10
-      WHEN ai.title LIKE '%GAD-7%' THEN 9
-      ELSE 15
-    END,
-    CASE
-      WHEN ai.title LIKE '%PHQ-9%' THEN 'Moderate Depression'
-      WHEN ai.title LIKE '%GAD-7%' THEN 'Mild Anxiety'
-      ELSE 'Moderate'
-    END,
-    CASE
-      WHEN ai.title LIKE '%PHQ-9%' THEN 'Moderate depression symptoms present'
-      WHEN ai.title LIKE '%GAD-7%' THEN 'Mild anxiety symptoms present'
-      ELSE 'Moderate symptoms present'
-    END,
-    'moderate',
-    'moderate',
-    CASE
-      WHEN ai.title LIKE '%PHQ-9%' THEN 'Continue therapy, monitor progress, consider medication evaluation'
-      WHEN ai.title LIKE '%GAD-7%' THEN 'Continue anxiety management techniques, monitor symptoms'
-      ELSE 'Continue current treatment approach'
-    END,
-    true,
-    now() - INTERVAL '3 days'
-  FROM assessment_instances ai
-  WHERE ai.status = 'completed'
-    AND ai.client_id = demo_client_id
-  ON CONFLICT (instance_id) DO NOTHING;
-
-  -- 4.8 Progress tracking
-  INSERT INTO progress_tracking (
-    client_id, metric_type, value,
-    source_type, source_id, recorded_at
-  )
-  SELECT
-    demo_client_id,
-    CASE
-      WHEN ai.title LIKE '%PHQ-9%' THEN 'phq9_total'
-      WHEN ai.title LIKE '%GAD-7%' THEN 'gad7_total'
-      ELSE 'assessment_score'
-    END,
-    CASE
-      WHEN ai.title LIKE '%PHQ-9%' THEN 10
-      WHEN ai.title LIKE '%GAD-7%' THEN 9
-      ELSE 15
-    END,
-    'psychometric',
-    ai.id,
-    now() - INTERVAL '3 days'
-  FROM assessment_instances ai
-  WHERE ai.status = 'completed'
-    AND ai.client_id = demo_client_id
-  ON CONFLICT DO NOTHING;
-
-  -- 4.9 Appointments
-  INSERT INTO appointments (
-    therapist_id, client_id,
-    appointment_date, duration_minutes,
-    appointment_type, status, notes, created_at
-  ) VALUES
-    (demo_therapist_id, demo_client_id, now() - INTERVAL '2 weeks',
-     50, 'individual', 'completed', 'Initial intake session. Client presented with anxiety and depression symptoms.', now() - INTERVAL '2 weeks'),
-    (demo_therapist_id, demo_client_id, now() - INTERVAL '1 week',
-     50, 'individual', 'completed', 'Introduced CBT concepts and thought record technique. Client engaged well.', now() - INTERVAL '1 week'),
-    (demo_therapist_id, demo_client_id, now() + INTERVAL '3 days',
-     50, 'individual', 'scheduled', 'Follow-up session to review assessment results and adjust treatment plan.', now())
-  ON CONFLICT DO NOTHING;
-
-  -- 4.10 CBT Worksheets
-  INSERT INTO cbt_worksheets (
-    therapist_id, client_id, type, title, content, status, created_at
-  ) VALUES (
-    demo_therapist_id, demo_client_id, 'thought_record', 'Daily Thought Record Practice',
-    '{
-      "situation": "Received rejection email from job application",
-      "automatic_thought": "I will never find a job. I am not good enough.",
-      "emotion": "Anxious, sad",
-      "intensity": 8,
-      "evidence_for": "This is the third rejection this month",
-      "evidence_against": "I have had interviews, which means my resume is competitive. The job market is tough right now for everyone.",
-      "balanced_thought": "Job searching is challenging, but rejections are normal. I have valuable skills and will find the right opportunity.",
-      "new_emotion": "Disappointed but hopeful",
-      "new_intensity": 4
-    }'::jsonb,
-    'completed',
-    now() - INTERVAL '5 days'
-  ) ON CONFLICT DO NOTHING;
-
-  -- 4.11 Therapeutic Exercises
-  INSERT INTO therapeutic_exercises (
-    therapist_id, client_id, exercise_type,
-    title, description, game_config, progress, status,
-    created_at, last_played_at
-  ) VALUES (
-    demo_therapist_id, demo_client_id, 'breathing',
-    'Box Breathing Exercise', 'Practice 4-4-4-4 breathing technique to manage anxiety',
-    '{"cycles_target": 10, "inhale_duration": 4, "hold_duration": 4, "exhale_duration": 4, "pause_duration": 4}'::jsonb,
-    '{"cycles_completed": 15, "total_sessions": 3, "best_session": 12}'::jsonb,
-    'in_progress',
-    now() - INTERVAL '1 week',
-    now() - INTERVAL '1 day'
-  ) ON CONFLICT DO NOTHING;
-
-END $$;
-
-
-
-
 
 -- ========================================================
 -- 1. Enable Required Extensions & Helper Functions
@@ -593,7 +345,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION auto_calculate_assessment_score()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.status = 'completed' AND OLD.status IS DISTINCT FROM 'completed' THEN
+  IF NEW.status::text = 'completed' AND OLD.status::text IS DISTINCT FROM 'completed' THEN
     -- Placeholder: future server‑side scoring logic
     NULL;
   END IF;
@@ -638,8 +390,8 @@ CREATE POLICY "assessment_templates_read_all"
 DROP POLICY IF EXISTS "assessment_templates_therapist_manage" ON assessment_templates;
 CREATE POLICY "assessment_templates_therapist_manage"
   ON assessment_templates FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'therapist'))
-  WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'therapist'));
+  USING ((public.get_user_role() = 'therapist'))
+  WITH CHECK ((public.get_user_role() = 'therapist'));
 
 -- assessment_instances
 CREATE TABLE IF NOT EXISTS assessment_instances (
@@ -835,12 +587,12 @@ BEGIN
     FROM assessment_instances ai
     JOIN assessment_templates t ON t.id = ai.template_id
     CROSS JOIN jsonb_array_elements(t.questions) AS q
-    WHERE ai.client_id = demo_client_id AND ai.status = 'completed'
+  WHERE ai.client_id = demo_client_id AND ai.status::text = 'completed'
     ON CONFLICT (instance_id, question_id) DO NOTHING;
 
   INSERT INTO assessment_scores (instance_id, raw_score, interpretation_category, calculated_at)
     SELECT id, 10, 'Threshold reached', now() - INTERVAL '2 days'
-    FROM assessment_instances WHERE client_id = demo_client_id AND status = 'completed'
+  FROM assessment_instances WHERE client_id = demo_client_id AND status::text = 'completed'
     ON CONFLICT (instance_id) DO NOTHING;
 
   -- Corrected line:

@@ -65,7 +65,7 @@ CREATE POLICY "Therapists can read assigned clients" ON public.profiles
 DROP POLICY IF EXISTS "Supervisors can read therapist profiles" ON public.profiles;
 CREATE POLICY "Supervisors can read therapist profiles" ON public.profiles
   FOR SELECT TO authenticated
-  USING ( (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'supervisor' AND role IN ('therapist', 'client') );
+  USING ( (public.get_user_role()) = 'supervisor' AND role IN ('therapist', 'client') );
 
 
 -- client_profiles: therapists manage, clients can read own
@@ -96,7 +96,7 @@ CREATE POLICY "Clients can read own cases" ON public.cases
 DROP POLICY IF EXISTS "Supervisors can read flagged cases" ON public.cases;
 CREATE POLICY "Supervisors can read flagged cases" ON public.cases
   FOR SELECT TO authenticated
-  USING ( (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'supervisor' AND EXISTS ( SELECT 1 FROM public.supervision_flags sf WHERE sf.case_id = public.cases.id ) );
+  USING ( (public.get_user_role()) = 'supervisor' AND EXISTS ( SELECT 1 FROM public.supervision_flags sf WHERE sf.case_id = public.cases.id ) );
 
 
 -- assessment_instances / assessment_responses / assessment_scores
@@ -153,7 +153,7 @@ CREATE POLICY "Resource library access" ON public.resource_library
 DROP POLICY IF EXISTS "Therapists can create resources" ON public.resource_library;
 CREATE POLICY "Therapists can create resources" ON public.resource_library
   FOR INSERT TO authenticated
-  WITH CHECK ( (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'therapist' );
+  WITH CHECK ( (public.get_user_role()) = 'therapist' );
 
 DROP POLICY IF EXISTS "Therapists can update own resources" ON public.resource_library;
 CREATE POLICY "Therapists can update own resources" ON public.resource_library
@@ -172,7 +172,7 @@ CREATE POLICY "Public resource files" ON storage.objects
 DROP POLICY IF EXISTS "Therapists can upload resources" ON storage.objects;
 CREATE POLICY "Therapists can upload resources" ON storage.objects
   FOR INSERT
-  WITH CHECK (bucket_id = 'resource_files' AND (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'therapist');
+  WITH CHECK (bucket_id = 'resource_files' AND (public.get_user_role()) = 'therapist');
 
 DROP POLICY IF EXISTS "Therapists can manage licensing docs" ON storage.objects;
 CREATE POLICY "Therapists can manage licensing docs" ON storage.objects
@@ -197,15 +197,15 @@ CREATE POLICY "Client requests access" ON public.client_requests
 DROP POLICY IF EXISTS "Supervision flags access" ON public.supervision_flags;
 CREATE POLICY "Supervision flags access" ON public.supervision_flags
   FOR ALL TO authenticated
-  USING ( therapist_id = (SELECT auth.uid()) OR flagged_by = (SELECT auth.uid()) OR (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'supervisor' )
-  WITH CHECK ( therapist_id = (SELECT auth.uid()) OR flagged_by = (SELECT auth.uid()) OR (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'supervisor' );
+  USING ( therapist_id = (SELECT auth.uid()) OR flagged_by = (SELECT auth.uid()) OR (public.get_user_role()) = 'supervisor' )
+  WITH CHECK ( therapist_id = (SELECT auth.uid()) OR flagged_by = (SELECT auth.uid()) OR (public.get_user_role()) = 'supervisor' );
 
 
 -- Audit/logging and other owner-scoped tables
 DROP POLICY IF EXISTS "Audit logs access" ON public.audit_logs;
 CREATE POLICY "Audit logs access" ON public.audit_logs
   FOR SELECT TO authenticated
-  USING ( user_id = (SELECT auth.uid()) OR (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) IN ('supervisor', 'admin') );
+  USING ( user_id = (SELECT auth.uid()) OR (public.get_user_role()) IN ('supervisor', 'admin') );
 
 
 -- ================

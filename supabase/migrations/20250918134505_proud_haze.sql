@@ -297,6 +297,7 @@ ALTER TABLE case_audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE supervision_attachments ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for supervision_requests
+DROP POLICY IF EXISTS "Therapists can create supervision requests for own cases" ON supervision_requests;
 CREATE POLICY "Therapists can create supervision requests for own cases"
   ON supervision_requests FOR INSERT
   TO authenticated
@@ -304,28 +305,31 @@ CREATE POLICY "Therapists can create supervision requests for own cases"
     check_case_permissions(case_id, auth.uid(), 'submit_supervision')
   );
 
+DROP POLICY IF EXISTS "Requesters and supervisors can read supervision requests" ON supervision_requests;
 CREATE POLICY "Requesters and supervisors can read supervision requests"
   ON supervision_requests FOR SELECT
   TO authenticated
   USING (
     requester_id = auth.uid() OR 
     supervisor_id = auth.uid() OR
-    (SELECT role FROM profiles WHERE id = auth.uid()) = 'supervisor'
+    public.get_user_role() = 'supervisor'
   );
 
+DROP POLICY IF EXISTS "Supervisors can update supervision requests" ON supervision_requests;
 CREATE POLICY "Supervisors can update supervision requests"
   ON supervision_requests FOR UPDATE
   TO authenticated
   USING (
     supervisor_id = auth.uid() OR
-    (SELECT role FROM profiles WHERE id = auth.uid()) = 'supervisor'
+    public.get_user_role() = 'supervisor'
   )
   WITH CHECK (
     supervisor_id = auth.uid() OR
-    (SELECT role FROM profiles WHERE id = auth.uid()) = 'supervisor'
+    public.get_user_role() = 'supervisor'
   );
 
 -- RLS Policies for case_referrals
+DROP POLICY IF EXISTS "Therapists can create referrals for own cases" ON case_referrals;
 CREATE POLICY "Therapists can create referrals for own cases"
   ON case_referrals FOR INSERT
   TO authenticated
@@ -333,6 +337,7 @@ CREATE POLICY "Therapists can create referrals for own cases"
     check_case_permissions(case_id, auth.uid(), 'refer')
   );
 
+DROP POLICY IF EXISTS "Involved therapists can read referrals" ON case_referrals;
 CREATE POLICY "Involved therapists can read referrals"
   ON case_referrals FOR SELECT
   TO authenticated
@@ -341,6 +346,7 @@ CREATE POLICY "Involved therapists can read referrals"
     to_therapist_id = auth.uid()
   );
 
+DROP POLICY IF EXISTS "Target therapists can update referral status" ON case_referrals;
 CREATE POLICY "Target therapists can update referral status"
   ON case_referrals FOR UPDATE
   TO authenticated
@@ -348,6 +354,7 @@ CREATE POLICY "Target therapists can update referral status"
   WITH CHECK (to_therapist_id = auth.uid());
 
 -- RLS Policies for case_audit_logs
+DROP POLICY IF EXISTS "Users can read audit logs for accessible cases" ON case_audit_logs;
 CREATE POLICY "Users can read audit logs for accessible cases"
   ON case_audit_logs FOR SELECT
   TO authenticated
@@ -355,12 +362,14 @@ CREATE POLICY "Users can read audit logs for accessible cases"
     check_case_permissions(case_id, auth.uid(), 'read')
   );
 
+DROP POLICY IF EXISTS "System can insert audit logs" ON case_audit_logs;
 CREATE POLICY "System can insert audit logs"
   ON case_audit_logs FOR INSERT
   TO authenticated
   WITH CHECK (true);
 
 -- RLS Policies for supervision_attachments
+DROP POLICY IF EXISTS "Supervision participants can manage attachments" ON supervision_attachments;
 CREATE POLICY "Supervision participants can manage attachments"
   ON supervision_attachments FOR ALL
   TO authenticated
@@ -392,11 +401,13 @@ VALUES (
 ) ON CONFLICT (id) DO NOTHING;
 
 -- Storage policies for supervision attachments
+DROP POLICY IF EXISTS "Authenticated users can upload supervision attachments" ON storage.objects;
 CREATE POLICY "Authenticated users can upload supervision attachments"
   ON storage.objects FOR INSERT
   TO authenticated
   WITH CHECK (bucket_id = 'supervision-attachments');
 
+DROP POLICY IF EXISTS "Users can read own supervision attachments" ON storage.objects;
 CREATE POLICY "Users can read own supervision attachments"
   ON storage.objects FOR SELECT
   TO authenticated

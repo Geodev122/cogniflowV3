@@ -132,7 +132,7 @@ CREATE POLICY "Active VIP offers are readable by therapists"
   TO authenticated
   USING (
     is_active = true
-    AND (SELECT role FROM public.profiles WHERE id = (SELECT auth.uid())) = 'therapist'
+    AND public.get_user_role() = 'therapist'
   );
 
 -- ============================================================================
