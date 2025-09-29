@@ -374,6 +374,31 @@ export const Clienteles: React.FC = () => {
     setFirstName(''); setLastName(''); setEmail(''); setPhone('')
   }
 
+  
+
+  /* ------------------------------ Actions --------------------------------- */
+  const sendIntake = (via: 'whatsapp' | 'email', r: ClientRow) => {
+    const link = `${window.location.origin}/intake/${r.id}`
+    if (via === 'whatsapp') {
+      const phone = formatWhatsappDigits((r.phone || r.whatsapp_number || ''))
+      if (!phone || phone.replace(/\D/g, '').length < 6) return alert('No valid WhatsApp number on file.')
+      const code = r.patient_code || 'your code'
+      const text = `Hello ${r.first_name || ''}, please use the code ${code} to log in and complete your intake form: ${link}`
+      window.open(`https://wa.me/${phone.replace('+', '')}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+    } else {
+      const code = r.patient_code ? `Your code: ${r.patient_code}\n\n` : ''
+      window.location.href = `mailto:${r.email}?subject=Intake%20Form&body=${encodeURIComponent(
+        `${code}Please complete your intake: ${link}`
+      )}`
+    }
+  }
+
+  const openCase = (r: ClientRow) => navigate(`/therapist/cases?clientId=${encodeURIComponent(r.id)}`)
+  const assignAssessment = (r: ClientRow) => navigate(`/therapist/assessments?clientId=${encodeURIComponent(r.id)}`)
+  const messageClient = (r: ClientRow) => navigate(`/therapist/comms?clientId=${encodeURIComponent(r.id)}`)
+  const isMine = (id: string) => myIds.has(id)
+  const getAssignmentStatus = (id: string) => assignedMap[id] || null
+
   // Render body content (clients list vs referrals inbox)
   const bodyContent = showReferralsTab ? (
     <div className="p-4">
@@ -490,29 +515,6 @@ export const Clienteles: React.FC = () => {
       </div>
     </>
   )
-
-  /* ------------------------------ Actions --------------------------------- */
-  const sendIntake = (via: 'whatsapp' | 'email', r: ClientRow) => {
-    const link = `${window.location.origin}/intake/${r.id}`
-    if (via === 'whatsapp') {
-      const phone = formatWhatsappDigits((r.phone || r.whatsapp_number || ''))
-      if (!phone || phone.replace(/\D/g, '').length < 6) return alert('No valid WhatsApp number on file.')
-      const code = r.patient_code || 'your code'
-      const text = `Hello ${r.first_name || ''}, please use the code ${code} to log in and complete your intake form: ${link}`
-      window.open(`https://wa.me/${phone.replace('+', '')}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
-    } else {
-      const code = r.patient_code ? `Your code: ${r.patient_code}\n\n` : ''
-      window.location.href = `mailto:${r.email}?subject=Intake%20Form&body=${encodeURIComponent(
-        `${code}Please complete your intake: ${link}`
-      )}`
-    }
-  }
-
-  const openCase = (r: ClientRow) => navigate(`/therapist/cases?clientId=${encodeURIComponent(r.id)}`)
-  const assignAssessment = (r: ClientRow) => navigate(`/therapist/assessments?clientId=${encodeURIComponent(r.id)}`)
-  const messageClient = (r: ClientRow) => navigate(`/therapist/comms?clientId=${encodeURIComponent(r.id)}`)
-  const isMine = (id: string) => myIds.has(id)
-  const getAssignmentStatus = (id: string) => assignedMap[id] || null
 
   const requestAssignment = async (clientId: string) => {
     if (!profile?.id) {
