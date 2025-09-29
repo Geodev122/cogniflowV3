@@ -205,6 +205,16 @@ export const Clienteles: React.FC = () => {
       } else {
         setRows(normalized)
       }
+      // After rows are set, ensure server-side patient_code exists for any missing values.
+      // This will call the `ensure_patient_code` RPC (if deployed) and update local state.
+      // Do not await here synchronously in the main flow; call helper to update state.
+      ;(async () => {
+        try {
+          await ensurePatientCodes(normalized)
+        } catch (e) {
+          console.warn('[Clienteles] ensurePatientCodes failed', e)
+        }
+      })()
     }
     catch (e: any) {
       console.error('[Clienteles] fetchRows', e)
@@ -287,6 +297,26 @@ export const Clienteles: React.FC = () => {
       console.warn('copy failed', e)
       setToast({ type: 'error', message: 'Could not copy Patient ID' })
     }
+  }
+
+  // Ensure server-side patient codes exist for rows missing a server-generated code.
+  const ensurePatientCodes = async (cRows: ClientRow[]) => {
+    if (!cRows || cRows.length === 0) return
+    const updates: Record<string,string> = {}
+    for (const r of cRows) {
+      if (r.patient_code && /^PT/i.test(r.patient_code)) continue
+      try {
+        const { data, error } = await supabase.rpc('ensure_patient_code', { p_profile: r.id }) as any
+        if (error) throw error
+        const code = Array.isArray(data) ? data[0] : data
+        if (code) updates[r.id] = code
+      } catch (e) {
+        // ignore missing rpc or errors; the fallback may have set patient_code already
+        // console.warn('ensure_patient_code failed for', r.id, e)
+      }
+    }
+    if (Object.keys(updates).length === 0) return
+    setRows(prev => prev.map(rr => ({ ...rr, patient_code: updates[rr.id] || rr.patient_code })))
   }
 
   // Initial + manual refresh
@@ -570,12 +600,9 @@ export const Clienteles: React.FC = () => {
       <div className="mx-auto w-full max-w-[1400px] px-3 sm:px-6 py-6 min-w-0">
         {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 min-w-0">
-            <div className="flex items-center gap-2">
-              <Users className="w-6 h-6 text-blue-600 shrink-0" />
-              <h2 className="text-2xl font-bold text-gray-900 truncate">Clienteles</h2>
-            </div>
-            <div className="text-sm text-gray-500 mt-1 sm:mt-0 sm:ml-2">{displayRows.length} clients</div>
+          <div className="flex items-center gap-2">
+            <Users className="w-6 h-6 text-blue-600 shrink-0" />
+            <div className="text-sm text-gray-500">{displayRows.length} clients</div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -615,6 +642,11 @@ export const Clienteles: React.FC = () => {
               <span className="hidden sm:inline">Add Client</span>
             </button>
           </div>
+        </div>
+
+        {/* Title (moved below controls) */}
+        <div className="mt-4 mb-2">
+          <h2 className="text-2xl font-bold text-gray-900">Clienteles</h2>
         </div>
 
         {/* Body */}
@@ -709,148 +741,36 @@ export const Clienteles: React.FC = () => {
                 })}
               </ul>
 
-              {/* Desktop: fixed table */}
+              {/* Desktop: compact Patient ID + Actions */}
               <div className="hidden md:block w-full overflow-x-auto">
                 <table className="w-full table-auto">
                   <colgroup>
-                    <col className="w-[18%]" />
-                    <col className="w-[38%]" />
-                    {scope === 'mine' && <col className="w-[14%]" />}
-                    {scope === 'mine' && <col className="w-[14%]" />}
-                    {scope === 'mine' && <col className="w-[12%]" />}
-                    <col className="w-[12%]" />
+                    <col className="w-[60%]" />
+                    <col className="w-[40%]" />
                   </colgroup>
                   <thead className="bg-gray-50 text-xs uppercase text-gray-600">
                     <tr>
                       <th className="text-left px-4 py-3">Patient ID</th>
-                      <th className="text-left px-4 py-3">Name</th>
-                      {scope === 'mine' && <th className="text-left px-4 py-3">City</th>}
-                      {scope === 'mine' && <th className="text-left px-4 py-3">Country</th>}
-                      {scope === 'mine' && <th className="text-left px-4 py-3">Contact</th>}
                       <th className="text-right px-4 py-3">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y text-sm">
-                    {displayRows.map(r => {
-                      const mine = isMine(r.id)
-                      const name = fullName(r)
-                      return (
-                        <tr key={r.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 align-top">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-[13px] text-gray-700 truncate border rounded px-2 py-1 bg-gray-50">{r.patient_code || r.id}</span>
-                              <button type="button" onClick={() => copyPatientIdToClipboard(r.patient_code || r.id)} className="p-1 rounded hover:bg-gray-100" aria-label="Copy Patient ID">
-                                <Copy className="w-4 h-4 text-gray-500" />
-                              </button>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-[10px] shrink-0">
-                                {toInitials(r.first_name, r.last_name)}
-                              </span>
-                              <div className="min-w-0">
-                                <div className="font-medium text-gray-900 truncate">{name}</div>
-                                <div className="text-xs text-gray-500">{new Date(r.created_at).toLocaleDateString()}</div>
-                              </div>
-                            </div>
-                          </td>
-                          {scope === 'mine' && (
-                            <td className="px-4 py-3">
-                              <div className="truncate">{r.city || '—'}</div>
-                            </td>
-                          )}
-                          {scope === 'mine' && (
-                            <td className="px-4 py-3">
-                              <div className="truncate">{r.country || '—'}</div>
-                            </td>
-                          )}
-                          {scope === 'mine' && (
-                            <td className="px-4 py-3">
-                              <div className="text-xs text-gray-600 truncate break-words">{mine ? (r.email || '—') : 'Hidden'}</div>
-                              <div className="text-xs text-gray-500 truncate break-all">{mine ? (r.phone || r.whatsapp_number || '—') : '—'}</div>
-                            </td>
-                          )}
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap items-center gap-2 justify-end">
-                              <button
-                                onClick={() => openCase(r)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-100"
-                                title="Open Case"
-                              >
-                                <FileText className="w-4 h-4" />
-                                <span className="hidden xl:inline">Open Case</span>
-                              </button>
-                              <button
-                                onClick={() => assignAssessment(r)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100"
-                                title="Assign Assessment"
-                              >
-                                <Brain className="w-4 h-4" />
-                                <span className="hidden xl:inline">Assign</span>
-                              </button>
-                              <button
-                                onClick={() => messageClient(r)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100"
-                                title="Message"
-                              >
-                                <MessageSquare className="w-4 h-4" />
-                                <span className="hidden xl:inline">Message</span>
-                              </button>
-                              <button
-                                onClick={() => openEditModal(r)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 border border-gray-200 rounded hover:bg-gray-200"
-                                title="Edit Client"
-                              >
-                                <Edit className="w-4 h-4" />
-                                <span className="hidden xl:inline">Edit</span>
-                              </button>
-                              <button
-                                onClick={() => sendIntake('whatsapp', r)}
-                                disabled={!mine}
-                                className="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title={mine ? 'Send WhatsApp intake' : 'Only available for linked clients'}
-                              >
-                                <span className="hidden 2xl:inline">WhatsApp Intake</span>
-                                <span className="inline 2xl:hidden">WA</span>
-                              </button>
-                              <button
-                                onClick={() => sendIntake('email', r)}
-                                disabled={!mine}
-                                className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title={mine ? 'Send email intake' : 'Only available for linked clients'}
-                              >
-                                <span className="hidden 2xl:inline">Email Intake</span>
-                                <span className="inline 2xl:hidden">Mail</span>
-                              </button>
-
-                              {/* Assignment/Create Case */}
-                              {isMine(r.id) || getAssignmentStatus(r.id) === 'accepted' ? (
-                                <button
-                                  onClick={() => createCaseForClient(r.id)}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                                >
-                                  <FileText className="w-4 h-4" />
-                                  <span className="hidden xl:inline">Create Case</span>
-                                </button>
-                              ) : getAssignmentStatus(r.id) === 'pending' ? (
-                                <button className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-300 text-gray-700 rounded" disabled>Request Pending</button>
-                              ) : (
-                                <button
-                                  data-test-request-btn
-                                  onClick={() => requestAssignment(r.id)}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-500 text-white rounded hover:bg-amber-600"
-                                  disabled={!!requestingMap[r.id]}
-                                >
-                                  <ShieldCheck className="w-4 h-4" />
-                                  <span className="hidden xl:inline">{requestingMap[r.id] ? 'Sending...' : 'Request Assignment'}</span>
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
+                    {displayRows.map(r => (
+                      <tr key={r.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[13px] text-gray-700 truncate border rounded px-2 py-1 bg-gray-50">{r.patient_code || r.id}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 justify-end">
+                            <button onClick={() => copyPatientIdToClipboard(r.patient_code || r.id)} className="p-2 rounded hover:bg-gray-100" title="Copy ID"><Copy className="w-4 h-4"/></button>
+                            <button onClick={() => openCase(r)} className="p-2 rounded hover:bg-gray-100" title="Open Case"><FileText className="w-4 h-4"/></button>
+                            <button onClick={() => openEditModal(r)} className="p-2 rounded hover:bg-gray-100" title="Edit"><Edit className="w-4 h-4"/></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
