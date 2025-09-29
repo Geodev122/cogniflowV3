@@ -967,7 +967,7 @@ export default function TherapistDashboard() {
         </div>
       </header>
 
-      <div className="flex pt-16">
+  <div className="flex pt-16 min-w-0">
         {/* Sidebar (extracted to shared component) */}
         <TherapistSidebar
           sidebarCollapsed={sidebarCollapsed}
@@ -1062,8 +1062,8 @@ export default function TherapistDashboard() {
         )}
 
         {/* Main Content */}
-        <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} bg-gray-50 min-h-0`}>
-          <main className="min-h-[calc(100vh-4rem)] overflow-y-auto overflow-x-hidden">
+        <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'} bg-gray-50 min-h-0 min-w-0`}>
+          <main className="min-h-[calc(100vh-4rem)] overflow-y-auto overflow-x-hidden min-w-0">
             <Suspense fallback={<div className="p-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>}>
               {active === 'overview'            && <Overview />}
               {active === 'clienteles'          && <Clienteles />}
