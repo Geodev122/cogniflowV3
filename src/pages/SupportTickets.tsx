@@ -122,7 +122,7 @@ const api = {
       last_activity_at: r.updated_at ?? r.created_at ?? new Date().toISOString(),
       requester_id: r.user_id ?? r.requester_id ?? '',
       requester_email: r.profiles?.email ?? r.requester_email ?? '',
-      requester_name: [r.profiles?.first_name, r.profiles?.last_name].filter(Boolean).join(' ') || r.requester_name ?? '',
+  requester_name: ([r.profiles?.first_name, r.profiles?.last_name].filter(Boolean).join(' ') || r.requester_name) ?? '',
       assignee_id: r.assignee_id ?? null,
       assignee_email: r.assignee_email ?? null,
       assignee_name: r.assignee_name ?? null,
