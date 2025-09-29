@@ -160,7 +160,7 @@ const AssessmentLibrary: React.FC<AssessmentLibraryProps> = ({ onAssign, onPrevi
   }
 
   return (
-  <div className="h-full flex flex-col overflow-x-hidden">
+  <div className="h-full flex flex-col min-w-0 overflow-x-hidden">
       {/* Sticky/compact filters */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-gray-200 p-3">
         <div className="flex items-center justify-between mb-2">
@@ -1215,7 +1215,7 @@ export default function ResourceLibrary() {
     }
 
     return (
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col min-w-0 overflow-x-hidden">
         {/* Filters header */}
         <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-200 px-3 py-4">
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -1496,7 +1496,7 @@ export default function ResourceLibrary() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 min-h-0">
+  <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
         {activeTab === 'assessments' ? (
           <AssessmentLibrary
             onAssign={(templateId) => {
