@@ -17,6 +17,18 @@ type Appt = {
   notes: string | null
 }
 
+type Client = {
+  id: string
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+}
+
+type Case = {
+  id: string
+  title?: string | null
+}
+
 const SessionManagement: React.FC = () => {
   const { profile } = useAuth()
   const [rows, setRows] = useState<Appt[]>([])
@@ -26,7 +38,26 @@ const SessionManagement: React.FC = () => {
   const [editing, setEditing] = useState<Partial<Appt> | null>(null)
   const [saving, setSaving] = useState(false)
 
+  const [clients, setClients] = useState<Client[]>([])
+  const [cases, setCases] = useState<Case[]>([])
+
   const canEdit = !!profile?.id
+
+  // Helpers to convert between ISO strings and input[type=datetime-local] values
+  const toInputDateTime = (iso?: string | null) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    // get local datetime without timezone
+    const tzOffset = d.getTimezoneOffset() * 60000
+    const local = new Date(d.getTime() - tzOffset)
+    return local.toISOString().slice(0, 16)
+  }
+  const fromInputToISO = (localValue: string) => {
+    // localValue is like '2025-09-30T14:30' (local), interpret as local time and convert to ISO
+    if (!localValue) return ''
+    const dt = new Date(localValue)
+    return dt.toISOString()
+  }
 
   const fetchRows = async () => {
     if (!profile?.id) return
@@ -42,7 +73,35 @@ const SessionManagement: React.FC = () => {
     setLoading(false)
   }
 
+  const fetchClients = async () => {
+    if (!profile?.id) return
+    // fetch profiles with role 'client'
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email')
+      .eq('role', 'client')
+      .order('first_name', { ascending: true })
+    if (error) console.warn('Failed to load clients', error)
+    else setClients((data || []) as Client[])
+  }
+
+  const fetchCases = async () => {
+    if (!profile?.id) return
+    // if your project uses a different table name for cases, update this query accordingly
+    const { data, error } = await supabase
+      .from('cases')
+      .select('id, title')
+      .order('title', { ascending: true })
+    if (error) {
+      // not all projects have cases; that's non-fatal
+      console.debug('No cases table or failed to load cases', error.message)
+    } else {
+      setCases((data || []) as Case[])
+    }
+  }
+
   useEffect(() => { fetchRows() }, [profile?.id])
+  useEffect(() => { fetchClients(); fetchCases() }, [profile?.id])
 
   const openNew = () => {
     setEditing({
@@ -53,20 +112,55 @@ const SessionManagement: React.FC = () => {
       status: 'scheduled',
       location: '',
       notes: '',
-      client_id: '',
+      client_id: clients[0]?.id ?? '',
       case_id: null,
     })
   }
 
   const save = async () => {
     if (!editing) return
+    // basic validation
+    if (!editing.client_id) {
+      alert('Please select a client')
+      return
+    }
+    if (!editing.start_time || !editing.end_time) {
+      alert('Please provide start and end times')
+      return
+    }
+    const s = new Date(editing.start_time)
+    const e = new Date(editing.end_time)
+    if (s >= e) {
+      alert('Start time must be before end time')
+      return
+    }
+
     setSaving(true)
     try {
+      const payload: Partial<Appt> = {
+        therapist_id: editing.therapist_id || profile!.id,
+        client_id: editing.client_id,
+        case_id: editing.case_id ?? null,
+        title: editing.title ?? null,
+        start_time: editing.start_time!,
+        end_time: editing.end_time!,
+        location: editing.location ?? null,
+        status: (editing.status as any) ?? 'scheduled',
+        notes: editing.notes ?? null,
+      }
+
       if (editing.id) {
-        const { error } = await supabase.from('appointments').update(editing).eq('id', editing.id)
+        const { data, error } = await supabase
+          .from('appointments')
+          .update(payload)
+          .eq('id', editing.id)
+          .select()
         if (error) throw error
       } else {
-        const { error } = await supabase.from('appointments').insert(editing)
+        const { data, error } = await supabase
+          .from('appointments')
+          .insert(payload)
+          .select()
         if (error) throw error
       }
       setEditing(null)
@@ -83,6 +177,20 @@ const SessionManagement: React.FC = () => {
     const { error } = await supabase.from('appointments').delete().eq('id', id)
     if (error) alert(error.message)
     else fetchRows()
+  }
+
+  // memoized lookup maps
+  const clientById = useMemo(() => {
+    const m: Record<string, Client> = {}
+    clients.forEach(c => { m[c.id] = c })
+    return m
+  }, [clients])
+
+  const formatClient = (id?: string | null) => {
+    if (!id) return '—'
+    const c = clientById[id]
+    if (!c) return id
+    return [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email || id
   }
 
   return (
@@ -109,8 +217,9 @@ const SessionManagement: React.FC = () => {
         <div className="border rounded overflow-hidden">
           <div className="grid grid-cols-12 bg-gray-50 text-xs uppercase text-gray-600 px-3 py-2">
             <div className="col-span-3">Title</div>
-            <div className="col-span-3">Start</div>
-            <div className="col-span-3">End</div>
+            <div className="col-span-2">Client</div>
+            <div className="col-span-2">Start</div>
+            <div className="col-span-2">End</div>
             <div className="col-span-2">Status</div>
             <div className="col-span-1"></div>
           </div>
@@ -118,8 +227,9 @@ const SessionManagement: React.FC = () => {
             {rows.map(r => (
               <div key={r.id} className="grid grid-cols-12 px-3 py-2 items-center">
                 <div className="col-span-3 truncate">{r.title || '—'}</div>
-                <div className="col-span-3">{new Date(r.start_time).toLocaleString()}</div>
-                <div className="col-span-3">{new Date(r.end_time).toLocaleString()}</div>
+                <div className="col-span-2 truncate">{formatClient(r.client_id)}</div>
+                <div className="col-span-2">{new Date(r.start_time).toLocaleString()}</div>
+                <div className="col-span-2">{new Date(r.end_time).toLocaleString()}</div>
                 <div className="col-span-2 capitalize">{r.status}</div>
                 <div className="col-span-1 flex gap-2 justify-end">
                   <button className="p-1 rounded hover:bg-gray-100" onClick={() => setEditing(r)} title="Edit">
@@ -144,22 +254,48 @@ const SessionManagement: React.FC = () => {
             <div className="p-4 space-y-3">
               <input className="w-full border rounded p-2" placeholder="Title"
                 value={editing.title ?? ''} onChange={(e) => setEditing(s => ({ ...s!, title: e.target.value }))} />
+
+              <label className="block text-sm">Client</label>
+              <select className="w-full border rounded p-2" value={editing.client_id ?? ''} onChange={(e) => setEditing(s => ({ ...s!, client_id: e.target.value }))}>
+                <option value="">Select client</option>
+                {clients.map(c => (
+                  <option key={c.id} value={c.id}>{[c.first_name, c.last_name].filter(Boolean).join(' ') || c.email || c.id}</option>
+                ))}
+              </select>
+
               <label className="block text-sm">Start</label>
               <input type="datetime-local" className="w-full border rounded p-2"
-                value={editing.start_time ? new Date(editing.start_time).toISOString().slice(0,16) : ''}
-                onChange={(e) => setEditing(s => ({ 
-                  ...s!, 
-                  start_time: new Date(e.target.value).toISOString(),
-                  appointment_date: new Date(e.target.value).toISOString()
-                }))}/>
+                value={toInputDateTime(editing.start_time)}
+                onChange={(e) => setEditing(s => ({ ...s!, start_time: fromInputToISO(e.target.value) }))} />
+
               <label className="block text-sm">End</label>
               <input type="datetime-local" className="w-full border rounded p-2"
-                value={editing.end_time ? new Date(editing.end_time).toISOString().slice(0,16) : ''}
-                onChange={(e) => setEditing(s => ({ ...s!, end_time: new Date(e.target.value).toISOString() }))}/>
+                value={toInputDateTime(editing.end_time)}
+                onChange={(e) => setEditing(s => ({ ...s!, end_time: fromInputToISO(e.target.value) }))} />
+
+              <label className="block text-sm">Location</label>
               <input className="w-full border rounded p-2" placeholder="Location"
-                value={editing.location ?? ''} onChange={(e) => setEditing(s => ({ ...s!, location: e.target.value }))}/>
+                value={editing.location ?? ''} onChange={(e) => setEditing(s => ({ ...s!, location: e.target.value }))} />
+
+              <label className="block text-sm">Case (optional)</label>
+              <select className="w-full border rounded p-2" value={editing.case_id ?? ''} onChange={(e) => setEditing(s => ({ ...s!, case_id: e.target.value || null }))}>
+                <option value="">None</option>
+                {cases.map(cs => (
+                  <option key={cs.id} value={cs.id}>{cs.title || cs.id}</option>
+                ))}
+              </select>
+
+              <label className="block text-sm">Status</label>
+              <select className="w-full border rounded p-2" value={editing.status ?? 'scheduled'} onChange={(e) => setEditing(s => ({ ...s!, status: e.target.value }))}>
+                <option value="scheduled">Scheduled</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+
+              <label className="block text-sm">Notes</label>
               <textarea className="w-full border rounded p-2" rows={3} placeholder="Notes"
-                value={editing.notes ?? ''} onChange={(e) => setEditing(s => ({ ...s!, notes: e.target.value }))}/>
+                value={editing.notes ?? ''} onChange={(e) => setEditing(s => ({ ...s!, notes: e.target.value }))} />
+
               <div className="flex justify-end gap-2 pt-2">
                 <button className="px-3 py-1.5 rounded border" onClick={() => setEditing(null)}>Cancel</button>
                 <button className="px-3 py-1.5 rounded bg-blue-600 text-white" onClick={save} disabled={saving}>
