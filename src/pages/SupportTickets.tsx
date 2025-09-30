@@ -1,11 +1,3 @@
-<<<<<<< HEAD
-import React, { useState } from 'react'
-import { supabase, expectMany, run } from '.../lib/supabase'
-import { Input } from '../components/ui/input'
-import { Textarea } from '../components/ui/textarea'
-import { Button } from '../components/ui/button'
-import { Card, CardContent } from '../components/ui/card'
-=======
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase, expectMany, run } from "../lib/supabase";
@@ -113,10 +105,10 @@ const api = {
     // Basic filtering: q -> subject/body search, status, priority, category, assignee (email)
     let query = supabase.from('tickets').select('*, profiles:profiles!user_id(id, first_name, last_name, email)');
     // apply simple filters where possible
-    if (params.status) query = query.eq('status', params.status as string);
-    if (params.priority) query = query.eq('status', params.priority as string); // keep parity if needed
+    if (params.status) query = query.eq('status', params.status as TicketStatus);
+  if (params.priority) query = (query as any).eq('priority', params.priority as TicketPriority); // filter by priority
     // category and assignee handling might depend on schema; do a simple select and map server-side
-    const { rows } = await expectMany<TicketListItem>(query);
+  const { rows } = await expectMany<TicketListItem>(query as any);
     // rows may not match TicketListItem shape; best-effort map
     return rows.map((r: any) => ({
       id: String(r.id),
@@ -140,7 +132,7 @@ const api = {
     } as TicketListItem));
   },
   getMessages: async (ticketId: string) => {
-    const { rows } = await expectMany<TicketMessage>(supabase.from('messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }));
+  const { rows } = await expectMany<TicketMessage>((supabase.from('messages').select('*') as any).eq('ticket_id', ticketId).order('created_at', { ascending: true }));
     return rows.map((r: any) => ({
       ticket_id: String(r.ticket_id),
       message_id: String(r.id ?? r.message_id),
@@ -236,18 +228,18 @@ const api = {
     } as TicketListItem;
   },
   listCategories: async () => {
-    const { rows } = await expectMany<SupportCategory>(supabase.from('support_categories').select('*'));
+    const { rows } = await expectMany<SupportCategory>(supabase.from('support_categories').select('*') as any);
     return rows.map((r: any) => ({ key: r.key ?? String(r.id), name: r.name ?? r.key, description: r.description } as SupportCategory));
   },
   listTags: async () => {
-    const { rows } = await expectMany<SupportTag>(supabase.from('support_tags').select('*'));
+  const { rows } = await expectMany<SupportTag>(supabase.from('support_tags').select('*') as any);
     return rows.map((r: any) => ({ key: r.key ?? String(r.id), label: r.label } as SupportTag));
   },
   listProfiles: async (q = '', role?: string) => {
     let query = supabase.from('profiles').select('id, email, first_name, last_name, role');
     if (q) query = query.ilike('email', `%${q}%`).or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`);
     if (role) query = query.eq('role', role);
-    const { rows } = await expectMany<ProfileLite>(query.limit(20));
+  const { rows } = await expectMany<ProfileLite>(query.limit(20) as any);
     return rows.map((r: any) => ({ id: String(r.id), email: r.email, first_name: r.first_name, last_name: r.last_name, role: r.role } as ProfileLite));
   },
 };
@@ -318,7 +310,7 @@ function AssigneePill({ name, email }: { name?: string | null; email?: string | 
     </span>
   );
 }
->>>>>>> 5a3da3e (chore: fix imports and build issues)
+
 
 export default function SupportTickets() {
   const [name, setName] = useState('')
