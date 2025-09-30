@@ -729,13 +729,12 @@ async function exportCaseSummaryPDF(args: {
 }) {
   const { caseTitle, caseId, notes, activities } = args
 
-  // Avoid Vite pre-bundling; show a friendly message if jspdf isn't installed
+  // Avoid Vite pre-bundling; caller will show a toast if this returns false
   let jsPDFMod: any = null
   try {
     jsPDFMod = await import(/* @vite-ignore */ 'jspdf')
   } catch {
-    push({ message: 'PDF export requires the "jspdf" package. Install with `npm i jspdf`.', type: 'info' })
-    return
+    return false
   }
 
   const jsPDF = jsPDFMod.default || jsPDFMod.jsPDF || jsPDFMod
@@ -787,6 +786,7 @@ async function exportCaseSummaryPDF(args: {
   }
 
   doc.save(`case-summary-${caseId}.pdf`)
+  return true
 }
 
 /* =========================================================
@@ -883,31 +883,41 @@ export default function Workspace() {
 
   const confirmLeave = useCallback(async () => {
     if (!isSaving && !isDirty) return true
-    // Open confirm modal and await user's choice
-    return await new Promise<boolean>((resolve) => {
-      setConfirmOpen(true)
-      setConfirmResolve(() => (v: boolean) => {
-        setConfirmOpen(false)
-        setConfirmResolve(null)
-        resolve(v)
+    try {
+      // Open confirm modal and await user's choice
+      const wantsToLeave = await new Promise<boolean>((resolve) => {
+        setConfirmOpen(true)
+        setConfirmResolve(() => (v: boolean) => {
+          setConfirmOpen(false)
+          setConfirmResolve(null)
+          resolve(v)
+        })
       })
-    }).then(async (wantsToLeave) => {
       if (!wantsToLeave) return false
       if (isDirty && sessionRef.current) {
         const ok = await sessionRef.current.saveNow()
         return ok || true
       }
       return true
-    })
+    } catch (e) {
+      console.error('[Workspace] confirmLeave error:', e)
+      try { push({ message: 'Could not confirm leave. Please try again.', type: 'error' }) } catch {}
+      return false
+    }
   }, [isSaving, isDirty])
 
   const onChangeCase = useCallback(
     async (newId: string) => {
       if (!newId || newId === selectedCaseId) return
-      const ok = await confirmLeave()
-      if (!ok) return
-      setSelectedCaseId(newId)
-      navigate(`/cases/${newId}/workspace`)
+      try {
+        const ok = await confirmLeave()
+        if (!ok) return
+        setSelectedCaseId(newId)
+        navigate(`/cases/${newId}/workspace`)
+      } catch (e) {
+        console.error('[Workspace] onChangeCase error:', e)
+        try { push({ message: 'Error switching case. Please try again.', type: 'error' }) } catch {}
+      }
     },
     [confirmLeave, navigate, selectedCaseId]
   )
@@ -1020,7 +1030,14 @@ export default function Workspace() {
       notes: (notes ?? []) as SessionNote[],
       activities: (acts ?? []) as ClientActivity[],
     })
-  }, [cases, selectedCaseId])
+    const ok = await exportCaseSummaryPDF({
+      caseTitle,
+      caseId: selectedCaseId,
+      notes: (notes ?? []) as SessionNote[],
+      activities: (acts ?? []) as ClientActivity[],
+    })
+    if (!ok) push({ message: 'PDF export requires the "jspdf" package. Install with `npm i jspdf`.', type: 'info' })
+  }, [cases, selectedCaseId, push])
 
   return (
     <div className="h-full flex flex-col">
@@ -1120,64 +1137,55 @@ export default function Workspace() {
 
       {/* Body */}
       <div className="flex-1 min-h-0">
-        {!selectedCaseId ? (
-          <div className="h-full grid place-items-center px-4">
-            <div className="text-center">
-              <p className="text-sm text-gray-600">Pick a case from the dropdown to open the Workspace.</p>
-            </div>
-          </div>
-        ) : (
-          <div className="max-w-7xl mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* In-Between Sessions + Embedded Assessment Workspace (left panel) */}
-            <div className="space-y-4">
-              {current?.client_id && profile?.id ? (
-                <InBetweenPanel caseId={selectedCaseId} therapistId={profile.id} />
-              ) : (
-                <div className="bg-white border rounded-xl p-4">
-                  <h3 className="font-medium text-gray-900 mb-1">In-Between Sessions</h3>
-                  <p className="text-sm text-gray-500">Client not available for this case.</p>
-                </div>
-              )}
-
-              {/* Assessment Workspace embedded for quick access; collapsible */}
-              <div className="bg-white border rounded-xl p-0 overflow-hidden">
-                <div className="p-3 flex items-center justify-between border-b">
-                  <h3 className="font-medium text-gray-900">Assessments</h3>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        try { localStorage.setItem('ws_show_assessment', String(!showAssessment)) } catch {}
-                        setShowAssessment(s => !s)
-                      }}
-                      className="px-2 py-1 text-sm rounded border hover:bg-gray-50"
-                    >
-                      {showAssessment ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                </div>
-
-                {showAssessment ? (
-                  <div className="p-0">
-                    <AssessmentWorkspace initialInstanceId={undefined} onClose={() => { /* noop when embedded */ }} />
-                  </div>
-                ) : (
-                  <div className="p-4 text-sm text-gray-500">Assessments hidden. Click Show to expand.</div>
-                )}
+        <div className="max-w-7xl mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left panel */}
+          <div className="space-y-4">
+            {selectedCaseId && current?.client_id && profile?.id ? (
+              <InBetweenPanel caseId={selectedCaseId} therapistId={profile.id} />
+            ) : (
+              <div className="bg-white border rounded-xl p-4">
+                <h3 className="font-medium text-gray-900 mb-1">In-Between Sessions</h3>
+                <p className="text-sm text-gray-500">Pick a case to load client activities and assessments.</p>
               </div>
-            </div>
+            )}
 
-            {/* Session Board */}
-            <div className="lg:col-span-2 bg-white border rounded-xl">
-              <SessionBoard
-                ref={sessionRef}
-                defaultCaseId={current?.id || ''}
-                defaultClientId={current?.client_id || ''}
-                onSavingChange={setIsSaving}
-                onDirtyChange={setIsDirty}
-              />
+            <div className="bg-white border rounded-xl p-0 overflow-hidden">
+              <div className="p-3 flex items-center justify-between border-b">
+                <h3 className="font-medium text-gray-900">Assessments</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      try { localStorage.setItem('ws_show_assessment', String(!showAssessment)) } catch {}
+                      setShowAssessment(s => !s)
+                    }}
+                    className="px-2 py-1 text-sm rounded border hover:bg-gray-50"
+                  >
+                    {showAssessment ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+
+              {showAssessment ? (
+                <div className="p-0">
+                  <AssessmentWorkspace initialInstanceId={undefined} onClose={() => { /* noop when embedded */ }} />
+                </div>
+              ) : (
+                <div className="p-4 text-sm text-gray-500">Assessments hidden. Click Show to expand.</div>
+              )}
             </div>
           </div>
-        )}
+
+          {/* Session Board (always rendered for structure) */}
+          <div className="lg:col-span-2 bg-white border rounded-xl p-4">
+            <SessionBoard
+              ref={sessionRef}
+              defaultCaseId={current?.id || ''}
+              defaultClientId={current?.client_id || ''}
+              onSavingChange={setIsSaving}
+              onDirtyChange={setIsDirty}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Drawers / Modals */}
