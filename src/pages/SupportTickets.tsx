@@ -310,8 +310,6 @@ function AssigneePill({ name, email }: { name?: string | null; email?: string | 
     </span>
   );
 }
->>>>>>> 5a3da3e (chore: fix imports and build issues)
-
 export default function SupportTickets() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
