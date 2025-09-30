@@ -105,8 +105,8 @@ const api = {
     // Basic filtering: q -> subject/body search, status, priority, category, assignee (email)
     let query = supabase.from('tickets').select('*, profiles:profiles!user_id(id, first_name, last_name, email)');
     // apply simple filters where possible
-    if (params.status) query = query.eq('status', params.status as TicketStatus);
-  if (params.priority) query = (query as any).eq('priority', params.priority as TicketPriority); // filter by priority
+    if (params.status) query = query.eq('status', params.status as string);
+    if (params.priority) query = query.eq('status', params.priority as string); // keep parity if needed
     // category and assignee handling might depend on schema; do a simple select and map server-side
   const { rows } = await expectMany<TicketListItem>(query as any);
     // rows may not match TicketListItem shape; best-effort map
@@ -132,7 +132,7 @@ const api = {
     } as TicketListItem));
   },
   getMessages: async (ticketId: string) => {
-  const { rows } = await expectMany<TicketMessage>((supabase.from('messages').select('*') as any).eq('ticket_id', ticketId).order('created_at', { ascending: true }));
+    const { rows } = await expectMany<TicketMessage>(supabase.from('messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }));
     return rows.map((r: any) => ({
       ticket_id: String(r.ticket_id),
       message_id: String(r.id ?? r.message_id),
@@ -150,7 +150,7 @@ const api = {
     payload: { sender_id: string; body: string; is_internal?: boolean }
   ) => {
     const p: any = { ticket_id: ticketId, body: payload.body, is_internal: payload.is_internal ?? false, sender_id: payload.sender_id };
-    const inserted = await run(supabase.from('messages').insert(p).select('*').single());
+  const inserted = await run(supabase.from('messages').insert(p).select('*').single() as any);
     if (!inserted) throw new Error('Failed to insert message');
     const r: any = inserted;
     return {
@@ -171,7 +171,7 @@ const api = {
   ) => {
     const data: any = { ...(patch as any) };
     if (patch.assignee_id !== undefined) data.assignee_id = patch.assignee_id;
-    const updated = await run(supabase.from('tickets').update(data).eq('id', ticketId).select('*').single());
+  const updated = await run(supabase.from('tickets').update(data).eq('id', ticketId).select('*').single() as any);
     if (!updated) throw new Error('Failed to update ticket');
     const r: any = updated;
     return {
@@ -203,7 +203,7 @@ const api = {
       category_key: payload.category_key ?? null,
       priority: payload.priority ?? 'medium',
     };
-    const inserted = await run(supabase.from('tickets').insert(toInsert).select('*').single());
+  const inserted = await run(supabase.from('tickets').insert(toInsert).select('*').single() as any);
     if (!inserted) throw new Error('Failed to create ticket');
     const r: any = inserted;
     return {
@@ -228,11 +228,11 @@ const api = {
     } as TicketListItem;
   },
   listCategories: async () => {
-    const { rows } = await expectMany<SupportCategory>(supabase.from('support_categories').select('*') as any);
+    const { rows } = await expectMany<SupportCategory>(supabase.from('support_categories').select('*'));
     return rows.map((r: any) => ({ key: r.key ?? String(r.id), name: r.name ?? r.key, description: r.description } as SupportCategory));
   },
   listTags: async () => {
-  const { rows } = await expectMany<SupportTag>(supabase.from('support_tags').select('*') as any);
+    const { rows } = await expectMany<SupportTag>(supabase.from('support_tags').select('*'));
     return rows.map((r: any) => ({ key: r.key ?? String(r.id), label: r.label } as SupportTag));
   },
   listProfiles: async (q = '', role?: string) => {
@@ -310,7 +310,7 @@ function AssigneePill({ name, email }: { name?: string | null; email?: string | 
     </span>
   );
 }
-
+>>>>>>> 5a3da3e (chore: fix imports and build issues)
 
 export default function SupportTickets() {
   const [name, setName] = useState('')
@@ -326,7 +326,7 @@ export default function SupportTickets() {
     const payload: any = { name: name || null, email: email || null, message: message || null }
     try {
       // Try to write to contact_messages table if it exists
-      await run(supabase.from('contact_messages').insert(payload).select('*').maybeSingle())
+  await run(supabase.from('contact_messages').insert(payload).select('*').maybeSingle() as any)
       setStatus('Saved — thanks, we will follow up via email.')
     } catch (err:any) {
       // Fallback to a simple POST to an optional serverless endpoint

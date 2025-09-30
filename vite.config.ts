@@ -31,12 +31,13 @@ export default defineConfig({
     },
     chunkSizeWarningLimit: 1000,
     target: 'esnext',
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
+    // Use esbuild for minification to avoid terser edge-cases that can produce
+    // "import is not a function" during mangling/minify for some dynamic import
+    // shapes. esbuild is faster and generally safer for modern ESM builds.
+    minify: 'esbuild',
+    // Configure esbuild to drop console/debugger statements similarly to terserOptions
+    esbuild: {
+      drop: ['console', 'debugger'],
     },
   },
   optimizeDeps: {

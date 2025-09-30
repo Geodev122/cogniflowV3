@@ -8,9 +8,30 @@ export const Badge: React.FC<React.HTMLAttributes<HTMLSpanElement>> = ({ childre
   <span className={['inline-flex items-center px-2 py-0.5 text-xs rounded-full', className].filter(Boolean).join(' ')} {...rest}>{children}</span>
 )
 
-export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, className, ...rest }) => (
-  <button className={['inline-flex items-center px-3 py-1.5 rounded-md bg-blue-600 text-white', className].filter(Boolean).join(' ')} {...rest}>{children}</button>
-)
+// Use a permissive prop type here because the real design system Button
+// supports extra props like `variant` and `size` that are not standard
+// HTML attributes. Keeping this as `any` avoids excessive type errors in
+// pages that expect the design-system API.
+export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'outline' | 'primary' | 'ghost' | string;
+  size?: 'icon' | 'sm' | 'md' | string;
+};
+
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({ children, className, variant, size, ...rest }, ref) => {
+  const base = 'inline-flex items-center px-3 py-1.5 rounded-md bg-blue-600 text-white';
+  const variants: Record<string, string> = {
+    outline: 'bg-white border',
+    ghost: 'bg-transparent',
+    primary: 'bg-blue-600 text-white',
+  };
+  const variantClass = variant ? (variants[variant] ?? '') : '';
+  const sizeClass = size === 'icon' ? 'p-2 rounded-full' : '';
+  const cls = [base, variantClass, sizeClass, className].filter(Boolean).join(' ');
+  return (
+    <button ref={ref} className={cls} {...rest}>{children}</button>
+  );
+});
+Button.displayName = 'Button';
 
 export const Card: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, className, ...rest }) => (
   <div className={['bg-white rounded-lg shadow-sm', className].filter(Boolean).join(' ')} {...rest}>{children}</div>

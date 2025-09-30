@@ -18,6 +18,7 @@ import {
   Plus, Shield, Globe, Download, RefreshCw
 } from 'lucide-react'
 import { useToast } from '../../../components/ui/Toast'
+import { loadJsPDF } from '../../../lib/loadJspdf'
 import ConfirmModal from '../../../components/ui/ConfirmModal'
 
 /* =========================================================
@@ -679,15 +680,9 @@ async function exportCaseSummaryPDF(args: {
 }) {
   const { caseTitle, caseId, notes, activities } = args
 
-  // Avoid Vite pre-bundling; caller will show a toast if this returns false
-  let jsPDFMod: any = null
-  try {
-    jsPDFMod = await import('jspdf')
-  } catch {
-    return false
-  }
-
-  const jsPDF = jsPDFMod.default || jsPDFMod.jsPDF || jsPDFMod
+  // Load jspdf via helper which normalizes export shapes and caches result
+  const jsPDF = await loadJsPDF()
+  if (!jsPDF) return false
   const doc = new jsPDF()
 
   const line = (txt: string, y: number) => doc.text(txt, 14, y)

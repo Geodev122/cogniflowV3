@@ -114,7 +114,15 @@ export const MembershipPanel: React.FC = () => {
         .order('sort_order')
 
       if (plansError) throw plansError
-      setPlans(plansData || [])
+      // Deduplicate plans by id (defensive: avoid duplicate rows from DB or RPC)
+      const rawPlans = plansData || []
+      const byId = new Map<string, MembershipPlan>()
+      rawPlans.forEach((p: any) => {
+        const id = String(p.id)
+        if (!byId.has(id)) byId.set(id, p as MembershipPlan)
+      })
+      const uniquePlans = Array.from(byId.values()).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      setPlans(uniquePlans)
 
       // Load current subscription
       const { data: subData, error: subError } = await supabase

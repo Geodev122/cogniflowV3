@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import confirmAsync from '../../utils/confirm'
 import { useToast } from '../../components/ui/Toast'
+import { loadJsPDF } from '../../lib/loadJspdf'
 
 type ResourceRow = {
   id: string
@@ -709,15 +710,12 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
                       ])
                       if (nErr || aErr) throw nErr || aErr
 
-                      // minimal export: try to use jspdf; if missing, inform
-                      let jsPDFMod: any = null
-                      try {
-                        jsPDFMod = await import('jspdf')
-                      } catch {
+                      // Load jsPDF via helper which normalizes CJS/ESM shapes
+                      const jsPDF = await loadJsPDF()
+                      if (!jsPDF) {
                         push({ message: 'PDF export requires the "jspdf" package. Install with `npm i jspdf`.', type: 'info' })
                         return
                       }
-                      const jsPDF = jsPDFMod.default || jsPDFMod.jsPDF || jsPDFMod
                       const doc = new jsPDF()
                       let y = 14
                       const line = (txt: string) => { doc.text(txt, 14, y); y += 6 }

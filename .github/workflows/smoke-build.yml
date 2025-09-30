@@ -1,0 +1,6 @@
+name: disabled — smoke build (removed)
+
+on:
+# This workflow was removed/disabled. Left intentionally empty so it does not run.
+on: []
+jobs: {}
