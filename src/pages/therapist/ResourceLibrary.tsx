@@ -7,6 +7,7 @@ import {
   Library, Search, Grid3X3, List, Eye, Send, BookOpen, FileText, Video, Headphones, X,
   Users, Zap, BookmarkCheck, Bookmark, Download, AlertTriangle, Clock, Link as LinkIcon, Trash2
 } from 'lucide-react'
+import { useToast } from '../../components/ui/Toast'
 
 /* =========================
    Types & Constants
@@ -36,7 +37,7 @@ interface Resource {
 const CATEGORIES = [
   { id: 'all', name: 'All', icon: Library },
   { id: 'worksheet', name: 'Worksheets', icon: FileText },
-  { id: 'educational', name: 'Educational', icon: BookOpen },
+  { id: 'educational', name: 'Psychoeducation', icon: BookOpen },
   { id: 'intervention', name: 'Interventions', icon: Zap },
   { id: 'protocol', name: 'Protocols', icon: Headphones },
 ] as const
@@ -588,7 +589,7 @@ const CreateResourceModal: React.FC<{
     } catch (err) {
       console.error('CreateResource error:', err)
       const msg = err && (err as any).message ? (err as any).message : String(err)
-      alert(`Could not create resource: ${msg}`)
+      push({ message: `Could not create resource: ${msg}`, type: 'error' })
     } finally {
       setLoading(false)
     }
@@ -855,7 +856,7 @@ const CreateCourseModal: React.FC<{
     } catch (err) {
       console.error('CreateCourse error:', err)
       const msg = err && (err as any).message ? (err as any).message : String(err)
-      alert(`Could not create course: ${msg}`)
+      push({ message: `Could not create course: ${msg}`, type: 'error' })
     } finally {
       setSaving(false)
     }
@@ -1038,6 +1039,8 @@ const CreateCourseModal: React.FC<{
 export default function ResourceLibrary() {
   const [activeTab, setActiveTab] = useState<'assessments' | 'resources'>('assessments')
 
+  const { push } = useToast()
+
   // Shared state
   const [clients, setClients] = useState<any[]>([])
   const [clientsError, setClientsError] = useState<string | null>(null)
@@ -1177,15 +1180,15 @@ export default function ResourceLibrary() {
         resource_id: resourceId,
       }))
 
-  const { error } = await supabase.from('form_assignments').insert(payload as any)
+      const { error } = await supabase.from('form_assignments').insert(payload as any)
       if (error) throw error
 
       setShowAssignModal(false)
       setSelectedResource(null)
-      alert('Resource assigned successfully!')
+      push({ message: 'Resource assigned', type: 'success' })
     } catch (e) {
       console.error('Error assigning resource:', e)
-      alert('Error assigning resource. Please try again.')
+      push({ message: 'Error assigning resource. Please try again.', type: 'error' })
     }
   }
 
@@ -1197,10 +1200,10 @@ export default function ResourceLibrary() {
     try {
       await assignAssessment(templateId, clientIds, options)
       setShowAssessmentAssignModal(false)
-      alert('Assessment assigned successfully!')
+      push({ message: 'Assessment assigned', type: 'success' })
     } catch (e) {
       console.error('Error assigning assessment:', e)
-      alert('Error assigning assessment. Please try again.')
+      push({ message: 'Error assigning assessment. Please try again.', type: 'error' })
     }
   }
 

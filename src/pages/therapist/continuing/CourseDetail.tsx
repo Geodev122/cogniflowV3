@@ -28,12 +28,12 @@ export default function CourseDetail(){
   },[id])
 
   const enroll = async () => {
-    if (!profile?.id) return alert('Please sign in to enroll')
+  if (!profile?.id) return push({ message: 'Please sign in to enroll', type: 'info' })
     try{
       const { error } = await supabase.from('ce_enrollments').insert({ course_id: id, user_id: profile.id })
       if (error) throw error
-      alert('Enrolled')
-    }catch(e:any){ console.error('enroll', e); alert(e?.message || 'Could not enroll') }
+      push({ message: 'Enrolled', type: 'success' })
+    }catch(e:any){ console.error('enroll', e); push({ message: e?.message || 'Could not enroll', type: 'error' }) }
   }
 
   if (loading) return <div className="p-6">Loading…</div>

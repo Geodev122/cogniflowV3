@@ -40,6 +40,7 @@ export default function PracticeManagement() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { profile } = useAuth()
+  const { push } = useToast()
 
   useEffect(() => {
     if (profile) {
@@ -97,6 +98,7 @@ export default function PracticeManagement() {
           return
         }
         console.warn('Error fetching appointments for practice stats:', appointmentsError)
+        push({ message: 'Error loading appointments for stats', type: 'error' })
       }
 
       const totalClients = clientRelations?.length || 0
@@ -114,6 +116,8 @@ export default function PracticeManagement() {
         completionRate: totalSessions > 0 ? Math.round((completedSessions / totalSessions) * 100) : 0,
         noShowRate: totalSessions > 0 ? Math.round((noShows / totalSessions) * 100) : 0
       })
+      // Informational toast summarizing key stats
+      push({ message: `Practice stats loaded — ${totalClients} clients, ${completedSessions} completed sessions.`, type: 'info' })
     } catch (error) {
       console.error('Error fetching practice stats:', error)
       if (isRecursionError(error)) {

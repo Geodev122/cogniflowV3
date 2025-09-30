@@ -381,7 +381,7 @@ export const Clienteles: React.FC = () => {
     const link = `${window.location.origin}/intake/${r.id}`
     if (via === 'whatsapp') {
       const phone = formatWhatsappDigits((r.phone || r.whatsapp_number || ''))
-      if (!phone || phone.replace(/\D/g, '').length < 6) return alert('No valid WhatsApp number on file.')
+      if (!phone || phone.replace(/\D/g, '').length < 6) return setToast({ type: 'error', message: 'No valid WhatsApp number on file.' })
       const code = r.patient_code || 'your code'
       const text = `Hello ${r.first_name || ''}, please use the code ${code} to log in and complete your intake form: ${link}`
       window.open(`https://wa.me/${phone.replace('+', '')}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')

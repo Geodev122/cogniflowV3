@@ -205,10 +205,12 @@ export const ClinicRentalPanel: React.FC = () => {
       setModalOpen(false)
       setActiveSpace(null)
       await fetchRequests()
-      alert('Your request was submitted. The clinic/admin will get back to you.')
+      const { push } = useToast()
+      push({ message: 'Your request was submitted. The clinic/admin will get back to you.', type: 'success' })
     } catch (e: any) {
       console.error('[ClinicRental] submitRequest error', e)
-      alert(e?.message || 'Failed to submit request.')
+      const { push } = useToast()
+      push({ message: e?.message || 'Failed to submit request.', type: 'error' })
     } finally {
       setModalSubmitting(false)
     }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useToast } from '../ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDate } from '../../utils/helpers'
 import { 
@@ -207,6 +208,7 @@ export const AssessmentTools: React.FC = () => {
         status: 'assigned'
       }))
 
+      const { push } = useToast()
       const { error } = await supabase
         .from('form_assignments')
         .insert(assignments)
@@ -234,14 +236,15 @@ export const AssessmentTools: React.FC = () => {
       await fetchAssignedAssessments()
       setShowAssignModal(false)
       setSelectedAssessment(null)
-      alert('Assessment assigned successfully!')
+      push({ message: 'Assessment assigned', type: 'success' })
     } catch (error) {
       console.error('Error assigning assessment:', error)
-      alert('Error assigning assessment. Please try again.')
+      push({ message: 'Error assigning assessment. Please try again.', type: 'error' })
     }
   }
 
   const createCustomAssessment = async (formData: any) => {
+    const { push } = useToast()
     try {
       const { error } = await supabase
         .from('custom_forms')
@@ -256,10 +259,10 @@ export const AssessmentTools: React.FC = () => {
 
       setShowCreateForm(false)
       await fetchAssessmentLibrary()
-      alert('Custom assessment created successfully!')
+      push({ message: 'Custom assessment created', type: 'success' })
     } catch (error) {
       console.error('Error creating custom assessment:', error)
-      alert('Error creating custom assessment. Please try again.')
+      push({ message: 'Error creating custom assessment. Please try again.', type: 'error' })
     }
   }
 

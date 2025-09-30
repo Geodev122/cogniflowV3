@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { Plus, CalendarClock, Trash2, Pencil } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
+import { useToast } from '../../components/ui/Toast'
 
 type Appt = {
   id: string
@@ -42,6 +43,7 @@ const SessionManagement: React.FC = () => {
   const [cases, setCases] = useState<Case[]>([])
 
   const canEdit = !!profile?.id
+  const { push } = useToast()
 
   // Helpers to convert between ISO strings and input[type=datetime-local] values
   const toInputDateTime = (iso?: string | null) => {
@@ -121,17 +123,17 @@ const SessionManagement: React.FC = () => {
     if (!editing) return
     // basic validation
     if (!editing.client_id) {
-      alert('Please select a client')
+      push({ message: 'Please select a client', type: 'info' })
       return
     }
     if (!editing.start_time || !editing.end_time) {
-      alert('Please provide start and end times')
+      push({ message: 'Please provide start and end times', type: 'info' })
       return
     }
     const s = new Date(editing.start_time)
     const e = new Date(editing.end_time)
     if (s >= e) {
-      alert('Start time must be before end time')
+      push({ message: 'Start time must be before end time', type: 'info' })
       return
     }
 
@@ -166,17 +168,22 @@ const SessionManagement: React.FC = () => {
       setEditing(null)
       await fetchRows()
     } catch (e: any) {
-      alert(e.message || 'Failed to save appointment')
+      push({ message: e?.message || 'Failed to save appointment', type: 'error' })
     } finally {
       setSaving(false)
     }
   }
 
   const remove = async (id: string) => {
+    // graceful confirmation using toast info with manual confirm flow is complex;
+    // use window.confirm as last-resort but show a toast for the result.
     if (!confirm('Delete this appointment?')) return
     const { error } = await supabase.from('appointments').delete().eq('id', id)
-    if (error) alert(error.message)
-    else fetchRows()
+    if (error) push({ message: error.message || 'Failed to delete appointment', type: 'error' })
+    else {
+      push({ message: 'Appointment deleted', type: 'success' })
+      fetchRows()
+    }
   }
 
   // memoized lookup maps

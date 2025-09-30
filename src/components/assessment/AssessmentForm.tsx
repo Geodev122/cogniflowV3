@@ -250,7 +250,8 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
       onSave?.()
     } catch (e) {
       console.error('[AssessmentForm] save error:', e)
-      alert('Error saving assessment. Please try again.')
+      const { push } = useToast()
+      push({ message: 'Error saving assessment. Please try again.', type: 'error' })
     } finally {
       setSaving(false)
     }
@@ -362,7 +363,8 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({
       onComplete?.()
     } catch (e) {
       console.error('[AssessmentForm] complete error:', e)
-      alert('Error completing assessment. Please try again.')
+      const { push } = useToast()
+      push({ message: 'Error completing assessment. Please try again.', type: 'error' })
     } finally {
       setCompleting(false)
     }

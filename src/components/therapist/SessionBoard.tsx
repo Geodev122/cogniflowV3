@@ -210,7 +210,7 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
       await loadAgenda()
     } catch (e) {
       console.error('[SessionBoard] markAgendaDone error:', e)
-      alert('Could not update agenda item.')
+      push({ message: 'Could not update agenda item.', type: 'error' })
     }
   }
 
@@ -222,7 +222,7 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
       await loadAgenda()
     } catch (e) {
       console.error('[SessionBoard] removeAgendaItem error:', e)
-      alert('Could not remove agenda item.')
+      push({ message: 'Could not remove agenda item.', type: 'error' })
     }
   }
 

@@ -38,10 +38,12 @@ export const TherapistSearchModal: React.FC = () => {
       const { data, error } = await supabase.rpc('create_referral_request', { p_from: supabase.auth.user()?.id, p_to: therapistId, p_client: clientId, p_note: null, p_metadata: null }) as any
       if (error) throw error
       setOpen(false)
-      alert('Referral sent')
+      const { push } = useToast()
+      push({ message: 'Referral sent', type: 'success' })
     } catch (e: any) {
       console.error('referral create', e)
-      alert('Could not send referral: ' + (e?.message || e))
+      const { push } = useToast()
+      push({ message: 'Could not send referral: ' + (e?.message || e), type: 'error' })
     }
   }
 
