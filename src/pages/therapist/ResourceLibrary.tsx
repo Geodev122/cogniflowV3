@@ -505,6 +505,7 @@ const CreateResourceModal: React.FC<{
   onClose: () => void
   onCreated: (resource: Resource) => void
 }> = ({ onClose, onCreated }) => {
+  const { push } = useToast()
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('worksheet')
   const [description, setDescription] = useState('')
@@ -789,6 +790,7 @@ const CreateCourseModal: React.FC<{
   onClose: () => void
   onCreated: (resource: Resource) => void
 }> = ({ onClose, onCreated }) => {
+  const { push } = useToast()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [difficulty, setDifficulty] = useState('beginner')
@@ -1119,7 +1121,7 @@ export default function ResourceLibrary() {
           .select(
             'id, title, category, subcategory, description, content_type, tags, difficulty_level, evidence_level, is_public, created_at, media_url, storage_path, external_url, interactive_schema, course_manifest'
           )
-          .eq('is_public', true)
+          .eq('is_public', true as any)
           .order('created_at', { ascending: false })
 
         if (error) {
