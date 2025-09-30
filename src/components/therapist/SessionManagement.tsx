@@ -190,7 +190,7 @@ export const SessionManagement: React.FC = () => {
   }
 
   const deleteAppointment = async (aptId: string) => {
-    if (!confirm('Delete this appointment?')) return
+    if (!(await confirmAsync({ title: 'Delete appointment', description: 'Delete this appointment?' }))) return
     try {
       const { error: delErr } = await supabase.from('appointments').delete().eq('id', aptId)
       if (delErr) throw delErr

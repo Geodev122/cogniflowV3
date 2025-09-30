@@ -769,11 +769,7 @@ export default function Workspace() {
   const [drawerSessionIndex, setDrawerSessionIndex] = useState<number | null>(null)
 
   // Quick resource modal (🔥 removed stray "the:" label that caused the parser error)
-  const [showCreateResource, setShowCreateResource] = useState(false)
-  const [showResourceSearch, setShowResourceSearch] = useState(false)
-  const [resourceQuery, setResourceQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<ResourceRow[]>([])
-  const [searchLoading, setSearchLoading] = useState(false)
+  // Resource search & create are handled by the SessionBoard (canonical session runner)
   const [showAgenda, setShowAgenda] = useState(true)
   const [showInBetween, setShowInBetween] = useState(true)
   // Confirm modal state for leaving with unsaved changes
@@ -957,103 +953,7 @@ export default function Workspace() {
     setDrawerOpen(true)
   }
 
-  /* Agenda Panel (moved from SessionBoard) */
-  const AgendaPanel: React.FC<{ caseId?: string; therapistId?: string | null }> = ({ caseId, therapistId }) => {
-    const [agendaRows, setAgendaRows] = useState<AgendaItem[]>([])
-    const [loading, setLoading] = useState(false)
-    const [err, setErr] = useState<string | null>(null)
-
-    const load = async () => {
-      if (!caseId || !therapistId) { setAgendaRows([]); return }
-      setLoading(true); setErr(null)
-      try {
-        const { data, error } = await supabase
-          .from('session_agenda')
-          .select('id, case_id, therapist_id, source, source_id, title, payload, created_at, completed_at')
-          .eq('case_id', caseId)
-          .eq('therapist_id', therapistId)
-          .order('created_at', { ascending: false })
-        if (error) throw error
-        setAgendaRows((data ?? []) as AgendaItem[])
-      } catch (e) {
-        console.error('[AgendaPanel] load error:', e)
-        setAgendaRows([])
-        setErr('Failed to load agenda.')
-      } finally { setLoading(false) }
-    }
-
-    useEffect(() => { void load() }, [caseId, therapistId])
-
-    const toggleDone = async (id: string, done: boolean) => {
-      try {
-        const { error } = await supabase.from('session_agenda').update({ completed_at: done ? new Date().toISOString() : null }).eq('id', id)
-        if (error) throw error
-        await load()
-      } catch (e) {
-        console.error('[AgendaPanel] toggleDone error:', e)
-        push({ message: 'Could not update agenda item.', type: 'error' })
-      }
-    }
-
-    const remove = async (id: string) => {
-      const ok = await confirmAsync({ title: 'Remove agenda item', description: 'Remove this agenda item?' })
-      if (!ok) return
-      try {
-        const { error } = await supabase.from('session_agenda').delete().eq('id', id)
-        if (error) throw error
-        await load()
-      } catch (e) {
-        console.error('[AgendaPanel] remove error:', e)
-        push({ message: 'Could not remove agenda item.', type: 'error' })
-      }
-    }
-
-    if (!caseId) {
-      return (
-        <div className="bg-white border rounded-xl p-4">
-          <h3 className="font-medium text-gray-900 mb-1">Session Agenda</h3>
-          <p className="text-sm text-gray-500">Select a case to view session agenda.</p>
-        </div>
-      )
-    }
-
-    return (
-      <div className="bg-white border rounded-xl p-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-medium text-gray-900">Session Agenda</h3>
-          <div className="flex items-center gap-2">
-            <button onClick={() => void load()} className="px-2 py-1 text-xs rounded border">Refresh</button>
-            <button onClick={() => setShowResourceSearch(true)} className="px-2 py-1 text-xs rounded border">Add Resource</button>
-          </div>
-        </div>
-        <div className="mt-3">
-          {loading ? (
-            <div className="text-sm text-gray-500">Loading…</div>
-          ) : err ? (
-            <div className="text-sm text-red-600">{err}</div>
-          ) : agendaRows.length === 0 ? (
-            <div className="text-sm text-gray-500">No queued items yet.</div>
-          ) : (
-            <div className="space-y-2">
-              {agendaRows.map(a => (
-                <div key={a.id} className="border rounded p-2 flex items-start justify-between">
-                  <div>
-                    <div className="text-sm font-medium">{a.title}</div>
-                    <div className="text-xs text-gray-500">{a.source ?? '—'} • {fmt(a.created_at)}</div>
-                    {a.payload?.details && <div className="text-sm text-gray-700 mt-1">{a.payload.details}</div>}
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <button onClick={() => void toggleDone(a.id, !a.completed_at)} className="px-2 py-1 text-xs rounded bg-green-600 text-white">{a.completed_at ? 'Undo' : 'Done'}</button>
-                    <button onClick={() => void remove(a.id)} className="px-2 py-1 text-xs rounded border">Remove</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  }
+  /* AgendaPanel removed — SessionBoard now provides agenda UI & assignment flows */
 
   // Export PDF
   const onExportPDF = useCallback(async () => {
@@ -1137,25 +1037,7 @@ export default function Workspace() {
               )}
             </div>
 
-            {/* Quick Create Resource (Private/Public) */}
-            {profile?.id && (
-              <>
-                <button
-                  onClick={() => window.dispatchEvent(new CustomEvent('open-resource-library'))}
-                  className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50 inline-flex items-center gap-1"
-                  title="Search & assign a resource to this client/session"
-                >
-                  <Plus className="w-4 h-4" /> New Resource
-                </button>
-                <button
-                  onClick={() => setShowCreateResource(true)}
-                  className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50 inline-flex items-center gap-1"
-                  title="Create a new resource"
-                >
-                  <FileText className="w-4 h-4" /> Create
-                </button>
-              </>
-            )}
+            {/* Resource management moved into SessionBoard — use the 'New Resource' button there */}
 
             {/* Flag Case */}
             <button
@@ -1200,74 +1082,18 @@ export default function Workspace() {
 
       {/* Body */}
       <div className="flex-1 min-h-0">
-        <div className="max-w-7xl mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left panel: Agenda -> InBetween -> Assessments (all toggleable) */}
-          <div className="space-y-4">
-            <div className="bg-white border rounded-xl p-0 overflow-hidden">
-              <div className="p-3 flex items-center justify-between border-b">
-                <div className="flex items-center gap-2"><ClipboardList className="w-4 h-4 text-blue-600" /><h3 className="font-medium text-gray-900">Agenda</h3></div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setShowAgenda(s => !s)} className="px-2 py-1 text-sm rounded border">{showAgenda ? 'Hide' : 'Show'}</button>
-                </div>
-              </div>
-              <div className="p-4">
-                {showAgenda ? <AgendaPanel caseId={selectedCaseId || undefined} therapistId={profile?.id ?? null} /> : <div className="text-sm text-gray-500">Agenda hidden. Click Show to expand.</div>}
-              </div>
-            </div>
-
-            <div>
-              {showInBetween ? (
-                <InBetweenPanel caseId={selectedCaseId} therapistId={profile?.id ?? null} />
-              ) : (
-                <div className="bg-white border rounded-xl p-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium text-gray-900">In-Between Sessions</h3>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setShowInBetween(s => !s)} className="px-2 py-1 text-sm rounded border">Show</button>
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-500">In-Between panel hidden.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white border rounded-xl p-0 overflow-hidden">
-              <div className="p-3 flex items-center justify-between border-b">
-                <h3 className="font-medium text-gray-900">Assessments</h3>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      try { localStorage.setItem('ws_show_assessment', String(!showAssessment)) } catch {}
-                      setShowAssessment(s => !s)
-                    }}
-                    className="px-2 py-1 text-sm rounded border hover:bg-gray-50"
-                  >
-                    {showAssessment ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-              </div>
-
-              {showAssessment ? (
-                <div className="p-0">
-                  <AssessmentWorkspace initialInstanceId={undefined} onClose={() => { /* noop when embedded */ }} />
-                </div>
-              ) : (
-                <div className="p-4 text-sm text-gray-500">Assessments hidden. Click Show to expand.</div>
-              )}
+          <div className="max-w-7xl mx-auto p-4 lg:p-6">
+            {/* SessionBoard is the canonical full-width session runner and owns agenda & resources */}
+            <div className="bg-white border rounded-xl p-4">
+              <SessionBoard
+                ref={sessionRef}
+                defaultCaseId={current?.id || ''}
+                defaultClientId={current?.client_id || ''}
+                onSavingChange={setIsSaving}
+                onDirtyChange={setIsDirty}
+              />
             </div>
           </div>
-
-          {/* Session Board (always rendered for structure) */}
-          <div className="lg:col-span-2 bg-white border rounded-xl p-4">
-            <SessionBoard
-              ref={sessionRef}
-              defaultCaseId={current?.id || ''}
-              defaultClientId={current?.client_id || ''}
-              onSavingChange={setIsSaving}
-              onDirtyChange={setIsDirty}
-            />
-          </div>
-        </div>
       </div>
 
       {/* Drawers / Modals */}

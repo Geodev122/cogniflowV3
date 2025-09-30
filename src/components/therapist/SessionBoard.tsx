@@ -19,13 +19,6 @@ import {
 import confirmAsync from '../../utils/confirm'
 import { useToast } from '../../components/ui/Toast'
 
-type QuickResource = {
-  id: string
-  title: string
-  content_type: string | null
-  category: string | null
-}
-
 type ResourceRow = {
   id: string
   title: string
@@ -90,9 +83,7 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
   const lastSaved = useRef<string>('') // for dirty tracking
 
   // Quick resources
-  const [resources, setResources] = useState<QuickResource[]>([])
-  const [resourcesLoading, setResourcesLoading] = useState<boolean>(false)
-  const [resourcesError, setResourcesError] = useState<string | null>(null)
+  // Quick resources removed — SessionBoard uses the resource search modal only
 
   // Session agenda is now rendered by Workspace; SessionBoard keeps only local agenda actions
   const [agenda, setAgenda] = useState<AgendaItem[]>([])
@@ -207,37 +198,7 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
     void loadDraft()
   }, [therapistId, caseId, sessionNoteId])
 
-  /* =========================
-     Fetch quick resources (public)
-  ========================= */
-  useEffect(() => {
-    let cancelled = false
-    const fetchResources = async () => {
-      setResourcesLoading(true)
-      setResourcesError(null)
-      try {
-        const { data, error } = await supabase
-          .from('resource_library')
-          .select('id, title, content_type, category')
-          .eq('is_public', true)
-          .order('created_at', { ascending: false })
-          .limit(8)
-
-        if (error) throw error
-        if (!cancelled) setResources((data ?? []) as QuickResource[])
-      } catch (e) {
-        console.error('[SessionBoard] resources fetch error:', e)
-        if (!cancelled) {
-          setResourcesError('Failed to load resources.')
-          setResources([])
-        }
-      } finally {
-        if (!cancelled) setResourcesLoading(false)
-      }
-    }
-    void fetchResources()
-    return () => { cancelled = true }
-  }, [])
+  /* quick resource list removed to avoid duplicate mini-library in the board */
 
   /* =========================
      Session Agenda: fetch / toggle / remove
@@ -395,12 +356,9 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
     isDirty: () => dirty,
   }))
 
-  // Attach resource (just appends a reference line to the note for now)
-  const attach = (r: QuickResource) => {
-    setContent((prev) =>
-      `${prev}${prev ? '\n\n' : ''}[Attached Resource] ${r.title} (${r.content_type ?? 'other'}/${r.category ?? 'general'})`
-    )
-  }
+  // Resource attachments should be created via the resource search modal and agenda entries
+
+  const [showAgenda, setShowAgenda] = useState<boolean>(true)
 
   // Internal resource search modal (used when header dispatches 'open-resource-library')
   const ResourceSearchModal: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
@@ -486,7 +444,7 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
               </div>
             )}
             <div className="mt-4 text-right">
-              <button onClick={() => { onClose(); setShowCreateResource(true) }} className="px-3 py-2 rounded border">Create new</button>
+              {/* Create new removed — resource creation is handled from a dedicated admin flow */}
             </div>
           </div>
         </div>
@@ -494,119 +452,6 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
     )
   }
 
-  // Internal CreateQuickResource modal (compact copy of workspace version)
-  const [showCreateResource, setShowCreateResource] = useState(false)
-  const CreateQuickResourceModalLocal: React.FC<{ ownerId: string; onClose: () => void; onCreated?: (r: ResourceRow) => void }> = ({ ownerId, onClose, onCreated }) => {
-    const [title, setTitle] = useState('')
-    const [description, setDescription] = useState('')
-    const [contentType, setContentType] = useState('pdf')
-    const [category, setCategory] = useState('worksheet')
-    const [isPublic, setIsPublic] = useState(false)
-    const [externalUrl, setExternalUrl] = useState('')
-    const [file, setFile] = useState<File | null>(null)
-    const [savingLocal, setSavingLocal] = useState(false)
-
-    const submitLocal = async (e: React.FormEvent) => {
-      e.preventDefault()
-      if (!title.trim()) return
-      try {
-        setSavingLocal(true)
-        let storage_path: string | null = null
-        let media_url: string | null = null
-        const ext_url = externalUrl.trim() || null
-
-        if (file) {
-          const key = `uploads/${Date.now()}_${file.name}`
-          const { error: upErr } = await supabase.storage.from('resource_files').upload(key, file, { cacheControl: '3600', upsert: false })
-          if (upErr) throw upErr
-          storage_path = key
-          const { data: pub } = supabase.storage.from('resource_files').getPublicUrl(key)
-          media_url = pub?.publicUrl || null
-        }
-
-        const { data, error } = await supabase
-          .from('resource_library')
-          .insert({ title, description, category, content_type: contentType, therapist_owner_id: ownerId, is_public: isPublic, media_url: media_url || null, storage_path, external_url: ext_url })
-          .select('id, title, description, content_type, category, is_public, therapist_owner_id, media_url, storage_path, external_url, created_at')
-          .single()
-        if (error) throw error
-        onCreated?.(data as ResourceRow)
-        onClose()
-      } catch (e) {
-        console.error('[SessionBoard::CreateQuickResourceModalLocal] error:', e)
-        push({ message: 'Could not create resource. Check storage bucket & RLS.', type: 'error' })
-      } finally {
-        setSavingLocal(false)
-      }
-    }
-
-    return (
-      <div className="fixed inset-0 z-50 overflow-y-auto">
-        <div className="flex min-h-screen items-center justify-center p-4">
-          <div className="fixed inset-0 bg-gray-900/50" onClick={onClose} />
-          <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full">
-            <form onSubmit={submitLocal}>
-              <div className="p-5 border-b flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Create Resource</h3>
-                <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">Close</button>
-              </div>
-              <div className="p-5 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="block text-sm font-medium text-gray-700 mb-1">Title</span>
-                    <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-3 py-2 border rounded" required />
-                  </label>
-                  <label className="block">
-                    <span className="block text-sm font-medium text-gray-700 mb-1">Category</span>
-                    <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-3 py-2 border rounded">
-                      <option value="worksheet">Worksheet</option>
-                      <option value="educational">Educational</option>
-                      <option value="intervention">Intervention</option>
-                      <option value="protocol">Protocol</option>
-                    </select>
-                  </label>
-                </div>
-                <label className="block">
-                  <span className="block text-sm font-medium text-gray-700 mb-1">Description</span>
-                  <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full px-3 py-2 border rounded" />
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <label className="block">
-                    <span className="block text-sm font-medium text-gray-700 mb-1">Content Type</span>
-                    <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="w-full px-3 py-2 border rounded">
-                      <option value="pdf">PDF</option>
-                      <option value="video">Video</option>
-                      <option value="audio">Audio</option>
-                      <option value="link">External Link</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="block text-sm font-medium text-gray-700 mb-1">Visibility</span>
-                    <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => setIsPublic(false)} className={`flex-1 px-3 py-2 border rounded inline-flex items-center gap-1 ${!isPublic ? 'bg-gray-900 text-white' : ''}`}>Private</button>
-                      <button type="button" onClick={() => setIsPublic(true)} className={`flex-1 px-3 py-2 border rounded inline-flex items-center gap-1 ${isPublic ? 'bg-blue-600 text-white' : ''}`}>Public</button>
-                    </div>
-                  </label>
-                  <label className="block">
-                    <span className="block text-sm font-medium text-gray-700 mb-1">External URL</span>
-                    <input value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://…" className="w-full px-3 py-2 border rounded" />
-                  </label>
-                </div>
-                <label className="block">
-                  <span className="block text-sm font-medium text-gray-700 mb-1">Upload file (optional)</span>
-                  <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="w-full text-sm" />
-                </label>
-              </div>
-              <div className="p-5 border-t flex justify-end gap-2">
-                <button type="button" onClick={onClose} className="px-4 py-2 border rounded">Cancel</button>
-                <button type="submit" disabled={savingLocal || !title.trim()} className="px-6 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{savingLocal ? 'Saving…' : 'Create'}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   // Listen for header or other components requesting the resource library open
   useEffect(() => {
@@ -618,14 +463,16 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
   const [showResourceSearch, setShowResourceSearch] = useState(false)
 
   return (
-    <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-4">
+    <div className="w-full h-full space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ClipboardList className="w-6 h-6 text-blue-600" />
           <h2 className="text-2xl font-bold text-gray-900">Session Board</h2>
         </div>
-        <div className="text-xs text-gray-500">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowAgenda(s => !s)} className="px-2 py-1 text-xs rounded border">{showAgenda ? 'Hide Agenda' : 'Show Agenda'}</button>
+          <div className="text-xs text-gray-500">
           {!therapistId
             ? 'Sign in required'
             : saving
@@ -633,12 +480,13 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
             : dirty
             ? 'Unsaved changes'
             : (saveInfo || 'Idle')}
+          </div>
         </div>
       </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left column: Session Agenda (kept but callers can hide) */}
-        <div className="bg-white border rounded-lg shadow-sm p-4">
+        {/* Left column: Session Agenda (kept but can be hidden) */}
+        {showAgenda && (
+          <div className="bg-white border rounded-lg shadow-sm p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <ListChecks className="w-4 h-4 text-blue-600" />
@@ -712,48 +560,12 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
           )}
 
           {/* Quick Resources (compact, under agenda) */}
-          <div className="mt-5 pt-4 border-t">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-sm font-semibold text-gray-900">Quick Resources</div>
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent('open-resource-library'))}
-                className="text-xs text-blue-600 hover:underline"
-              >
-                Open Library
-              </button>
-            </div>
-
-            {resourcesLoading ? (
-              <div className="text-sm text-gray-500">Loading resources…</div>
-            ) : resourcesError ? (
-              <div className="text-sm text-red-600">{resourcesError}</div>
-            ) : resources.length === 0 ? (
-              <div className="text-sm text-gray-500">No resources available.</div>
-            ) : (
-              <div className="space-y-2">
-                {resources.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between border rounded p-2">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-gray-900 truncate">{r.title}</div>
-                      <div className="text-xs text-gray-500">
-                        {r.content_type ?? 'other'} • {r.category ?? 'general'}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => attach(r)}
-                      className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                    >
-                      Attach
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+                {/* Quick Resources removed — use the full Resource Library via the header or the resource search modal */}
           </div>
-        </div>
+        )}
 
         {/* Note editor */}
-        <div className="lg:col-span-2 bg-white border rounded-lg shadow-sm p-4">
+        <div className={`${showAgenda ? 'lg:col-span-2' : 'lg:col-span-3'} bg-white border rounded-lg shadow-sm p-4`}>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3 items-center">
             <div>
               {/* Session history dropdown and new session control */}
