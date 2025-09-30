@@ -9,6 +9,8 @@ import React, {
 } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import AssessmentWorkspace from '../assessment/AssessmentWorkspace'
+import { InBetweenSessions } from './InBetweenSessions'
 import {
   ClipboardList,
   ListChecks,
@@ -473,13 +475,7 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
         <div className="flex items-center gap-3">
           <button onClick={() => setShowAgenda(s => !s)} className="px-2 py-1 text-xs rounded border">{showAgenda ? 'Hide Agenda' : 'Show Agenda'}</button>
           <div className="text-xs text-gray-500">
-          {!therapistId
-            ? 'Sign in required'
-            : saving
-            ? 'Saving…'
-            : dirty
-            ? 'Unsaved changes'
-            : (saveInfo || 'Idle')}
+            {!caseId ? 'Select a case from the header to enable sessions' : !therapistId ? 'Sign in required' : saving ? 'Saving…' : dirty ? 'Unsaved changes' : (saveInfo || 'Idle')}
           </div>
         </div>
       </div>
@@ -564,8 +560,8 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
           </div>
         )}
 
-        {/* Note editor */}
-        <div className={`${showAgenda ? 'lg:col-span-2' : 'lg:col-span-3'} bg-white border rounded-lg shadow-sm p-4`}>
+  {/* Note editor */}
+  <div className={`${showAgenda ? 'lg:col-span-2' : 'lg:col-span-3'} bg-white border rounded-lg shadow-sm p-4`}>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3 items-center">
             <div>
               {/* Session history dropdown and new session control */}
@@ -645,6 +641,17 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
               />
 
               <div className="mt-3 flex items-center justify-end gap-2">
+                    <button
+                      onClick={async () => {
+                        const ok = await persist(content)
+                        if (ok) push({ message: 'Saved', type: 'success' })
+                      }}
+                      disabled={!caseId || !therapistId}
+                      className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
+                    >
+                      Save
+                    </button>
+
                 <button
                   onClick={async () => {
                     const ok = await persist(content, { finalize: true })
@@ -680,8 +687,83 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
                 >
                   Save & Exit
                 </button>
+
+                <button
+                  onClick={async () => {
+                    if (!caseId) return push({ message: 'Select a case first', type: 'info' })
+                    // Export recent notes and activities for this case
+                    try {
+                      const [{ data: notes, error: nErr }, { data: acts, error: aErr }] = await Promise.all([
+                        supabase
+                          .from('session_notes')
+                          .select('id, case_id, therapist_id, content, created_at, updated_at, session_index')
+                          .eq('case_id', caseId)
+                          .order('updated_at', { ascending: false })
+                          .limit(30),
+                        supabase
+                          .from('client_activities')
+                          .select('id, case_id, client_id, type, title, details, occurred_at, session_phase, reviewed_at, reviewed_by')
+                          .eq('case_id', caseId)
+                          .order('occurred_at', { ascending: false })
+                          .limit(50),
+                      ])
+                      if (nErr || aErr) throw nErr || aErr
+
+                      // minimal export: try to use jspdf; if missing, inform
+                      let jsPDFMod: any = null
+                      try {
+                        jsPDFMod = await import(/* @vite-ignore */ 'jspdf')
+                      } catch {
+                        push({ message: 'PDF export requires the "jspdf" package. Install with `npm i jspdf`.', type: 'info' })
+                        return
+                      }
+                      const jsPDF = jsPDFMod.default || jsPDFMod.jsPDF || jsPDFMod
+                      const doc = new jsPDF()
+                      let y = 14
+                      const line = (txt: string) => { doc.text(txt, 14, y); y += 6 }
+                      doc.setFont('helvetica', 'bold'); doc.setFontSize(14)
+                      line(`Case Summary — ${caseId}`)
+                      doc.setFont('helvetica', 'normal'); doc.setFontSize(10)
+                      line(`Generated: ${new Date().toLocaleString()}`)
+                      y += 4
+                      doc.setFont('helvetica', 'bold'); line('Recent Session Notes')
+                      doc.setFont('helvetica', 'normal')
+                      ;(notes ?? []).slice(0, 20).forEach((n: any) => {
+                        const txt = typeof n.content === 'string' ? n.content : JSON.stringify(n.content)
+                        const head = `${new Date(n.updated_at || n.created_at).toLocaleString()} — S${n.session_index ?? '•'}`
+                        line(head)
+                        const chunks = txt.slice(0, 800).match(/.{1,90}(\s|$)/g) || []
+                        chunks.forEach((c: string) => { line(c.trim()) })
+                        y += 2
+                        if (y > 280) { doc.addPage(); y = 14 }
+                      })
+                      doc.save(`case-summary-${caseId}.pdf`)
+                    } catch (e) {
+                      console.error('[SessionBoard] export error', e)
+                      push({ message: 'Export failed. Check console for details.', type: 'error' })
+                    }
+                  }}
+                  className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50"
+                >
+                  Export Summary
+                </button>
               </div>
             </>
+          )}
+        </div>
+        {/* Right column: Assessments & In-Between panel (embedded) */}
+        <div className={`hidden lg:block bg-white border rounded-lg shadow-sm p-4 ${showAgenda ? '' : 'lg:col-span-3'}`}>
+          {caseId ? (
+            <div className="space-y-4">
+              <div>
+                <AssessmentWorkspace />
+              </div>
+              <div>
+                <InBetweenSessions caseFile={{ client: { id: clientId } }} onUpdate={() => { void loadAgenda() }} />
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500">Select a case to enable assessments & in-between tasks.</div>
           )}
         </div>
       </div>
