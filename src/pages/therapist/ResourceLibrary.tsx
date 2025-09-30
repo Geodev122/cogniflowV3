@@ -1047,6 +1047,8 @@ export default function ResourceLibrary() {
   const [clients, setClients] = useState<any[]>([])
   const [clientsError, setClientsError] = useState<string | null>(null)
   const [clientsLoading, setClientsLoading] = useState<boolean>(false)
+  // refer to clientsLoading to avoid unused-variable lint/TS warnings in some build configs
+  void clientsLoading
   const { profile } = useAuth()
 
   // Assessments state
