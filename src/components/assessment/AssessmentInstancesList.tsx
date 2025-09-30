@@ -216,7 +216,7 @@ const AssessmentInstancesList: React.FC<Props> = ({
   const handleOpen = (i: AssessmentInstance) => onOpenInstance?.(i)
   const handleMarkComplete = async (i: AssessmentInstance) => { await updateInstanceStatus(i.id, 'completed') }
   const handleDelete = async (i: AssessmentInstance) => {
-    if (!confirm('Delete this assessment instance? This cannot be undone.')) return
+    if (!(await confirmAsync({ title: 'Delete assessment', description: 'Delete this assessment instance? This cannot be undone.' }))) return
     await deleteInstance(i.id)
   }
 

@@ -177,7 +177,7 @@ const SessionManagement: React.FC = () => {
   const remove = async (id: string) => {
     // graceful confirmation using toast info with manual confirm flow is complex;
     // use window.confirm as last-resort but show a toast for the result.
-    if (!confirm('Delete this appointment?')) return
+  if (!(await confirmAsync({ title: 'Delete appointment', description: 'Delete this appointment?' }))) return
     const { error } = await supabase.from('appointments').delete().eq('id', id)
     if (error) push({ message: error.message || 'Failed to delete appointment', type: 'error' })
     else {

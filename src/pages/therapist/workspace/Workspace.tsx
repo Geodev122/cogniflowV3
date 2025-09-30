@@ -560,162 +560,7 @@ const InBetweenPanel: React.FC<{
   )
 }
 
-/* =========================================================
-   Quick "Create Resource" Modal with Public/Private toggle
-========================================================= */
-
-const CreateQuickResourceModal: React.FC<{
-  ownerId: string
-  onClose: () => void
-  onCreated: (r: ResourceRow) => void
-}> = ({ ownerId, onClose, onCreated }) => {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [contentType, setContentType] = useState('pdf')
-  const [category, setCategory] = useState('worksheet')
-  const [isPublic, setIsPublic] = useState(false)
-  const [externalUrl, setExternalUrl] = useState('')
-  const [file, setFile] = useState<File | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!title.trim()) return
-    try {
-      setSaving(true)
-      let storage_path: string | null = null
-      let media_url: string | null = null
-      const ext_url = externalUrl.trim() || null
-
-      if (file) {
-        const key = `uploads/${Date.now()}_${file.name}`
-        const { error: upErr } = await supabase.storage.from('resource_files').upload(key, file, {
-          cacheControl: '3600',
-          upsert: false,
-        })
-        if (upErr) throw upErr
-        storage_path = key
-        const { data: pub } = supabase.storage.from('resource_files').getPublicUrl(key)
-        media_url = pub?.publicUrl || null
-      }
-
-      const { data, error } = await supabase
-        .from('resource_library')
-        .insert({
-          title,
-          description,
-          category,
-          content_type: contentType,
-          therapist_owner_id: ownerId,
-          is_public: isPublic,
-          media_url: media_url || null,
-          storage_path,
-          external_url: ext_url,
-        })
-        .select('id, title, description, content_type, category, is_public, therapist_owner_id, media_url, storage_path, external_url, created_at')
-        .single()
-
-      if (error) throw error
-      onCreated(data as ResourceRow)
-      onClose()
-    } catch (e) {
-      console.error('[CreateQuickResourceModal] error:', e)
-      push({ message: 'Could not create resource. Check storage bucket & RLS.', type: 'error' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="fixed inset-0 bg-gray-900/50" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl max-w-2xl w-full">
-          <form onSubmit={submit}>
-            <div className="p-5 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Create Resource</h3>
-              <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="block">
-                  <span className="block text-sm font-medium text-gray-700 mb-1">Title</span>
-                  <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-3 py-2 border rounded" required />
-                </label>
-                <label className="block">
-                  <span className="block text-sm font-medium text-gray-700 mb-1">Category</span>
-                  <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-3 py-2 border rounded">
-                    <option value="worksheet">Worksheet</option>
-                    <option value="educational">Educational</option>
-                    <option value="intervention">Intervention</option>
-                    <option value="protocol">Protocol</option>
-                  </select>
-                </label>
-              </div>
-
-              <label className="block">
-                <span className="block text-sm font-medium text-gray-700 mb-1">Description</span>
-                <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full px-3 py-2 border rounded" />
-              </label>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <label className="block">
-                  <span className="block text-sm font-medium text-gray-700 mb-1">Content Type</span>
-                  <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="w-full px-3 py-2 border rounded">
-                    <option value="pdf">PDF</option>
-                    <option value="video">Video</option>
-                    <option value="audio">Audio</option>
-                    <option value="link">External Link</option>
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="block text-sm font-medium text-gray-700 mb-1">Visibility</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsPublic(false)}
-                      className={`flex-1 px-3 py-2 border rounded inline-flex items-center gap-1 ${!isPublic ? 'bg-gray-900 text-white' : ''}`}
-                    >
-                      <Shield className="w-4 h-4" /> Private
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsPublic(true)}
-                      className={`flex-1 px-3 py-2 border rounded inline-flex items-center gap-1 ${isPublic ? 'bg-blue-600 text-white' : ''}`}
-                    >
-                      <Globe className="w-4 h-4" /> Public
-                    </button>
-                  </div>
-                </label>
-
-                <label className="block">
-                  <span className="block text-sm font-medium text-gray-700 mb-1">External URL</span>
-                  <input value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://…" className="w-full px-3 py-2 border rounded" />
-                </label>
-              </div>
-
-              <label className="block">
-                <span className="block text-sm font-medium text-gray-700 mb-1">Upload file (optional)</span>
-                <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="w-full text-sm" />
-              </label>
-            </div>
-
-            <div className="p-5 border-t flex justify-end gap-2">
-              <button type="button" onClick={onClose} className="px-4 py-2 border rounded">Cancel</button>
-              <button type="submit" disabled={saving || !title.trim()} className="px-6 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
-                {saving ? 'Saving…' : 'Create'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  )
-}
+/* CreateQuickResourceModal removed from Workspace; SessionBoard provides canonical create/search flows now. */
 
 /* =========================================================
    Resource Search / Assign Modal
@@ -1151,7 +996,7 @@ export default function Workspace() {
     }
 
     const remove = async (id: string) => {
-      const ok = confirm('Remove agenda item?')
+      const ok = await confirmAsync({ title: 'Remove agenda item', description: 'Remove this agenda item?' })
       if (!ok) return
       try {
         const { error } = await supabase.from('session_agenda').delete().eq('id', id)
@@ -1436,23 +1281,7 @@ export default function Workspace() {
         sessionIndex={drawerSessionIndex ?? undefined}
       />
 
-      {showCreateResource && profile?.id && (
-        <CreateQuickResourceModal
-          ownerId={profile.id}
-          onClose={() => setShowCreateResource(false)}
-          onCreated={() => setShowCreateResource(false)}
-        />
-      )}
-      {showResourceSearch && (
-        <ResourceSearchModal
-          open={showResourceSearch}
-          onClose={() => setShowResourceSearch(false)}
-          caseId={selectedCaseId || undefined}
-          clientId={current?.client_id ?? undefined}
-          therapistId={profile?.id ?? undefined}
-          onCreateNew={() => setShowCreateResource(true)}
-        />
-      )}
+      {/* Resource search & create flows are now handled by SessionBoard (single canonical session runner) */}
       {/* Confirm modal used by confirmLeave */}
       <ConfirmModal
         open={confirmOpen}

@@ -756,7 +756,8 @@ export const Clienteles: React.FC = () => {
 
       const intakeUrl = `${window.location.origin}/intake/${targetId}`
       const msg = `Client created.\n\n• Temp password: ${patientCode || '(no temp password)'}\n• Patient code: ${finalPatientCode || '(not available)'}\n• Intake: ${intakeUrl}\n\nOpen WhatsApp to share this now?`
-      if (confirm(msg)) {
+  const ok = await confirmAsync({ title: 'Confirm', description: msg })
+  if (ok) {
         const waText = `Hello ${firstName}, please use the code ${finalPatientCode || patientCode || 'your code'} to log in and complete your intake form: ${intakeUrl}`
         const waNumber = cleanPhone.replace('+', '')
         if (waNumber) window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(waText)}`, '_blank', 'noopener,noreferrer')

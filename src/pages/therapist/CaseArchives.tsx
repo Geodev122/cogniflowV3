@@ -287,7 +287,7 @@ export default function CaseArchives() {
   }
 
   const reopen = async (id: string, caseNumber: string | null) => {
-    if (!confirm(`Re-open case ${caseNumber || id.slice(0, 8)}? This will make it active again.`)) return
+  if (!(await confirmAsync({ title: 'Re-open case', description: `Re-open case ${caseNumber || id.slice(0, 8)}? This will make it active again.` }))) return
     
     try {
       const { error } = await supabase

@@ -16,6 +16,8 @@
   "migrate:apply": "node ./supabase/scripts/apply_migration.js",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "clean": "rm -rf dist node_modules/.vite",
+  "test": "vitest",
+  "test:watch": "vitest --watch",
     "gen:db-types": "echo \"Run: supabase gen types typescript --schema public > src/types/database.ts\"",
     "reinstall": "npm run clean && npm install"
   },
