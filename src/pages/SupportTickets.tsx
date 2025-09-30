@@ -325,7 +325,7 @@ export default function SupportTickets() {
     const payload: any = { name: name || null, email: email || null, message: message || null }
     try {
       // Try to write to contact_messages table if it exists
-      await run(supabase.from('contact_messages').insert(payload).select('*').maybeSingle())
+  await run(supabase.from('contact_messages').insert(payload).select('*').maybeSingle() as any)
       setStatus('Saved — thanks, we will follow up via email.')
     } catch (err:any) {
       // Fallback to a simple POST to an optional serverless endpoint
