@@ -718,6 +718,111 @@ const CreateQuickResourceModal: React.FC<{
 }
 
 /* =========================================================
+   Resource Search / Assign Modal
+   - search resource_library by title/category
+   - assign selected resource to current case/client by inserting session_agenda with source=resource
+========================================================= */
+
+const ResourceSearchModal: React.FC<{
+  open: boolean
+  onClose: () => void
+  caseId?: string
+  clientId?: string | null
+  therapistId?: string | null
+  onCreateNew?: () => void
+}> = ({ open, onClose, caseId, clientId, therapistId, onCreateNew }) => {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<ResourceRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const { push } = useToast()
+
+  const search = async (q: string) => {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('resource_library')
+        .select('id, title, description, content_type, category, media_url, external_url')
+        .ilike('title', `%${q}%`)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (error) throw error
+      setResults((data ?? []) as ResourceRow[])
+    } catch (e) {
+      console.error('[ResourceSearchModal] search error:', e)
+      push({ message: 'Resource search failed.', type: 'error' })
+      setResults([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const assign = async (r: ResourceRow) => {
+    if (!caseId || !therapistId) return push({ message: 'Select a case before assigning resources.', type: 'error' })
+    try {
+      const payload = {
+        case_id: caseId,
+        therapist_id: therapistId,
+        source: 'resource',
+        source_id: r.id,
+        title: `Resource: ${r.title}`,
+        payload: { resource: r },
+        created_at: new Date().toISOString(),
+      }
+      const { error } = await supabase.from('session_agenda').insert(payload as any)
+      if (error) throw error
+      push({ message: 'Assigned resource to session agenda.', type: 'success' })
+      onClose()
+    } catch (e) {
+      console.error('[ResourceSearchModal] assign error:', e)
+      push({ message: 'Could not assign resource (check RLS).', type: 'error' })
+    }
+  }
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute left-1/2 top-12 transform -translate-x-1/2 w-full max-w-3xl bg-white shadow-xl border rounded-lg">
+        <div className="p-4 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">Search Resources</h3>
+          <button onClick={onClose} className="text-gray-500">Close</button>
+        </div>
+        <div className="p-4">
+          <div className="flex gap-2 mb-3">
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by title…" className="flex-1 px-3 py-2 border rounded" />
+            <button onClick={() => void search(query)} className="px-3 py-2 rounded bg-blue-600 text-white">Search</button>
+          </div>
+          {loading ? (
+            <div className="text-sm text-gray-500">Searching…</div>
+          ) : results.length === 0 ? (
+            <div className="text-sm text-gray-500">No results. Try another term or create a new resource.</div>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {results.map(r => (
+                <div key={r.id} className="border rounded p-3 flex items-start justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{r.title}</div>
+                    <div className="text-xs text-gray-500">{r.content_type ?? 'other'} • {r.category ?? 'general'}</div>
+                    {r.description ? <div className="text-sm text-gray-700 mt-1">{r.description.slice(0,200)}</div> : null}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button onClick={() => assign(r)} className="px-3 py-1 rounded bg-blue-600 text-white text-sm">Assign</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-4 text-right">
+            <button onClick={() => { onClose(); onCreateNew?.() }} className="px-3 py-2 rounded border">Create new</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* =========================================================
    PDF Export helper — lazy import with vite-ignore
 ========================================================= */
 
@@ -820,6 +925,12 @@ export default function Workspace() {
 
   // Quick resource modal (🔥 removed stray "the:" label that caused the parser error)
   const [showCreateResource, setShowCreateResource] = useState(false)
+  const [showResourceSearch, setShowResourceSearch] = useState(false)
+  const [resourceQuery, setResourceQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<ResourceRow[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [showAgenda, setShowAgenda] = useState(true)
+  const [showInBetween, setShowInBetween] = useState(true)
   // Confirm modal state for leaving with unsaved changes
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirmResolve, setConfirmResolve] = useState<null | ((v: boolean) => void)>(null)
@@ -861,6 +972,13 @@ export default function Workspace() {
     }
     run()
   }, [profile])
+
+  // Listen for programmatic 'open-resource-library' events from SessionBoard
+  useEffect(() => {
+    const h = () => setShowResourceSearch(true)
+    window.addEventListener('open-resource-library', h as any)
+    return () => window.removeEventListener('open-resource-library', h as any)
+  }, [])
 
   // Sync selected with route
   useEffect(() => {
@@ -1001,6 +1119,104 @@ export default function Workspace() {
     setDrawerOpen(true)
   }
 
+  /* Agenda Panel (moved from SessionBoard) */
+  const AgendaPanel: React.FC<{ caseId?: string; therapistId?: string | null }> = ({ caseId, therapistId }) => {
+    const [agendaRows, setAgendaRows] = useState<AgendaItem[]>([])
+    const [loading, setLoading] = useState(false)
+    const [err, setErr] = useState<string | null>(null)
+
+    const load = async () => {
+      if (!caseId || !therapistId) { setAgendaRows([]); return }
+      setLoading(true); setErr(null)
+      try {
+        const { data, error } = await supabase
+          .from('session_agenda')
+          .select('id, case_id, therapist_id, source, source_id, title, payload, created_at, completed_at')
+          .eq('case_id', caseId)
+          .eq('therapist_id', therapistId)
+          .order('created_at', { ascending: false })
+        if (error) throw error
+        setAgendaRows((data ?? []) as AgendaItem[])
+      } catch (e) {
+        console.error('[AgendaPanel] load error:', e)
+        setAgendaRows([])
+        setErr('Failed to load agenda.')
+      } finally { setLoading(false) }
+    }
+
+    useEffect(() => { void load() }, [caseId, therapistId])
+
+    const toggleDone = async (id: string, done: boolean) => {
+      try {
+        const { error } = await supabase.from('session_agenda').update({ completed_at: done ? new Date().toISOString() : null }).eq('id', id)
+        if (error) throw error
+        await load()
+      } catch (e) {
+        console.error('[AgendaPanel] toggleDone error:', e)
+        push({ message: 'Could not update agenda item.', type: 'error' })
+      }
+    }
+
+    const remove = async (id: string) => {
+      const ok = confirm('Remove agenda item?')
+      if (!ok) return
+      try {
+        const { error } = await supabase.from('session_agenda').delete().eq('id', id)
+        if (error) throw error
+        await load()
+      } catch (e) {
+        console.error('[AgendaPanel] remove error:', e)
+        push({ message: 'Could not remove agenda item.', type: 'error' })
+      }
+    }
+
+    if (!caseId) {
+      return (
+        <div className="bg-white border rounded-xl p-4">
+          <h3 className="font-medium text-gray-900 mb-1">Session Agenda</h3>
+          <p className="text-sm text-gray-500">Select a case to view session agenda.</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="bg-white border rounded-xl p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-medium text-gray-900">Session Agenda</h3>
+          <div className="flex items-center gap-2">
+            <button onClick={() => void load()} className="px-2 py-1 text-xs rounded border">Refresh</button>
+            <button onClick={() => setShowResourceSearch(true)} className="px-2 py-1 text-xs rounded border">Add Resource</button>
+          </div>
+        </div>
+        <div className="mt-3">
+          {loading ? (
+            <div className="text-sm text-gray-500">Loading…</div>
+          ) : err ? (
+            <div className="text-sm text-red-600">{err}</div>
+          ) : agendaRows.length === 0 ? (
+            <div className="text-sm text-gray-500">No queued items yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {agendaRows.map(a => (
+                <div key={a.id} className="border rounded p-2 flex items-start justify-between">
+                  <div>
+                    <div className="text-sm font-medium">{a.title}</div>
+                    <div className="text-xs text-gray-500">{a.source ?? '—'} • {fmt(a.created_at)}</div>
+                    {a.payload?.details && <div className="text-sm text-gray-700 mt-1">{a.payload.details}</div>}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button onClick={() => void toggleDone(a.id, !a.completed_at)} className="px-2 py-1 text-xs rounded bg-green-600 text-white">{a.completed_at ? 'Undo' : 'Done'}</button>
+                    <button onClick={() => void remove(a.id)} className="px-2 py-1 text-xs rounded border">Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   // Export PDF
   const onExportPDF = useCallback(async () => {
     if (!selectedCaseId) return
@@ -1085,13 +1301,22 @@ export default function Workspace() {
 
             {/* Quick Create Resource (Private/Public) */}
             {profile?.id && (
-              <button
-                onClick={() => setShowCreateResource(true)}
-                className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50 inline-flex items-center gap-1"
-                title="Create a resource with visibility toggle"
-              >
-                <Plus className="w-4 h-4" /> New Resource
-              </button>
+              <>
+                <button
+                  onClick={() => setShowResourceSearch(true)}
+                  className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50 inline-flex items-center gap-1"
+                  title="Search & assign a resource to this client/session"
+                >
+                  <Plus className="w-4 h-4" /> New Resource
+                </button>
+                <button
+                  onClick={() => setShowCreateResource(true)}
+                  className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50 inline-flex items-center gap-1"
+                  title="Create a new resource"
+                >
+                  <FileText className="w-4 h-4" /> Create
+                </button>
+              </>
             )}
 
             {/* Flag Case */}
@@ -1138,16 +1363,35 @@ export default function Workspace() {
       {/* Body */}
       <div className="flex-1 min-h-0">
         <div className="max-w-7xl mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left panel */}
+          {/* Left panel: Agenda -> InBetween -> Assessments (all toggleable) */}
           <div className="space-y-4">
-            {selectedCaseId && current?.client_id && profile?.id ? (
-              <InBetweenPanel caseId={selectedCaseId} therapistId={profile.id} />
-            ) : (
-              <div className="bg-white border rounded-xl p-4">
-                <h3 className="font-medium text-gray-900 mb-1">In-Between Sessions</h3>
-                <p className="text-sm text-gray-500">Pick a case to load client activities and assessments.</p>
+            <div className="bg-white border rounded-xl p-0 overflow-hidden">
+              <div className="p-3 flex items-center justify-between border-b">
+                <div className="flex items-center gap-2"><ClipboardList className="w-4 h-4 text-blue-600" /><h3 className="font-medium text-gray-900">Agenda</h3></div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowAgenda(s => !s)} className="px-2 py-1 text-sm rounded border">{showAgenda ? 'Hide' : 'Show'}</button>
+                </div>
               </div>
-            )}
+              <div className="p-4">
+                {showAgenda ? <AgendaPanel caseId={selectedCaseId || undefined} therapistId={profile?.id ?? null} /> : <div className="text-sm text-gray-500">Agenda hidden. Click Show to expand.</div>}
+              </div>
+            </div>
+
+            <div>
+              {showInBetween ? (
+                <InBetweenPanel caseId={selectedCaseId} therapistId={profile?.id ?? null} />
+              ) : (
+                <div className="bg-white border rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium text-gray-900">In-Between Sessions</h3>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setShowInBetween(s => !s)} className="px-2 py-1 text-sm rounded border">Show</button>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-500">In-Between panel hidden.</p>
+                </div>
+              )}
+            </div>
 
             <div className="bg-white border rounded-xl p-0 overflow-hidden">
               <div className="p-3 flex items-center justify-between border-b">
@@ -1204,6 +1448,16 @@ export default function Workspace() {
           ownerId={profile.id}
           onClose={() => setShowCreateResource(false)}
           onCreated={() => setShowCreateResource(false)}
+        />
+      )}
+      {showResourceSearch && (
+        <ResourceSearchModal
+          open={showResourceSearch}
+          onClose={() => setShowResourceSearch(false)}
+          caseId={selectedCaseId || undefined}
+          clientId={current?.client_id ?? undefined}
+          therapistId={profile?.id ?? undefined}
+          onCreateNew={() => setShowCreateResource(true)}
         />
       )}
       {/* Confirm modal used by confirmLeave */}

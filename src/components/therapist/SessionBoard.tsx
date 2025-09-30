@@ -80,10 +80,15 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
   const [resourcesLoading, setResourcesLoading] = useState<boolean>(false)
   const [resourcesError, setResourcesError] = useState<string | null>(null)
 
-  // Session agenda
+  // Session agenda is now rendered by Workspace; SessionBoard keeps only local agenda actions
   const [agenda, setAgenda] = useState<AgendaItem[]>([])
   const [agendaLoading, setAgendaLoading] = useState<boolean>(false)
   const [agendaError, setAgendaError] = useState<string | null>(null)
+
+  // Session history / current session tracking
+  const [sessionHistory, setSessionHistory] = useState<Array<{ id: string; session_index?: number | null; updated_at?: string | null }>>([])
+  const [sessionNoteId, setSessionNoteId] = useState<string | null>(null)
+  const [sessionIndex, setSessionIndex] = useState<number | null>(null)
 
   const canSave = useMemo(() => !!therapistId && !!caseId, [therapistId, caseId])
   const dirty = useMemo(() => content.trim() !== lastSaved.current.trim(), [content])
@@ -102,15 +107,53 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
   ========================= */
   useEffect(() => {
     const loadDraft = async () => {
+      // If no case selected, clear
       if (!therapistId || !caseId) {
         lastSaved.current = ''
         setContent('')
+        setSessionHistory([])
+        setSessionNoteId(null)
+        setSessionIndex(null)
         return
       }
+
       try {
+        // Load recent session history for dropdown
+        const { data: hist, error: hErr } = await supabase
+          .from('session_notes')
+          .select('id, session_index, updated_at')
+          .eq('therapist_id', therapistId)
+          .eq('case_id', caseId)
+          .order('updated_at', { ascending: false })
+          .limit(30)
+
+        if (hErr) throw hErr
+        setSessionHistory((hist ?? []) as any)
+
+        // If a specific sessionNoteId is set, load that; otherwise load latest draft as before
+        if (sessionNoteId) {
+          const { data, error } = await supabase
+            .from('session_notes')
+            .select('id, content, session_index')
+            .eq('id', sessionNoteId)
+            .maybeSingle()
+          if (error) throw error
+          if (data?.content) {
+            const text = typeof data.content === 'string' ? data.content : JSON.stringify(data.content)
+            lastSaved.current = text
+            setContent(text)
+            setSessionIndex(data.session_index ?? null)
+          } else {
+            lastSaved.current = ''
+            setContent('')
+          }
+          return
+        }
+
+        // load latest draft (most recent row) if present
         const { data, error } = await supabase
           .from('session_notes')
-          .select('id, content')
+          .select('id, content, session_index')
           .eq('therapist_id', therapistId)
           .eq('case_id', caseId)
           .order('updated_at', { ascending: false })
@@ -121,24 +164,34 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
           console.warn('[SessionBoard] loadDraft error:', error.message)
           lastSaved.current = ''
           setContent('')
+          setSessionNoteId(null)
+          setSessionIndex(null)
           return
         }
+
         if (data?.content) {
           const text = typeof data.content === 'string' ? data.content : JSON.stringify(data.content)
           lastSaved.current = text
           setContent(text)
+          setSessionNoteId(data.id)
+          setSessionIndex(data.session_index ?? null)
         } else {
           lastSaved.current = ''
           setContent('')
+          setSessionNoteId(null)
+          setSessionIndex(null)
         }
       } catch (e) {
         console.warn('[SessionBoard] loadDraft exception:', e)
         lastSaved.current = ''
         setContent('')
+        setSessionHistory([])
+        setSessionNoteId(null)
+        setSessionIndex(null)
       }
     }
     void loadDraft()
-  }, [therapistId, caseId])
+  }, [therapistId, caseId, sessionNoteId])
 
   /* =========================
      Fetch quick resources (public)
@@ -230,6 +283,29 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
     }
   }
 
+  // Load a specific session note into the editor (from history dropdown)
+  const loadSessionById = useCallback(async (id: string | null) => {
+    if (!id) return
+    try {
+      const { data, error } = await supabase
+        .from('session_notes')
+        .select('id, content, session_index')
+        .eq('id', id)
+        .maybeSingle()
+      if (error) throw error
+      if (data?.content) {
+        const text = typeof data.content === 'string' ? data.content : JSON.stringify(data.content)
+        lastSaved.current = text
+        setContent(text)
+        setSessionNoteId(data.id)
+        setSessionIndex(data.session_index ?? null)
+      }
+    } catch (e) {
+      console.error('[SessionBoard] loadSessionById error:', e)
+      push({ message: 'Could not load selected session.', type: 'error' })
+    }
+  }, [])
+
   /* =========================
      Core save routine
   ========================= */
@@ -243,25 +319,36 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
       }
       setSaving(true)
       try {
-        // Ensure you have a unique index on (therapist_id, case_id)
-        // Optional columns: finalized boolean, finalized_at timestamptz
-        const payload: any = {
-          therapist_id: therapistId,
-          client_id: clientId || null,
-          case_id: caseId || null,
-          content: text,
-          updated_at: new Date().toISOString(),
+        // If we are editing a specific session note (sessionNoteId), update by id.
+        if (sessionNoteId) {
+          const payload: any = {
+            content: text,
+            updated_at: new Date().toISOString(),
+          }
+          if (opts?.finalize) {
+            payload.finalized = true
+            payload.finalized_at = new Date().toISOString()
+          }
+          const { error } = await supabase.from('session_notes').update(payload as any).eq('id', sessionNoteId)
+          if (error) throw error
+        } else {
+          // Fallback: upsert draft by therapist+case
+          const payload: any = {
+            therapist_id: therapistId,
+            client_id: clientId || null,
+            case_id: caseId || null,
+            content: text,
+            updated_at: new Date().toISOString(),
+          }
+          if (opts?.finalize) {
+            payload.finalized = true
+            payload.finalized_at = new Date().toISOString()
+          }
+          const { error } = await supabase
+            .from('session_notes')
+            .upsert(payload as any, { onConflict: 'therapist_id,case_id' } as any)
+          if (error) throw error
         }
-        if (opts?.finalize) {
-          payload.finalized = true
-          payload.finalized_at = new Date().toISOString()
-        }
-
-        const { error } = await supabase
-          .from('session_notes')
-          .upsert(payload as any, { onConflict: 'therapist_id,case_id' } as any)
-
-        if (error) throw error
 
         lastSaved.current = text
         showSaveInfo(opts?.finalize ? 'Session finalized' : 'Saved')
@@ -275,7 +362,7 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
         setSaving(false)
       }
     },
-    [canSave, therapistId, clientId, caseId, onSavedOnce, showSaveInfo]
+    [canSave, therapistId, clientId, caseId, onSavedOnce, showSaveInfo, sessionNoteId]
   )
 
   // Autosave (debounced)
@@ -321,7 +408,7 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left column: Session Agenda */}
+        {/* Left column: Session Agenda (kept but callers can hide) */}
         <div className="bg-white border rounded-lg shadow-sm p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -438,19 +525,67 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
 
         {/* Note editor */}
         <div className="lg:col-span-2 bg-white border rounded-lg shadow-sm p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
-            <input
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              placeholder="Client ID"
-              className="px-3 py-2 border rounded text-sm"
-            />
-            <input
-              value={caseId}
-              onChange={(e) => setCaseId(e.target.value)}
-              placeholder="Case ID"
-              className="px-3 py-2 border rounded text-sm"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3 items-center">
+            <div>
+              {/* Session history dropdown and new session control */}
+              {caseId ? (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={sessionNoteId ?? ''}
+                    onChange={(e) => {
+                      const id = e.target.value || null
+                      setSessionNoteId(id)
+                      void loadSessionById(id)
+                    }}
+                    className="px-3 py-2 border rounded text-sm"
+                  >
+                    <option value="">Latest / Draft</option>
+                    {sessionHistory.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.session_index ? `S${s.session_index}` : new Date(s.updated_at || '').toLocaleString()}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={async () => {
+                      // start new session: determine next index and insert a new note row
+                      try {
+                        const { data: last } = await supabase
+                          .from('session_notes')
+                          .select('session_index')
+                          .eq('therapist_id', therapistId)
+                          .eq('case_id', caseId)
+                          .order('session_index', { ascending: false })
+                          .limit(1)
+                          .maybeSingle()
+                        const nextIndex = (last?.session_index ?? 0) + 1
+                        const { data, error } = await supabase
+                          .from('session_notes')
+                          .insert({ therapist_id: therapistId, case_id: caseId, client_id: clientId || null, content: '', session_index: nextIndex, created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as any)
+                          .select('id')
+                          .maybeSingle()
+                        if (error) throw error
+                        if (data?.id) {
+                          setSessionNoteId(data.id)
+                          setSessionIndex(nextIndex)
+                          setContent('')
+                          push({ message: 'Started new session', type: 'success' })
+                        }
+                      } catch (e) {
+                        console.error('[SessionBoard] startNewSession error:', e)
+                        push({ message: 'Could not start a new session.', type: 'error' })
+                      }
+                    }}
+                    className="px-3 py-2 text-sm rounded border hover:bg-gray-50"
+                  >
+                    New Session
+                  </button>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500">Select a case from the header to enable sessions.</div>
+              )}
+            </div>
+
             <div className="text-xs text-gray-500 flex items-center md:justify-end">
               {new Date().toLocaleString()}
             </div>
