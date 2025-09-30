@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Copy, FileText, Brain, MessageSquare, Edit, Users } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '../../lib/supabase'
 
 type Props = {
   clientId: string

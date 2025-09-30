@@ -712,7 +712,7 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
                       // minimal export: try to use jspdf; if missing, inform
                       let jsPDFMod: any = null
                       try {
-                        jsPDFMod = await import(/* @vite-ignore */ 'jspdf')
+                        jsPDFMod = await import('jspdf')
                       } catch {
                         push({ message: 'PDF export requires the "jspdf" package. Install with `npm i jspdf`.', type: 'info' })
                         return

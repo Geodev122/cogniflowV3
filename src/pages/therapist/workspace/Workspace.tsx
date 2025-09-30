@@ -682,7 +682,7 @@ async function exportCaseSummaryPDF(args: {
   // Avoid Vite pre-bundling; caller will show a toast if this returns false
   let jsPDFMod: any = null
   try {
-    jsPDFMod = await import(/* @vite-ignore */ 'jspdf')
+    jsPDFMod = await import('jspdf')
   } catch {
     return false
   }

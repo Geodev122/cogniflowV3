@@ -1,6 +1,6 @@
 // src/components/therapist/ResourceLibrary.tsx
 import React, { useEffect, useMemo, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useAssessments } from '../../hooks/useAssessments'
 import {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../hooks/useAuth'
 import { Users, CheckCircle, X, Clock } from 'lucide-react'
 import { useToasts } from '../ui/ToastContext'
 import ConfirmModal from '../ui/ConfirmModal'
