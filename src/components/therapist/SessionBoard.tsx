@@ -16,6 +16,8 @@ import {
   Trash2,
   RefreshCw,
 } from 'lucide-react'
+import confirmAsync from '../../utils/confirm'
+import { useToast } from '../../components/ui/Toast'
 
 type QuickResource = {
   id: string
@@ -58,6 +60,7 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
 ) {
   const { profile } = useAuth()
   const therapistId = profile?.id ?? null
+  const { push } = useToast()
 
   // keep props in sync
   const [clientId, setClientId] = useState<string>(defaultClientId)
@@ -213,8 +216,6 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
       push({ message: 'Could not update agenda item.', type: 'error' })
     }
   }
-
-  import confirmAsync from '../../utils/confirm'
 
   const removeAgendaItem = async (id: string) => {
     const ok = await confirmAsync({ title: 'Remove agenda item', description: 'Remove this agenda item?' })
