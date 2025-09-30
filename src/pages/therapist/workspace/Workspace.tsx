@@ -973,13 +973,6 @@ export default function Workspace() {
     run()
   }, [profile])
 
-  // Listen for programmatic 'open-resource-library' events from SessionBoard
-  useEffect(() => {
-    const h = () => setShowResourceSearch(true)
-    window.addEventListener('open-resource-library', h as any)
-    return () => window.removeEventListener('open-resource-library', h as any)
-  }, [])
-
   // Sync selected with route
   useEffect(() => {
     setSelectedCaseId(routeCaseId || '')
@@ -1303,7 +1296,7 @@ export default function Workspace() {
             {profile?.id && (
               <>
                 <button
-                  onClick={() => setShowResourceSearch(true)}
+                  onClick={() => window.dispatchEvent(new CustomEvent('open-resource-library'))}
                   className="px-3 py-2 text-sm rounded-lg border hover:bg-gray-50 inline-flex items-center gap-1"
                   title="Search & assign a resource to this client/session"
                 >
