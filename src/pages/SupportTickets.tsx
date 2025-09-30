@@ -105,10 +105,10 @@ const api = {
     // Basic filtering: q -> subject/body search, status, priority, category, assignee (email)
     let query = supabase.from('tickets').select('*, profiles:profiles!user_id(id, first_name, last_name, email)');
     // apply simple filters where possible
-    if (params.status) query = query.eq('status', params.status as string);
-    if (params.priority) query = query.eq('status', params.priority as string); // keep parity if needed
+  if (params.status) query = (query as any).eq('status', params.status as any);
+  if (params.priority) query = (query as any).eq('priority', params.priority as any); // fixed: use priority column
     // category and assignee handling might depend on schema; do a simple select and map server-side
-    const { rows } = await expectMany<TicketListItem>(query);
+  const { rows } = await expectMany<TicketListItem>(query as any);
     // rows may not match TicketListItem shape; best-effort map
     return rows.map((r: any) => ({
       id: String(r.id),
@@ -132,7 +132,7 @@ const api = {
     } as TicketListItem));
   },
   getMessages: async (ticketId: string) => {
-    const { rows } = await expectMany<TicketMessage>(supabase.from('messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }));
+  const { rows } = await expectMany<TicketMessage>(supabase.from('messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }) as any);
     return rows.map((r: any) => ({
       ticket_id: String(r.ticket_id),
       message_id: String(r.id ?? r.message_id),
@@ -150,7 +150,7 @@ const api = {
     payload: { sender_id: string; body: string; is_internal?: boolean }
   ) => {
     const p: any = { ticket_id: ticketId, body: payload.body, is_internal: payload.is_internal ?? false, sender_id: payload.sender_id };
-    const inserted = await run(supabase.from('messages').insert(p).select('*').single());
+  const inserted = await run(supabase.from('messages').insert(p).select('*').single() as any);
     if (!inserted) throw new Error('Failed to insert message');
     const r: any = inserted;
     return {
@@ -171,7 +171,7 @@ const api = {
   ) => {
     const data: any = { ...(patch as any) };
     if (patch.assignee_id !== undefined) data.assignee_id = patch.assignee_id;
-    const updated = await run(supabase.from('tickets').update(data).eq('id', ticketId).select('*').single());
+  const updated = await run(supabase.from('tickets').update(data).eq('id', ticketId).select('*').single() as any);
     if (!updated) throw new Error('Failed to update ticket');
     const r: any = updated;
     return {
@@ -203,7 +203,7 @@ const api = {
       category_key: payload.category_key ?? null,
       priority: payload.priority ?? 'medium',
     };
-    const inserted = await run(supabase.from('tickets').insert(toInsert).select('*').single());
+  const inserted = await run(supabase.from('tickets').insert(toInsert).select('*').single() as any);
     if (!inserted) throw new Error('Failed to create ticket');
     const r: any = inserted;
     return {
@@ -228,18 +228,18 @@ const api = {
     } as TicketListItem;
   },
   listCategories: async () => {
-    const { rows } = await expectMany<SupportCategory>(supabase.from('support_categories').select('*'));
+  const { rows } = await expectMany<SupportCategory>(supabase.from('support_categories').select('*') as any);
     return rows.map((r: any) => ({ key: r.key ?? String(r.id), name: r.name ?? r.key, description: r.description } as SupportCategory));
   },
   listTags: async () => {
-    const { rows } = await expectMany<SupportTag>(supabase.from('support_tags').select('*'));
+    const { rows } = await expectMany<SupportTag>(supabase.from('support_tags').select('*') as any);
     return rows.map((r: any) => ({ key: r.key ?? String(r.id), label: r.label } as SupportTag));
   },
   listProfiles: async (q = '', role?: string) => {
     let query = supabase.from('profiles').select('id, email, first_name, last_name, role');
     if (q) query = query.ilike('email', `%${q}%`).or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`);
     if (role) query = query.eq('role', role);
-    const { rows } = await expectMany<ProfileLite>(query.limit(20));
+  const { rows } = await expectMany<ProfileLite>(query.limit(20) as any);
     return rows.map((r: any) => ({ id: String(r.id), email: r.email, first_name: r.first_name, last_name: r.last_name, role: r.role } as ProfileLite));
   },
 };
