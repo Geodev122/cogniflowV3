@@ -421,6 +421,7 @@ const InBetweenPanel: React.FC<{
   caseId: string
   therapistId: string
 }> = ({ caseId, therapistId }) => {
+  const { push } = useToast()
   const [rows, setRows] = useState<ClientActivity[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -464,7 +465,7 @@ const InBetweenPanel: React.FC<{
       await load()
     } catch (e) {
       console.error('[InBetweenPanel] markReviewed error:', e)
-      alert('Could not mark reviewed.')
+      push({ message: 'Could not mark reviewed.', type: 'error' })
     }
   }
 
@@ -486,10 +487,10 @@ const InBetweenPanel: React.FC<{
       }
       const { error } = await supabase.from('session_agenda').insert(payload as any)
       if (error) throw error
-      alert('Added to next session.')
+      push({ message: 'Added to next session', type: 'success' })
     } catch (e) {
       console.error('[InBetweenPanel] addToNextSession error:', e)
-      alert('Could not add to next session (check table session_agenda & RLS).')
+      push({ message: 'Could not add to next session (check table session_agenda & RLS).', type: 'error' })
     }
   }
 
@@ -867,6 +868,8 @@ export default function Workspace() {
   }, [routeCaseId])
 
   // Window/tab close guard
+  // HMR touch: timestamp to trigger Vite update
+  // touched: 2025-09-30T00:00:00Z
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (isSaving || isDirty) {
@@ -896,15 +899,6 @@ export default function Workspace() {
       }
       return true
     })
-  push({ message: 'Could not mark reviewed.', type: 'error' })
-  push({ message: 'Added to next session', type: 'success' })
-  push({ message: 'Could not add to next session (check table session_agenda & RLS).', type: 'error' })
-    if (!wantsToLeave) return false
-    if (isDirty && sessionRef.current) {
-      const ok = await sessionRef.current.saveNow()
-      return ok || true
-    }
-    return true
   }, [isSaving, isDirty])
 
   const onChangeCase = useCallback(
