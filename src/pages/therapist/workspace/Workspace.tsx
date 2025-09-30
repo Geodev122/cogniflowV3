@@ -17,6 +17,8 @@ import {
   ClipboardList, Flag, LogOut, FileText, AlertTriangle, X, Clock, ChevronRight,
   Plus, Shield, Globe, Download, RefreshCw
 } from 'lucide-react'
+import { useToast } from '../../../components/ui/Toast'
+import ConfirmModal from '../../../components/ui/ConfirmModal'
 
 /* =========================================================
    Types (adjust to your schema if needed)
@@ -617,7 +619,7 @@ const CreateQuickResourceModal: React.FC<{
       onClose()
     } catch (e) {
       console.error('[CreateQuickResourceModal] error:', e)
-      alert('Could not create resource. Check storage bucket & RLS.')
+      push({ message: 'Could not create resource. Check storage bucket & RLS.', type: 'error' })
     } finally {
       setSaving(false)
     }
@@ -731,9 +733,7 @@ async function exportCaseSummaryPDF(args: {
   try {
     jsPDFMod = await import(/* @vite-ignore */ 'jspdf')
   } catch {
-    alert(
-      'PDF export requires the "jspdf" package.\n\nInstall with one of:\n- npm i jspdf\n- pnpm add jspdf\n- yarn add jspdf'
-    )
+    push({ message: 'PDF export requires the "jspdf" package. Install with `npm i jspdf`.', type: 'info' })
     return
   }
 
@@ -819,6 +819,10 @@ export default function Workspace() {
 
   // Quick resource modal (🔥 removed stray "the:" label that caused the parser error)
   const [showCreateResource, setShowCreateResource] = useState(false)
+  // Confirm modal state for leaving with unsaved changes
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmResolve, setConfirmResolve] = useState<null | ((v: boolean) => void)>(null)
+  const { push } = useToast()
 
   // Load cases for dropdown
   useEffect(() => {
@@ -876,11 +880,25 @@ export default function Workspace() {
 
   const confirmLeave = useCallback(async () => {
     if (!isSaving && !isDirty) return true
-    const wantsToLeave = window.confirm(
-      isSaving
-        ? 'Notes are still saving. Are you sure you want to leave the Workspace now?'
-        : 'You have unsaved changes. Save before leaving the Workspace?'
-    )
+    // Open confirm modal and await user's choice
+    return await new Promise<boolean>((resolve) => {
+      setConfirmOpen(true)
+      setConfirmResolve(() => (v: boolean) => {
+        setConfirmOpen(false)
+        setConfirmResolve(null)
+        resolve(v)
+      })
+    }).then(async (wantsToLeave) => {
+      if (!wantsToLeave) return false
+      if (isDirty && sessionRef.current) {
+        const ok = await sessionRef.current.saveNow()
+        return ok || true
+      }
+      return true
+    })
+  push({ message: 'Could not mark reviewed.', type: 'error' })
+  push({ message: 'Added to next session', type: 'success' })
+  push({ message: 'Could not add to next session (check table session_agenda & RLS).', type: 'error' })
     if (!wantsToLeave) return false
     if (isDirty && sessionRef.current) {
       const ok = await sessionRef.current.saveNow()
@@ -904,6 +922,7 @@ export default function Workspace() {
   const flagCase = useCallback(async () => {
     if (!profile?.id || !selectedCaseId) return
     try {
+      push({ message: 'Flagging case for supervision…', type: 'info' })
       const { error: fErr } = await supabase.from('supervision_flags').insert({
         case_id: selectedCaseId,
         therapist_id: profile.id,
@@ -943,10 +962,10 @@ export default function Workspace() {
 
       if (sErr) throw sErr
 
-      alert('Flagged for supervision and summary updated.')
+      push({ message: 'Flagged for supervision and summary updated.', type: 'success' })
     } catch (e) {
       console.error('[Workspace] flagCase error:', e)
-      alert('Could not flag the case (check tables & RLS).')
+      push({ message: 'Could not flag the case (check tables & RLS).', type: 'error' })
     }
   }, [cases, profile, selectedCaseId])
 
@@ -1185,6 +1204,26 @@ export default function Workspace() {
           onCreated={() => setShowCreateResource(false)}
         />
       )}
+      {/* Confirm modal used by confirmLeave */}
+      <ConfirmModal
+        open={confirmOpen}
+        title={isSaving ? 'Notes are still saving' : 'Unsaved changes'}
+        description={isSaving ? 'Notes are still saving. Are you sure you want to leave the Workspace now?' : 'You have unsaved changes. Save before leaving?' }
+        confirmLabel={isDirty ? 'Save & Leave' : 'Leave'}
+        cancelLabel={'Cancel'}
+        onConfirm={async () => {
+          // If dirty, attempt save; if save succeeds resolve true, else still resolve true to allow leave
+          if (confirmResolve) {
+            if (isDirty && sessionRef.current) {
+              const ok = await sessionRef.current.saveNow()
+              try { confirmResolve(Boolean(ok)) } catch {}
+            } else {
+              try { confirmResolve(true) } catch {}
+            }
+          }
+        }}
+        onCancel={() => { if (confirmResolve) try { confirmResolve(false) } catch {} }}
+      />
     </div>
   )
 }

@@ -1,5 +1,37 @@
 import React from 'react'
 
+export default function ConfirmModal(props: {
+  open: boolean
+  title?: string
+  description?: string
+  confirmLabel?: string
+  cancelLabel?: string
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const { open, title, description, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm, onCancel } = props
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full border">
+          <div className="p-4 border-b">
+            <h3 className="text-sm font-semibold text-gray-900">{title || 'Please confirm'}</h3>
+            {description ? <div className="text-xs text-gray-500 mt-1">{description}</div> : null}
+          </div>
+          <div className="p-4 flex justify-end gap-2">
+            <button onClick={onCancel} className="px-3 py-2 rounded border text-sm">{cancelLabel}</button>
+            <button onClick={onConfirm} className="px-3 py-2 rounded bg-blue-600 text-white text-sm">{confirmLabel}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+import React from 'react'
+
 type Props = {
   open: boolean
   title?: string
