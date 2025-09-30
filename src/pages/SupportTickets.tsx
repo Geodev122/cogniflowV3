@@ -1,11 +1,9 @@
-<<<<<<< HEAD
 import React, { useState } from 'react'
 import { supabase, expectMany, run } from '.../lib/supabase'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
 import { Button } from '../components/ui/button'
 import { Card, CardContent } from '../components/ui/card'
-=======
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase, expectMany, run } from "../lib/supabase";
@@ -318,7 +316,6 @@ function AssigneePill({ name, email }: { name?: string | null; email?: string | 
     </span>
   );
 }
->>>>>>> 5a3da3e (chore: fix imports and build issues)
 
 export default function SupportTickets() {
   const [name, setName] = useState('')
