@@ -214,8 +214,11 @@ const SessionBoard = forwardRef<SessionBoardHandle, Props>(function SessionBoard
     }
   }
 
+  import confirmAsync from '../../utils/confirm'
+
   const removeAgendaItem = async (id: string) => {
-    if (!window.confirm('Remove this agenda item?')) return
+    const ok = await confirmAsync({ title: 'Remove agenda item', description: 'Remove this agenda item?' })
+    if (!ok) return
     try {
       const { error } = await supabase.from('session_agenda').delete().eq('id', id)
       if (error) throw error
