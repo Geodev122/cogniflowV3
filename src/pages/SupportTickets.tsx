@@ -309,13 +309,6 @@ function AssigneePill({ name, email }: { name?: string | null; email?: string | 
     </span>
   );
 }
-<<<<<<< HEAD
-
-// alias Button to a permissive component to avoid prop-type mismatches in many usages
-const B = Button as unknown as React.FC<any>;
-
-=======
->>>>>>> a3161b2ceca7c86ca973b0252a2842921aacab12
 export default function SupportTickets() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
