@@ -1,9 +1,324 @@
+<<<<<<< HEAD
 import React, { useState } from 'react'
 import { supabase, expectMany, run } from '.../lib/supabase'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
 import { Button } from '../components/ui/button'
 import { Card, CardContent } from '../components/ui/card'
+=======
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { supabase, expectMany, run } from "../lib/supabase";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { Card, CardContent } from "../components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "../components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { ScrollArea } from "../components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import { Separator } from "../components/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../components/ui/sheet";
+import { Textarea } from "../components/ui/textarea";
+
+import {
+  AlertCircle,
+  Bug,
+  Check,
+  ChevronDown,
+  Clock,
+  DollarSign,
+  Filter,
+  Hash,
+  Loader2,
+  LucideIcon,
+  Mail,
+  MessageCircle,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Settings,
+  Tag,
+  Ticket as TicketIcon,
+  User2,
+  Users,
+} from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
+
+// Types
+export type TicketStatus = "open" | "pending" | "resolved" | "closed";
+export type TicketPriority = "low" | "medium" | "high" | "urgent";
+
+export type TicketListItem = {
+  id: string;
+  ticket_number: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  subject: string;
+  category_key: string | null;
+  created_at: string;
+  updated_at: string;
+  last_activity_at: string;
+  requester_id: string;
+  requester_email: string;
+  requester_name: string;
+  assignee_id: string | null;
+  assignee_email: string | null;
+  assignee_name: string | null;
+  latest_message_preview: string | null;
+  message_created_at?: string | null;
+  tags?: string[];
+};
+
+export type TicketMessage = {
+  ticket_id: string;
+  message_id: string;
+  body: string;
+  is_internal: boolean;
+  attachments: unknown[];
+  created_at: string;
+  sender_id: string;
+  sender_email: string;
+  sender_name: string;
+};
+
+export type SupportCategory = { key: string; name: string; description?: string };
+export type SupportTag = { key: string; label: string };
+export type ProfileLite = { id: string; email: string; first_name?: string; last_name?: string; role?: string };
+
+// Supabase-backed API helpers
+const api = {
+  listTickets: async (params: Partial<Record<string, string>> = {}) => {
+    // Basic filtering: q -> subject/body search, status, priority, category, assignee (email)
+    let query = supabase.from('tickets').select('*, profiles:profiles!user_id(id, first_name, last_name, email)');
+    // apply simple filters where possible
+    if (params.status) query = query.eq('status', params.status as string);
+    if (params.priority) query = query.eq('status', params.priority as string); // keep parity if needed
+    // category and assignee handling might depend on schema; do a simple select and map server-side
+    const { rows } = await expectMany<TicketListItem>(query);
+    // rows may not match TicketListItem shape; best-effort map
+    return rows.map((r: any) => ({
+      id: String(r.id),
+      ticket_number: r.ticket_number ?? (r.id as string).slice(0, 8),
+      status: (r.status ?? 'open') as TicketStatus,
+      priority: (r.priority ?? 'medium') as TicketPriority,
+      subject: r.subject ?? '',
+      category_key: r.category_key ?? null,
+      created_at: r.created_at ?? new Date().toISOString(),
+      updated_at: r.updated_at ?? new Date().toISOString(),
+      last_activity_at: r.updated_at ?? r.created_at ?? new Date().toISOString(),
+      requester_id: r.user_id ?? r.requester_id ?? '',
+      requester_email: r.profiles?.email ?? r.requester_email ?? '',
+  requester_name: ([r.profiles?.first_name, r.profiles?.last_name].filter(Boolean).join(' ') || r.requester_name) ?? '',
+      assignee_id: r.assignee_id ?? null,
+      assignee_email: r.assignee_email ?? null,
+      assignee_name: r.assignee_name ?? null,
+      latest_message_preview: r.latest_message_preview ?? null,
+      message_created_at: r.message_created_at ?? null,
+      tags: r.tags ?? undefined,
+    } as TicketListItem));
+  },
+  getMessages: async (ticketId: string) => {
+    const { rows } = await expectMany<TicketMessage>(supabase.from('messages').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }));
+    return rows.map((r: any) => ({
+      ticket_id: String(r.ticket_id),
+      message_id: String(r.id ?? r.message_id),
+      body: r.body,
+      is_internal: Boolean(r.is_internal),
+      attachments: r.attachments ?? [],
+      created_at: r.created_at,
+      sender_id: String(r.sender_id ?? r.created_by ?? ''),
+      sender_email: r.sender_email ?? r.sender_email ?? '',
+      sender_name: r.sender_name ?? r.sender_name ?? '',
+    } as TicketMessage));
+  },
+  postMessage: async (
+    ticketId: string,
+    payload: { sender_id: string; body: string; is_internal?: boolean }
+  ) => {
+    const p: any = { ticket_id: ticketId, body: payload.body, is_internal: payload.is_internal ?? false, sender_id: payload.sender_id };
+    const inserted = await run(supabase.from('messages').insert(p).select('*').single());
+    if (!inserted) throw new Error('Failed to insert message');
+    const r: any = inserted;
+    return {
+      ticket_id: String(r.ticket_id),
+      message_id: String(r.id ?? r.message_id),
+      body: r.body,
+      is_internal: Boolean(r.is_internal),
+      attachments: r.attachments ?? [],
+      created_at: r.created_at,
+      sender_id: String(r.sender_id ?? r.created_by ?? ''),
+      sender_email: r.sender_email ?? '',
+      sender_name: r.sender_name ?? '',
+    } as TicketMessage;
+  },
+  patchTicket: async (
+    ticketId: string,
+    patch: Partial<Pick<TicketListItem, 'status' | 'priority' | 'subject'>> & { assignee_id?: string | null }
+  ) => {
+    const data: any = { ...(patch as any) };
+    if (patch.assignee_id !== undefined) data.assignee_id = patch.assignee_id;
+    const updated = await run(supabase.from('tickets').update(data).eq('id', ticketId).select('*').single());
+    if (!updated) throw new Error('Failed to update ticket');
+    const r: any = updated;
+    return {
+      id: String(r.id),
+      ticket_number: r.ticket_number ?? (r.id as string).slice(0, 8),
+      status: (r.status ?? 'open') as TicketStatus,
+      priority: (r.priority ?? 'medium') as TicketPriority,
+      subject: r.subject ?? '',
+      category_key: r.category_key ?? null,
+      created_at: r.created_at ?? new Date().toISOString(),
+      updated_at: r.updated_at ?? new Date().toISOString(),
+      last_activity_at: r.updated_at ?? r.created_at ?? new Date().toISOString(),
+      requester_id: r.user_id ?? r.requester_id ?? '',
+      requester_email: r.requester_email ?? '',
+      requester_name: r.requester_name ?? '',
+      assignee_id: r.assignee_id ?? null,
+      assignee_email: r.assignee_email ?? null,
+      assignee_name: r.assignee_name ?? null,
+      latest_message_preview: r.latest_message_preview ?? null,
+      message_created_at: r.message_created_at ?? null,
+      tags: r.tags ?? undefined,
+    } as TicketListItem;
+  },
+  createTicket: async (payload: { requester_id: string; subject: string; description: string; category_key?: string | null; priority?: TicketPriority }) => {
+    const toInsert: any = {
+      user_id: payload.requester_id,
+      subject: payload.subject,
+      body: payload.description,
+      category_key: payload.category_key ?? null,
+      priority: payload.priority ?? 'medium',
+    };
+    const inserted = await run(supabase.from('tickets').insert(toInsert).select('*').single());
+    if (!inserted) throw new Error('Failed to create ticket');
+    const r: any = inserted;
+    return {
+      id: String(r.id),
+      ticket_number: r.ticket_number ?? (r.id as string).slice(0, 8),
+      status: (r.status ?? 'open') as TicketStatus,
+      priority: (r.priority ?? 'medium') as TicketPriority,
+      subject: r.subject ?? '',
+      category_key: r.category_key ?? null,
+      created_at: r.created_at ?? new Date().toISOString(),
+      updated_at: r.updated_at ?? new Date().toISOString(),
+      last_activity_at: r.updated_at ?? r.created_at ?? new Date().toISOString(),
+      requester_id: r.user_id ?? '',
+      requester_email: r.requester_email ?? '',
+      requester_name: r.requester_name ?? '',
+      assignee_id: r.assignee_id ?? null,
+      assignee_email: r.assignee_email ?? null,
+      assignee_name: r.assignee_name ?? null,
+      latest_message_preview: r.latest_message_preview ?? null,
+      message_created_at: r.message_created_at ?? null,
+      tags: r.tags ?? undefined,
+    } as TicketListItem;
+  },
+  listCategories: async () => {
+    const { rows } = await expectMany<SupportCategory>(supabase.from('support_categories').select('*'));
+    return rows.map((r: any) => ({ key: r.key ?? String(r.id), name: r.name ?? r.key, description: r.description } as SupportCategory));
+  },
+  listTags: async () => {
+    const { rows } = await expectMany<SupportTag>(supabase.from('support_tags').select('*'));
+    return rows.map((r: any) => ({ key: r.key ?? String(r.id), label: r.label } as SupportTag));
+  },
+  listProfiles: async (q = '', role?: string) => {
+    let query = supabase.from('profiles').select('id, email, first_name, last_name, role');
+    if (q) query = query.ilike('email', `%${q}%`).or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`);
+    if (role) query = query.eq('role', role);
+    const { rows } = await expectMany<ProfileLite>(query.limit(20));
+    return rows.map((r: any) => ({ id: String(r.id), email: r.email, first_name: r.first_name, last_name: r.last_name, role: r.role } as ProfileLite));
+  },
+};
+
+const CATEGORY_META: Record<string, { icon: LucideIcon; label: string }> = {
+  billing: { icon: DollarSign, label: "Billing & Payments" },
+  bug: { icon: Bug, label: "Bug Report" },
+  feature: { icon: Settings, label: "Feature Request" },
+  account: { icon: User2, label: "Account & Access" },
+  "clinical-data": { icon: AlertCircle, label: "Clinical Data" },
+  other: { icon: Tag, label: "Other" },
+};
+
+function clsx(...c: (string | undefined | false)[]) {
+  return c.filter(Boolean).join(" ");
+}
+
+function initials(name?: string) {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((s) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function StatusBadge({ status }: { status: TicketStatus }) {
+  const map: Record<TicketStatus, string> = {
+    open: "bg-emerald-100 text-emerald-700",
+    pending: "bg-amber-100 text-amber-700",
+    resolved: "bg-blue-100 text-blue-700",
+    closed: "bg-zinc-200 text-zinc-700",
+  };
+  return <Badge className={clsx("rounded-full px-2.5 py-0.5 text-xs border-0", map[status])}>{status}</Badge>;
+}
+
+function PriorityBadge({ priority }: { priority: TicketPriority }) {
+  const map: Record<TicketPriority, string> = {
+    low: "bg-zinc-100 text-zinc-700",
+    medium: "bg-sky-100 text-sky-700",
+    high: "bg-orange-100 text-orange-700",
+    urgent: "bg-rose-100 text-rose-700",
+  };
+  return <Badge className={clsx("rounded-full px-2.5 py-0.5 text-xs border-0", map[priority])}>{priority}</Badge>;
+}
+
+function CategoryChip({ category }: { category?: string | null }) {
+  if (!category) return null;
+  const meta = CATEGORY_META[category] ?? CATEGORY_META.other;
+  const Icon = meta.icon;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700">
+      <Icon className="h-3.5 w-3.5" /> {meta.label}
+    </span>
+  );
+}
+
+function AssigneePill({ name, email }: { name?: string | null; email?: string | null }) {
+  const label = name || email || "Unassigned";
+  return (
+    <span className="inline-flex items-center gap-2 text-xs px-2 py-0.5 rounded-full bg-white border">
+      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-zinc-200 text-[10px] font-semibold">
+        {initials(label)}
+      </span>
+      {label}
+    </span>
+  );
+}
+>>>>>>> 5a3da3e (chore: fix imports and build issues)
 
 export default function SupportTickets() {
   const [name, setName] = useState('')
